@@ -1,0 +1,43 @@
+name: ci
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+      - name: Install backend
+        run: pip install -r backend/requirements.txt
+      - name: Lint backend
+        working-directory: backend
+        run: ruff check app tests
+      - name: Test backend
+        working-directory: backend
+        run: pytest
+      - name: Install frontend
+        run: npm ci
+      - name: Test frontend
+        run: npm test
+      - name: Lint frontend
+        run: npm run lint
+      - name: Build frontend
+        run: npm run build
+
+  images:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build backend image
+        run: docker build -f backend/Dockerfile -t solutioncrafter-backend .
+      - name: Build frontend image
+        run: docker build -f frontend/Dockerfile -t solutioncrafter-frontend .

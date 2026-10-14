@@ -1,0 +1,66 @@
+name: cloud-run
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+
+jobs:
+  gate:
+    runs-on: ubuntu-latest
+    outputs:
+      enabled: ${{ steps.check.outputs.enabled }}
+    steps:
+      - id: check
+        env:
+          GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+          GCP_SA_KEY: ${{ secrets.GCP_SA_KEY }}
+        run: |
+          if [ -n "$GCP_PROJECT_ID" ] && [ -n "$GCP_SA_KEY" ]; then
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+          fi
+
+  deploy:
+    needs: gate
+    if: needs.gate.outputs.enabled == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+      - uses: google-github-actions/setup-gcloud@v2
+      - name: Deploy backend and frontend
+        env:
+          PROJECT: ${{ secrets.GCP_PROJECT_ID }}
+          REGION: ${{ secrets.GCP_REGION }}
+          REPO: ${{ secrets.GAR_REPO }}
+          BUCKET: ${{ secrets.GCS_BUCKET }}
+        run: |
+          REGION="${REGION:-asia-southeast1}"
+          REPO="${REPO:-solutioncrafter}"
+          gcloud config set project "$PROJECT"
+          gcloud artifacts repositories describe "$REPO" --location "$REGION" >/dev/null 2>&1 || \
+            gcloud artifacts repositories create "$REPO" --repository-format docker --location "$REGION"
+          IMAGE_BASE="${REGION}-docker.pkg.dev/${PROJECT}/${REPO}"
+          gcloud auth configure-docker "${REGION}-docker.pkg.dev" --quiet
+          docker build -f backend/Dockerfile -t "${IMAGE_BASE}/backend:${GITHUB_SHA}" .
+          docker build -f frontend/Dockerfile -t "${IMAGE_BASE}/frontend:${GITHUB_SHA}" .
+          docker push "${IMAGE_BASE}/backend:${GITHUB_SHA}"
+          docker push "${IMAGE_BASE}/frontend:${GITHUB_SHA}"
+          gcloud run deploy solutioncrafter-backend \
+            --image "${IMAGE_BASE}/backend:${GITHUB_SHA}" \
+            --region "$REGION" \
+            --memory 4Gi \
+            --max-instances 1 \
+            --set-env-vars "DATA_DIR=/data,SDD_TEMPLATE_PATH=/app/specs/solution_design_document.md,GCS_BUCKET=${BUCKET},GCS_DB_PATH=duckdb/solutioncrafter.duckdb" \
+            --set-secrets "LLM_API_KEY=LLM_API_KEY:latest,JWT_SECRET=JWT_SECRET:latest" \
+            --quiet
+          BACKEND_URL="$(gcloud run services describe solutioncrafter-backend --region "$REGION" --format='value(status.url)')"
+          gcloud run deploy solutioncrafter-frontend \
+            --image "${IMAGE_BASE}/frontend:${GITHUB_SHA}" \
+            --region "$REGION" \
+            --set-env-vars "BACKEND_URL=${BACKEND_URL}" \
+            --quiet

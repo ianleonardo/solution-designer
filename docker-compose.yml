@@ -1,0 +1,30 @@
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    ports:
+      - "8000:8000"
+    environment:
+      DATA_DIR: /data
+      SDD_TEMPLATE_PATH: /app/specs/solution_design_document.md
+      JWT_SECRET: ${JWT_SECRET:-dev-only-change-me}
+      SETTINGS_ENCRYPTION_KEY: ${SETTINGS_ENCRYPTION_KEY:-}
+      LLM_API_KEY: ${LLM_API_KEY:-}
+      EMBEDDING_API_KEY: ${EMBEDDING_API_KEY:-}
+      GCS_BUCKET: ${GCS_BUCKET:-}
+      GCS_DB_PATH: ${GCS_DB_PATH:-duckdb/solutioncrafter.duckdb}
+    volumes:
+      - sdddata:/data
+
+  frontend:
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile
+    ports:
+      - "8080:80"
+    depends_on:
+      - backend
+
+volumes:
+  sdddata:

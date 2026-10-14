@@ -1,0 +1,15 @@
+# Guiding Principles for Resiliency by Design
+
+---
+
+| # | Dimension | Principle |
+|---|---|---|
+| **1** | **Load Balancing** | Implement load balancing mechanisms to distribute incoming requests across multiple instances of your backend applications. |
+| **2** | **Redundancy and Replication** | Deploy redundant instances of your backend applications across different servers or data centers. If one instance fails, traffic can be automatically redirected to the healthy instances. |
+| **3** | **Circuit Breaker Pattern** | Implement a circuit breaker pattern to detect and handle failures in your backend services. If a backend service is consistently failing, the circuit breaker can temporarily "open" to prevent further requests, giving the service time to recover. This helps in isolating the failing service and prevents cascading failures. |
+| **4** | **Timeouts and Retries** | Set appropriate timeouts for your requests to the backend services. If a service takes too long to respond, consider it as a failure and retry the request with an exponential backoff strategy. This helps in dealing with transient failures. |
+| **5** | **Graceful Degradation, Shutdown and Restart** | - Plan for graceful degradation by identifying critical and non-critical functionalities. If a non-critical backend service is down, the application can still provide essential features to users. Implement fallback mechanisms or alternative workflows for degraded scenarios.<br><br>- Ensure that your backend applications can be gracefully shut down and restarted without affecting the entire system. This is crucial for applying updates, patches, or resolving issues without causing downtime. |
+| **6** | **Isolation through Microservices** | Where feasible, design your backend as a set of microservices where possible. This way, if one microservice fails, it doesn't necessarily impact the entire application. Each microservice can have its own resilience mechanisms and can be scaled independently. |
+| **7** | **Monitoring and Alerting** | Implement robust monitoring of your backend services. Use tools to track performance, detect anomalies, and set up alerts for potential issues. This enables proactive identification of problems before they impact users. |
+| **8** | **Failover and DR** | Establish a failover and disaster recovery plan. Consider how your system will behave in the event of a major outage and have mechanisms in place to switch to backup systems or data centers. |
+| **9** | **Design Isolation** | Based on critical functions, isolate the services (real-time or batch) across the stack to ensure one function does not impact others including systems on AS400 and Z/OS:<br>- Includes isolation for internal/external integration using asynchronous process where needed<br>- Includes isolation of pre-login and post-login workload (e.g., Account Opening for NTB, Marketing, etc.)<br>- Includes isolation of incoming and outgoing queues<br>- Includes isolation of Host Initiated vs Channel Initiated Queues (e.g., ATM Host to RBK or REM to RBK) |

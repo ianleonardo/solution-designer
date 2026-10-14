@@ -1,0 +1,42 @@
+from tests.conftest import auth, login
+
+TABLE = b"| Name | Purpose |\n| --- | --- |\n| Login screen | Authenticate users |\n| Nightly settle | Settle trades |\n"
+
+
+def _upload(client, token, inventory_type, filename="items.md", body=TABLE):
+    return client.post(
+        "/api/rag",
+        params={"inventory_type": inventory_type} if inventory_type else None,
+        files={"file": (filename, body, "text/markdown")},
+        headers=auth(token),
+    )
+
+
+def test_upload_is_forced_to_the_selected_type(client):
+    admin = login(client, "Admin")
+    screens = _upload(client, admin, "Screens")
+    assert screens.status_code == 200, screens.text
+    rows = screens.json()
+    assert len(rows) == 2
+    assert {row["inventory_type"] for row in rows} == {"Screens"}
+    assert all(row["rag_id"].startswith("SC-") for row in rows)
+    batches = _upload(client, admin, "Batches", filename="jobs.md")
+    assert {row["inventory_type"] for row in batches.json()} == {"Batches"}
+    assert all(row["rag_id"].startswith("BA-") for row in batches.json())
+
+
+def test_heading_classification_still_works_without_a_type(client):
+    admin = login(client, "Admin")
+    body = b"# Batch jobs\n| Name | Purpose |\n| --- | --- |\n| EOD | End of day |\n"
+    created = _upload(client, admin, None, body=body)
+    assert created.json()[0]["inventory_type"] == "Batches"
+
+
+def test_unknown_inventory_type_is_rejected(client):
+    admin = login(client, "Admin")
+    assert _upload(client, admin, "Nonsense").status_code == 400
+
+
+def test_only_admin_can_upload_to_the_knowledge_base(client):
+    maker = login(client, "Maker")
+    assert _upload(client, maker, "Screens").status_code == 403

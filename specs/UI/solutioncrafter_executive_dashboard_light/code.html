@@ -1,0 +1,808 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>SolutionCrafter - Enterprise SDD Workbench</title>
+<!-- Material Symbols Outlined -->
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<!-- Google Fonts: Inter, Plus Jakarta Sans, JetBrains Mono -->
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600;700&amp;family=Inter:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400;500;600&amp;family=Noto+Serif:wght@500;600;700&amp;display=swap" rel="stylesheet"/>
+<!-- Tailwind CSS with form & container query plugins -->
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script id="tailwind-config">
+    tailwind.config = {
+      darkMode: "class",
+      theme: {
+        extend: {
+          "colors": {
+            "surface-container-low": "#F8FAFC",
+            "on-error-container": "#93000a",
+            "on-tertiary": "#ffffff",
+            "secondary": "#006a61",
+            "on-surface-variant": "#434750",
+            "inverse-surface": "#283044",
+            "surface-variant": "#dae2fd",
+            "surface-container-highest": "#e2e8f0",
+            "outline": "#737781",
+            "primary-fixed-dim": "#aac7ff",
+            "surface-tint": "#325ea0",
+            "on-tertiary-fixed": "#40000d",
+            "tertiary": "#70001e",
+            "error-container": "#ffdad6",
+            "on-error": "#ffffff",
+            "tertiary-fixed-dim": "#ffb2b7",
+            "secondary-fixed-dim": "#6bd8cb",
+            "porcelain-pure": "#FFFFFF",
+            "secondary-fixed": "#89f5e7",
+            "surface-container": "#FFFFFF",
+            "on-primary-container": "#ffffff",
+            "outline-variant": "#E2E8F0",
+            "primary-container": "#1a4b8c",
+            "porcelain-ivory": "#F8FAFC",
+            "celadon-mist": "#0284c7",
+            "on-secondary": "#ffffff",
+            "on-tertiary-container": "#ffa3a9",
+            "primary-fixed": "#d6e3ff",
+            "cobalt-ultramarine": "#1a4b8c",
+            "secondary-container": "#86f2e4",
+            "slate-midnight": "#0F172A",
+            "error": "#ba1a1a",
+            "cobalt-deep": "#0f2f59",
+            "surface-bright": "#faf8ff",
+            "surface-container-lowest": "#ffffff",
+            "on-surface": "#0F172A",
+            "surface-container-high": "#F1F5F9",
+            "inverse-primary": "#aac7ff",
+            "inverse-on-surface": "#eef0ff",
+            "cinnabar-alert": "#dc2626",
+            "on-secondary-fixed": "#00201d",
+            "background": "#F4F7FB",
+            "tertiary-container": "#9b002d",
+            "surface-dim": "#d2d9f4",
+            "ceramic-gold": "#b45309",
+            "surface": "#FFFFFF",
+            "on-primary": "#ffffff",
+            "primary": "#1a4b8c",
+            "slate-night": "#1E293B",
+            "porcelain-glaze": "#0F172A",
+            "glaze-border": "#E2E8F0"
+          },
+          "borderRadius": {
+            "DEFAULT": "0.125rem",
+            "lg": "0.25rem",
+            "xl": "0.5rem",
+            "full": "0.75rem"
+          },
+          "spacing": {
+            "space-md": "1rem",
+            "space-lg": "1.5rem",
+            "margin-md": "1.5rem",
+            "space-sm": "0.5rem",
+            "margin-lg": "2rem",
+            "margin": "1rem",
+            "gutter-lg": "1.5rem",
+            "space-xs": "0.25rem",
+            "gutter": "1rem",
+            "space-xl": "2.5rem"
+          },
+          "fontFamily": {
+            "body-md": ["Hanken Grotesk", "Inter", "sans-serif"],
+            "headline-lg-mobile": ["Noto Serif", "serif"],
+            "display-hero": ["Noto Serif", "serif"],
+            "label-md": ["Hanken Grotesk", "sans-serif"],
+            "label-lg": ["Hanken Grotesk", "sans-serif"],
+            "label-sm": ["JetBrains Mono", "monospace"],
+            "headline-md": ["Noto Serif", "serif"],
+            "headline-lg": ["Noto Serif", "serif"],
+            "body-sm": ["Hanken Grotesk", "sans-serif"],
+            "body-lg": ["Hanken Grotesk", "sans-serif"],
+            "headline-sm": ["Noto Serif", "serif"]
+          }
+        }
+      }
+    }
+  </script>
+<style>
+    /* Luminous Qinghua porcelain delicate grid */
+    .porcelain-grid-bg {
+      background-size: 28px 28px;
+      background-image: 
+        radial-gradient(circle, rgba(26, 75, 140, 0.08) 1.2px, transparent 1.2px);
+    }
+    .custom-scrollbar::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    .custom-scrollbar::-webkit-scrollbar-track {
+      background: #F1F5F9;
+    }
+    .custom-scrollbar::-webkit-scrollbar-thumb {
+      background: #CBD5E1;
+      border-radius: 3px;
+    }
+    .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+      background: #94A3B8;
+    }
+  </style>
+</head>
+<body class="bg-background text-on-surface font-body-md text-[14px] antialiased min-h-screen selection:bg-primary-container selection:text-white">
+<!-- ================= TOP APP BAR (Shared Component: TopNavBar) ================= -->
+<header class="fixed top-0 left-0 w-full h-16 flex items-center justify-between px-space-lg border-b border-glaze-border z-40 bg-white/95 backdrop-blur-md shadow-xs">
+<!-- Brand and Left Search Cluster -->
+<div class="flex items-center space-x-6">
+<div class="flex items-center space-x-3 cursor-pointer select-none">
+<!-- Qinghua Cobalt knot emblem motif -->
+<div class="w-8 h-8 rounded-lg bg-blue-50 border border-cobalt-ultramarine/30 flex items-center justify-center shadow-xs">
+<span class="material-symbols-outlined text-primary text-xl" data-icon="polyline" style="font-variation-settings: 'FILL' 1;">polyline</span>
+</div>
+<div class="flex flex-col">
+<span class="font-headline-sm text-lg text-slate-night tracking-tight font-bold">SolutionCrafter</span>
+<span class="font-label-sm text-[10px] text-primary/70 tracking-widest uppercase">Qinghua Studio v4.2</span>
+</div>
+</div>
+<!-- Search Bar -->
+<div class="hidden lg:flex items-center relative w-96">
+<span class="material-symbols-outlined absolute left-3 text-slate-400 text-base" data-icon="search">search</span>
+<input class="w-full h-9 pl-9 pr-8 bg-slate-50 text-slate-800 border border-glaze-border rounded-lg font-body-sm text-[13px] focus:bg-white focus:border-cobalt-ultramarine focus:ring-1 focus:ring-cobalt-ultramarine/20 transition-all placeholder:text-slate-400" placeholder="Search projects, RAG interfaces, duckdb schemas..." type="text"/>
+<span class="absolute right-2.5 px-1.5 py-0.5 rounded bg-white border border-slate-200 text-slate-500 font-label-sm text-[10px] select-none shadow-2xs">⌘K</span>
+</div>
+</div>
+<!-- Center Navigation Links -->
+<nav class="hidden md:flex items-center space-x-6 h-full">
+<a class="h-full flex items-center px-1 text-primary border-b-2 border-primary font-semibold text-[13px] transition-colors duration-150" href="#">
+        Workspace
+      </a>
+<a class="h-full flex items-center px-1 text-slate-600 hover:text-slate-900 font-medium text-[13px] transition-colors duration-150" href="#">
+        Architecture Blueprints
+      </a>
+<a class="h-full flex items-center px-1 text-slate-600 hover:text-slate-900 font-medium text-[13px] transition-colors duration-150" href="#">
+        Compliance Gate
+      </a>
+<a class="h-full flex items-center px-1 text-slate-600 hover:text-slate-900 font-medium text-[13px] transition-colors duration-150" href="#">
+        Model Benchmarks
+      </a>
+</nav>
+<!-- Right Controls Cluster -->
+<div class="flex items-center space-x-3">
+<!-- Role Indicator Pill -->
+<div class="hidden xl:flex items-center space-x-1.5 px-2.5 py-1 rounded-full bg-amber-50 border border-amber-300 text-amber-800 font-label-sm text-[11px] font-medium">
+<span class="w-1.5 h-1.5 rounded-full bg-amber-600 animate-pulse"></span>
+<span>Role: Admin / Lead Architect</span>
+</div>
+<!-- Action: Export -->
+<button class="hidden sm:inline-flex items-center space-x-1.5 px-3 py-1.5 rounded-lg border border-slate-200 bg-white text-slate-700 hover:bg-slate-50 hover:text-slate-900 font-medium text-[13px] shadow-2xs transition-all duration-150 ease-in-out active:scale-95">
+<span class="material-symbols-outlined text-sm" data-icon="file_download">file_download</span>
+<span>Export</span>
+</button>
+<!-- Action: Generate / Infer Primary Button -->
+<button class="inline-flex items-center space-x-1.5 px-3.5 py-1.5 rounded-lg bg-primary text-white border border-cobalt-ultramarine font-semibold text-[13px] shadow-sm hover:bg-cobalt-deep transition-all duration-150 ease-in-out active:scale-95">
+<span class="material-symbols-outlined text-sm" data-icon="auto_awesome" style="font-variation-settings: 'FILL' 1;">auto_awesome</span>
+<span>Generate / Infer</span>
+</button>
+<!-- Icon Actions -->
+<div class="flex items-center space-x-1 pl-2 border-l border-slate-200">
+<!-- Notifications with badge -->
+<button class="relative p-2 rounded-lg text-slate-500 hover:bg-slate-100 hover:text-slate-800 transition-colors" title="Notifications">
+<span class="material-symbols-outlined text-xl" data-icon="notifications">notifications</span>
+<span class="absolute top-1.5 right-1.5 w-4 h-4 bg-cinnabar-alert text-white font-label-sm text-[9px] flex items-center justify-center rounded-full font-bold">3</span>
+</button>
+<!-- Dark / Light Mode Toggle -->
+<button class="p-2 rounded-lg text-slate-500 hover:bg-slate-100 hover:text-slate-800 transition-colors" title="Toggle theme">
+<span class="material-symbols-outlined text-xl" data-icon="light_mode">light_mode</span>
+</button>
+<!-- Tuning parameters -->
+<button class="p-2 rounded-lg text-slate-500 hover:bg-slate-100 hover:text-slate-800 transition-colors" title="Runtime Tuning">
+<span class="material-symbols-outlined text-xl" data-icon="tune">tune</span>
+</button>
+<!-- Account Circle / User profile with Admin Badge -->
+<div class="relative ml-1 cursor-pointer flex items-center group">
+<div class="w-8 h-8 rounded-full border border-blue-200 bg-blue-50 flex items-center justify-center text-primary font-semibold overflow-hidden ring-1 ring-blue-100">
+<span class="material-symbols-outlined text-2xl" data-icon="account_circle">account_circle</span>
+</div>
+<span class="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 bg-amber-500 rounded-full ring-2 ring-white" title="Chief Architect profile avatar with Admin badge"></span>
+</div>
+</div>
+</div>
+</header>
+<!-- ================= SIDEBAR RAIL (Shared Component: SideNavBar) ================= -->
+<aside class="fixed top-16 left-0 bottom-0 w-64 p-space-md flex flex-col justify-between border-r border-glaze-border z-30 bg-surface-container-low shadow-none">
+<!-- Top Branding / CTA Segment -->
+<div class="space-y-4">
+<div class="px-2 py-1 flex items-center space-x-3 border-b border-glaze-border pb-3">
+<div class="w-7 h-7 rounded bg-blue-100 border border-primary/20 flex items-center justify-center text-primary">
+<span class="material-symbols-outlined text-lg" data-icon="deployed_code" style="font-variation-settings: 'FILL' 1;">deployed_code</span>
+</div>
+<div>
+<h2 class="font-headline-sm text-[15px] text-slate-900 font-bold leading-tight">SDD Workbench</h2>
+<p class="font-body-sm text-[11px] text-slate-500">Enterprise Synthesis v4.2</p>
+</div>
+</div>
+<!-- CTA Button -->
+<button class="w-full flex items-center justify-center space-x-2 py-2 px-3 rounded-lg bg-white border border-blue-200 text-primary hover:border-primary hover:bg-blue-50 transition-all font-semibold text-[13px] shadow-2xs">
+<span class="material-symbols-outlined text-sm text-primary" data-icon="add">add</span>
+<span>New SDD Project</span>
+</button>
+<!-- Primary Sidebar Navigation Tabs -->
+<nav class="space-y-1">
+<!-- Active: Dashboard -->
+<a class="flex items-center space-x-3 px-3 py-2 bg-blue-50 text-primary border-r-2 border-primary font-semibold text-[13px] rounded-lg transition-all duration-150" href="#">
+<span class="material-symbols-outlined text-lg text-primary" data-icon="dashboard" style="font-variation-settings: 'FILL' 1;">dashboard</span>
+<span>Dashboard</span>
+</a>
+<!-- Inactive: Projects -->
+<a class="flex items-center space-x-3 px-3 py-2 text-slate-600 hover:text-slate-900 hover:bg-slate-100 font-medium text-[13px] rounded-lg transition-colors duration-150" href="#">
+<span class="material-symbols-outlined text-lg" data-icon="folder_open">folder_open</span>
+<span>Projects</span>
+</a>
+<!-- Inactive: Knowledge Base RAG -->
+<a class="flex items-center justify-between px-3 py-2 text-slate-600 hover:text-slate-900 hover:bg-slate-100 font-medium text-[13px] rounded-lg transition-colors duration-150" href="#">
+<div class="flex items-center space-x-3">
+<span class="material-symbols-outlined text-lg" data-icon="hub">hub</span>
+<span>Knowledge Base RAG</span>
+</div>
+<span class="px-1.5 py-0.5 rounded bg-blue-100 text-[10px] text-primary font-semibold font-label-sm">14k</span>
+</a>
+<!-- Inactive: Template Sequences -->
+<a class="flex items-center space-x-3 px-3 py-2 text-slate-600 hover:text-slate-900 hover:bg-slate-100 font-medium text-[13px] rounded-lg transition-colors duration-150" href="#">
+<span class="material-symbols-outlined text-lg" data-icon="account_tree">account_tree</span>
+<span>Template Sequences</span>
+</a>
+<!-- Inactive: LLM & Prompts -->
+<a class="flex items-center space-x-3 px-3 py-2 text-slate-600 hover:text-slate-900 hover:bg-slate-100 font-medium text-[13px] rounded-lg transition-colors duration-150" href="#">
+<span class="material-symbols-outlined text-lg" data-icon="tune">tune</span>
+<span>LLM &amp; Prompts</span>
+</a>
+<!-- Extension: DuckDB Metrics -->
+<a class="flex items-center space-x-3 px-3 py-2 text-slate-600 hover:text-slate-900 hover:bg-slate-100 font-medium text-[13px] rounded-lg transition-colors duration-150" href="#">
+<span class="material-symbols-outlined text-lg" data-icon="monitoring">monitoring</span>
+<span>DuckDB Metrics</span>
+</a>
+</nav>
+</div>
+<!-- Footer Segment (Audit Trail, System Status, Settings) -->
+<div class="border-t border-glaze-border pt-3 space-y-1">
+<a class="flex items-center space-x-3 px-3 py-1.5 text-slate-600 hover:text-slate-900 hover:bg-slate-100 font-medium text-[13px] rounded-lg transition-colors" href="#">
+<span class="material-symbols-outlined text-base" data-icon="history">history</span>
+<span>Audit Trail</span>
+</a>
+<div class="flex items-center justify-between px-3 py-1.5 text-slate-600 hover:text-slate-900 hover:bg-slate-100 font-medium text-[13px] rounded-lg cursor-pointer transition-colors">
+<div class="flex items-center space-x-3">
+<span class="material-symbols-outlined text-base" data-icon="dns">dns</span>
+<span>System Status</span>
+</div>
+<span class="w-2 h-2 rounded-full bg-emerald-500"></span>
+</div>
+<a class="flex items-center space-x-3 px-3 py-1.5 text-slate-600 hover:text-slate-900 hover:bg-slate-100 font-medium text-[13px] rounded-lg transition-colors" href="#">
+<span class="material-symbols-outlined text-base" data-icon="settings">settings</span>
+<span>Settings</span>
+</a>
+</div>
+</aside>
+<!-- ================= MAIN CONTENT CANVAS ================= -->
+<main class="ml-64 mt-16 p-space-lg max-w-[1720px] pb-24 porcelain-grid-bg min-h-[calc(100vh-4rem)]">
+<!-- 1. HEADER STATS BAR (Bento Metrics Row) -->
+<section class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-3 mb-space-lg">
+<!-- Stat 1: Total Projects -->
+<div class="bg-white border border-glaze-border rounded-xl p-3.5 flex flex-col justify-between hover:border-primary/40 hover:shadow-sm transition-all shadow-2xs">
+<div class="flex items-center justify-between text-slate-500">
+<span class="font-label-sm text-[10px] uppercase tracking-wider font-semibold">Total Projects</span>
+<span class="material-symbols-outlined text-primary text-base" data-icon="folder_copy">folder_copy</span>
+</div>
+<div class="mt-2 flex items-baseline justify-between">
+<span class="font-headline-lg text-2xl text-slate-900 font-bold">42</span>
+<span class="inline-flex items-center text-emerald-600 font-label-sm text-[11px] font-semibold">
+<span class="material-symbols-outlined text-xs mr-0.5" data-icon="trending_up">trending_up</span>+12%
+          </span>
+</div>
+<div class="mt-1 font-body-sm text-[12px] text-slate-500">3 new initiated this week</div>
+</div>
+<!-- Stat 2: Documents Generated -->
+<div class="bg-white border border-glaze-border rounded-xl p-3.5 flex flex-col justify-between hover:border-primary/40 hover:shadow-sm transition-all shadow-2xs">
+<div class="flex items-center justify-between text-slate-500">
+<span class="font-label-sm text-[10px] uppercase tracking-wider font-semibold">Documents Generated</span>
+<span class="material-symbols-outlined text-primary text-base" data-icon="description">description</span>
+</div>
+<div class="mt-2 flex items-baseline justify-between">
+<span class="font-headline-lg text-2xl text-slate-900 font-bold">128</span>
+<span class="font-label-sm text-[11px] text-blue-700 font-medium">SDDs Compiled</span>
+</div>
+<div class="mt-1 font-body-sm text-[12px] text-slate-500">Avg synthesis: 4.8s</div>
+</div>
+<!-- Stat 3: Pending Checker Approvals -->
+<div class="bg-white border border-glaze-border rounded-xl p-3.5 flex flex-col justify-between hover:border-amber-400 hover:shadow-sm transition-all shadow-2xs">
+<div class="flex items-center justify-between text-slate-500">
+<span class="font-label-sm text-[10px] uppercase tracking-wider font-semibold">Checker Gate</span>
+<span class="material-symbols-outlined text-amber-600 text-base" data-icon="pending_actions">pending_actions</span>
+</div>
+<div class="mt-2 flex items-baseline justify-between">
+<span class="font-headline-lg text-2xl text-amber-700 font-bold">5</span>
+<span class="inline-flex items-center px-1.5 py-0.5 rounded bg-amber-50 border border-amber-300 text-amber-700 font-label-sm text-[10px] font-semibold">Action Req</span>
+</div>
+<div class="mt-1 font-body-sm text-[12px] text-slate-500">Requiring formal review</div>
+</div>
+<!-- Stat 4: Active RAG Embeddings -->
+<div class="bg-white border border-glaze-border rounded-xl p-3.5 flex flex-col justify-between hover:border-primary/40 hover:shadow-sm transition-all shadow-2xs">
+<div class="flex items-center justify-between text-slate-500">
+<span class="font-label-sm text-[10px] uppercase tracking-wider font-semibold">RAG Entities</span>
+<span class="material-symbols-outlined text-primary text-base" data-icon="schema">schema</span>
+</div>
+<div class="mt-2 flex items-baseline justify-between">
+<span class="font-headline-lg text-2xl text-slate-900 font-bold">14,290</span>
+<span class="font-label-sm text-[11px] text-blue-700 font-medium">Vectors</span>
+</div>
+<div class="mt-1 font-body-sm text-[12px] text-slate-500 truncate">Interfaces, Schemas, Repos</div>
+</div>
+<!-- Stat 5: Active LLM Engine -->
+<div class="bg-white border border-glaze-border rounded-xl p-3.5 flex flex-col justify-between hover:border-primary/40 hover:shadow-sm transition-all shadow-2xs">
+<div class="flex items-center justify-between text-slate-500">
+<span class="font-label-sm text-[10px] uppercase tracking-wider font-semibold">In-Process Engine</span>
+<span class="material-symbols-outlined text-emerald-600 text-base" data-icon="memory">memory</span>
+</div>
+<div class="mt-2">
+<div class="font-label-md text-[13px] text-slate-900 font-bold flex items-center">
+<span class="w-1.5 h-1.5 rounded-full bg-emerald-500 mr-1.5"></span>
+            Claude 3.5 Sonnet
+          </div>
+<div class="font-label-sm text-[11px] text-slate-500 truncate mt-0.5">DuckDB v1.1 • GCS Synced</div>
+</div>
+<div class="mt-1 font-body-sm text-[12px] text-slate-500 truncate">Lat: 28ms | Cache 100%</div>
+</div>
+</section>
+<!-- 2. QUICK ACTIONS & INGESTION BANNER -->
+<section class="bg-gradient-to-r from-blue-50/70 via-white to-slate-50 border border-blue-200/80 rounded-xl p-space-md mb-space-lg flex flex-col md:flex-row items-start md:items-center justify-between gap-4 shadow-sm backdrop-blur-md">
+<div class="flex items-center space-x-4">
+<div class="w-12 h-12 rounded-xl bg-blue-100 border border-blue-200 flex items-center justify-center text-primary shrink-0 shadow-2xs">
+<span class="material-symbols-outlined text-2xl" data-icon="cloud_upload">cloud_upload</span>
+</div>
+<div>
+<div class="flex items-center space-x-2">
+<h3 class="font-headline-sm text-lg text-slate-900 font-bold">Solution Design Document Ingestion Pipeline</h3>
+<span class="px-2 py-0.5 rounded bg-blue-100 border border-blue-200 text-primary font-label-sm text-[11px] font-semibold">
+              Zero-Shot SDD Generator
+            </span>
+</div>
+<p class="font-body-md text-[13px] text-slate-600 mt-0.5">
+            Drop Business Requirements (BRD), Functional Specs (FSD), or Jira Epics in PDF, Markdown, or Excel format.
+          </p>
+</div>
+</div>
+<div class="flex flex-wrap items-center gap-2.5 shrink-0 w-full md:w-auto">
+<!-- Status alert chip -->
+<div class="px-3 py-1.5 rounded-lg bg-white border border-slate-200 flex items-center space-x-2 text-slate-600 font-label-sm text-[11px] shadow-2xs">
+<span class="w-2 h-2 rounded-full bg-emerald-500"></span>
+<span>Dynamic In-Memory Cache: Synced</span>
+<span class="text-slate-300">|</span>
+<span class="text-primary font-medium">0ms restart</span>
+</div>
+<!-- Secondary Button -->
+<button class="px-3.5 py-1.5 rounded-lg bg-white border border-slate-200 hover:border-primary text-slate-700 hover:text-primary font-semibold text-[13px] shadow-2xs transition-all">
+          Manage Template Sequences
+        </button>
+<!-- Primary Button -->
+<button class="px-4 py-1.5 rounded-lg bg-primary hover:bg-cobalt-deep text-white font-semibold text-[13px] border border-cobalt-ultramarine shadow-sm flex items-center space-x-2 transition-all active:scale-95">
+<span class="material-symbols-outlined text-sm" data-icon="post_add">post_add</span>
+<span>New Project &amp; Upload Baseline</span>
+</button>
+</div>
+</section>
+<!-- 3. MAIN PROJECTS DATA GRID (PRD Section 2.1) -->
+<section class="bg-white border border-glaze-border rounded-xl overflow-hidden shadow-sm mb-space-lg">
+<!-- Table Header Controls Bar -->
+<div class="p-space-md border-b border-glaze-border flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4 bg-slate-50/60">
+<div class="flex items-center space-x-3">
+<span class="material-symbols-outlined text-primary text-xl" data-icon="table_chart">table_chart</span>
+<div>
+<h4 class="font-headline-sm text-base text-slate-900 font-bold">Active SDD Project Architecture Registry</h4>
+<p class="font-body-sm text-[12px] text-slate-500">Real-time compilation and verification status across enterprise domains</p>
+</div>
+</div>
+<!-- Filter Controls -->
+<div class="flex flex-wrap items-center gap-2">
+<!-- Status Filter -->
+<div class="flex items-center rounded-lg bg-slate-100 border border-slate-200 p-0.5 text-slate-600 font-label-sm text-[11px]">
+<button class="px-2.5 py-1 rounded bg-white text-primary font-semibold shadow-2xs">All (42)</button>
+<button class="px-2.5 py-1 rounded hover:text-slate-900">In Progress</button>
+<button class="px-2.5 py-1 rounded hover:text-amber-800 text-amber-700 font-semibold">Pending Approval (5)</button>
+<button class="px-2.5 py-1 rounded hover:text-slate-900">Finalized</button>
+</div>
+<!-- Owner Dropdown -->
+<button class="flex items-center space-x-1.5 px-3 py-1.5 rounded-lg bg-white border border-slate-200 text-slate-700 font-label-sm text-[11px] hover:border-slate-300 shadow-2xs">
+<span>Owner: All Roles</span>
+<span class="material-symbols-outlined text-sm text-slate-400" data-icon="arrow_drop_down">arrow_drop_down</span>
+</button>
+<!-- Inventory Type -->
+<button class="flex items-center space-x-1.5 px-3 py-1.5 rounded-lg bg-white border border-slate-200 text-slate-700 font-label-sm text-[11px] hover:border-slate-300 shadow-2xs">
+<span>Inventory: Event Bus / DuckDB</span>
+<span class="material-symbols-outlined text-sm text-slate-400" data-icon="arrow_drop_down">arrow_drop_down</span>
+</button>
+<!-- Refresh action -->
+<button class="p-1.5 rounded-lg bg-white border border-slate-200 text-slate-500 hover:text-slate-900 shadow-2xs" title="Re-query DuckDB">
+<span class="material-symbols-outlined text-base" data-icon="refresh">refresh</span>
+</button>
+</div>
+</div>
+<!-- Data Table -->
+<div class="overflow-x-auto custom-scrollbar">
+<table class="w-full text-left border-collapse">
+<thead>
+<tr class="bg-slate-50 border-b border-glaze-border text-slate-500 font-label-sm text-[11px] uppercase tracking-wider font-semibold">
+<th class="py-3 px-4 font-semibold w-12 text-center">
+<input class="rounded border-slate-300 text-primary focus:ring-0" type="checkbox"/>
+</th>
+<th class="py-3 px-4 font-semibold min-w-[280px]">Project Name &amp; Code</th>
+<th class="py-3 px-4 font-semibold min-w-[220px]">Baseline Inputs</th>
+<th class="py-3 px-4 font-semibold min-w-[180px]">SDD Status</th>
+<th class="py-3 px-4 font-semibold min-w-[170px]">Owner &amp; Role</th>
+<th class="py-3 px-4 font-semibold min-w-[130px]">Last Modified</th>
+<th class="py-3 px-4 font-semibold min-w-[200px] text-right">Actions</th>
+</tr>
+</thead>
+<tbody class="divide-y divide-glaze-border font-body-sm text-[13px]">
+<!-- Row 1: Pending Approval (Checker) -->
+<tr class="hover:bg-blue-50/40 transition-colors bg-white">
+<td class="py-3.5 px-4 text-center">
+<input class="rounded border-slate-300 text-primary focus:ring-0" type="checkbox"/>
+</td>
+<td class="py-3.5 px-4">
+<div class="flex items-center space-x-2">
+<div class="w-2 h-2 rounded-full bg-amber-500 shrink-0"></div>
+<div>
+<div class="font-headline-sm text-[14px] text-slate-900 font-bold hover:text-primary cursor-pointer">
+                      Global Trade Settlement Core v3.2
+                    </div>
+<div class="font-label-sm text-[11px] text-slate-500 font-mono">PRJ-FIN-7890 • DuckDB Parquet Sink</div>
+</div>
+</div>
+</td>
+<td class="py-3.5 px-4">
+<div class="flex items-center space-x-1.5 flex-wrap gap-1">
+<span class="inline-flex items-center px-2 py-0.5 rounded bg-slate-100 border border-slate-200 text-[11px] font-mono text-slate-700">
+<span class="material-symbols-outlined text-[13px] mr-1 text-red-500" data-icon="picture_as_pdf">picture_as_pdf</span>
+                    Trade_FSD_v4.pdf
+                  </span>
+<span class="inline-flex items-center px-1.5 py-0.5 rounded bg-slate-100 border border-slate-200 text-[10px] text-slate-500 font-mono">+1 xlsx</span>
+</div>
+</td>
+<td class="py-3.5 px-4">
+<span class="inline-flex items-center px-2.5 py-1 rounded-full bg-amber-50 border border-amber-300 text-amber-800 font-label-sm text-[11px] font-medium">
+<span class="w-1.5 h-1.5 rounded-full bg-amber-500 mr-1.5 animate-pulse"></span>
+                  Pending Approval (Checker)
+                </span>
+</td>
+<td class="py-3.5 px-4">
+<div class="flex items-center space-x-2">
+<div class="w-6 h-6 rounded-full bg-teal-50 border border-teal-200 flex items-center justify-center font-label-sm text-[10px] text-secondary font-bold">SJ</div>
+<div>
+<div class="text-slate-800 font-medium leading-none">Sarah Jenkins</div>
+<span class="text-[10px] font-label-sm text-secondary font-semibold">Checker</span>
+</div>
+</div>
+</td>
+<td class="py-3.5 px-4 font-label-sm text-[11px] text-slate-500">
+                12 mins ago
+              </td>
+<td class="py-3.5 px-4 text-right space-x-1">
+<button class="px-2.5 py-1 rounded bg-primary text-white border border-primary text-xs font-semibold hover:bg-cobalt-deep transition-all shadow-2xs">
+                  Open Workspace
+                </button>
+<button class="p-1 rounded text-slate-500 hover:text-slate-800 hover:bg-slate-100" title="Export PDF/MD">
+<span class="material-symbols-outlined text-base" data-icon="file_download">file_download</span>
+</button>
+<button class="p-1 rounded text-slate-500 hover:text-slate-800 hover:bg-slate-100" title="Prompt Tuning">
+<span class="material-symbols-outlined text-base" data-icon="tune">tune</span>
+</button>
+</td>
+</tr>
+<!-- Row 2: Approved (Admin) -->
+<tr class="hover:bg-blue-50/40 transition-colors bg-slate-50/50">
+<td class="py-3.5 px-4 text-center">
+<input class="rounded border-slate-300 text-primary focus:ring-0" type="checkbox"/>
+</td>
+<td class="py-3.5 px-4">
+<div class="flex items-center space-x-2">
+<div class="w-2 h-2 rounded-full bg-emerald-500 shrink-0"></div>
+<div>
+<div class="font-headline-sm text-[14px] text-slate-900 font-bold hover:text-primary cursor-pointer">
+                      Omnichannel Payment Gateway Modernization
+                    </div>
+<div class="font-label-sm text-[11px] text-slate-500 font-mono">PRJ-PAY-1120 • Kafka + REST Gateway</div>
+</div>
+</div>
+</td>
+<td class="py-3.5 px-4">
+<div class="flex items-center space-x-1.5 flex-wrap gap-1">
+<span class="inline-flex items-center px-2 py-0.5 rounded bg-slate-100 border border-slate-200 text-[11px] font-mono text-slate-700">
+<span class="material-symbols-outlined text-[13px] mr-1 text-emerald-600" data-icon="table_view">table_view</span>
+                    Payment_BRD.xlsx
+                  </span>
+<span class="inline-flex items-center px-2 py-0.5 rounded bg-slate-100 border border-slate-200 text-[11px] font-mono text-slate-600">
+                    Epics.md
+                  </span>
+</div>
+</td>
+<td class="py-3.5 px-4">
+<span class="inline-flex items-center px-2.5 py-1 rounded-full bg-emerald-50 border border-emerald-300 text-emerald-700 font-label-sm text-[11px] font-medium">
+<span class="w-1.5 h-1.5 rounded-full bg-emerald-500 mr-1.5"></span>
+                  Approved (Admin)
+                </span>
+</td>
+<td class="py-3.5 px-4">
+<div class="flex items-center space-x-2">
+<div class="w-6 h-6 rounded-full bg-amber-50 text-amber-700 border border-amber-300 flex items-center justify-center font-label-sm text-[10px] font-bold">AR</div>
+<div>
+<div class="text-slate-800 font-medium leading-none">Alex Rivera</div>
+<span class="text-[10px] font-label-sm text-amber-700 font-semibold">Admin</span>
+</div>
+</div>
+</td>
+<td class="py-3.5 px-4 font-label-sm text-[11px] text-slate-500">
+                2 hours ago
+              </td>
+<td class="py-3.5 px-4 text-right space-x-1">
+<button class="px-2.5 py-1 rounded bg-white text-primary border border-blue-200 text-xs font-semibold hover:border-primary transition-all shadow-2xs">
+                  Open Workspace
+                </button>
+<button class="p-1 rounded text-slate-500 hover:text-slate-800 hover:bg-slate-100" title="Export PDF/MD">
+<span class="material-symbols-outlined text-base" data-icon="file_download">file_download</span>
+</button>
+<button class="p-1 rounded text-slate-500 hover:text-slate-800 hover:bg-slate-100" title="Prompt Tuning">
+<span class="material-symbols-outlined text-base" data-icon="tune">tune</span>
+</button>
+</td>
+</tr>
+<!-- Row 3: Missing Info Warning (Cinnabar) -->
+<tr class="hover:bg-blue-50/40 transition-colors bg-white">
+<td class="py-3.5 px-4 text-center">
+<input class="rounded border-slate-300 text-primary focus:ring-0" type="checkbox"/>
+</td>
+<td class="py-3.5 px-4">
+<div class="flex items-center space-x-2">
+<div class="w-2 h-2 rounded-full bg-cinnabar-alert shrink-0"></div>
+<div>
+<div class="font-headline-sm text-[14px] text-slate-900 font-bold hover:text-primary cursor-pointer">
+                      Customer MDM DuckDB Pipeline
+                    </div>
+<div class="font-label-sm text-[11px] text-slate-500 font-mono">PRJ-DATA-4402 • Columnar Lakehouse</div>
+</div>
+</div>
+</td>
+<td class="py-3.5 px-4">
+<div class="flex items-center space-x-1.5 flex-wrap gap-1">
+<span class="inline-flex items-center px-2 py-0.5 rounded bg-slate-100 border border-slate-200 text-[11px] font-mono text-slate-700">
+<span class="material-symbols-outlined text-[13px] mr-1 text-primary" data-icon="code">code</span>
+                    Schema_MDM.sql
+                  </span>
+</div>
+</td>
+<td class="py-3.5 px-4">
+<span class="inline-flex items-center px-2.5 py-1 rounded-full bg-red-50 border border-red-300 text-red-700 font-label-sm text-[11px] font-medium">
+<span class="material-symbols-outlined text-xs mr-1 text-cinnabar-alert" data-icon="warning">warning</span>
+                  Missing Info Warning
+                </span>
+</td>
+<td class="py-3.5 px-4">
+<div class="flex items-center space-x-2">
+<div class="w-6 h-6 rounded-full bg-blue-50 text-primary border border-blue-200 flex items-center justify-center font-label-sm text-[10px] font-bold">CW</div>
+<div>
+<div class="text-slate-800 font-medium leading-none">Chen Wei</div>
+<span class="text-[10px] font-label-sm text-blue-700 font-semibold">Maker</span>
+</div>
+</div>
+</td>
+<td class="py-3.5 px-4 font-label-sm text-[11px] text-slate-500">
+                Yesterday
+              </td>
+<td class="py-3.5 px-4 text-right space-x-1">
+<button class="px-2.5 py-1 rounded bg-red-50 text-red-700 border border-red-300 text-xs font-semibold hover:bg-red-100 transition-all">
+                  Fix Inputs
+                </button>
+<button class="p-1 rounded text-slate-500 hover:text-slate-800 hover:bg-slate-100" title="Export PDF/MD">
+<span class="material-symbols-outlined text-base" data-icon="file_download">file_download</span>
+</button>
+<button class="p-1 rounded text-slate-500 hover:text-slate-800 hover:bg-slate-100" title="Prompt Tuning">
+<span class="material-symbols-outlined text-base" data-icon="tune">tune</span>
+</button>
+</td>
+</tr>
+<!-- Row 4: Drafting (Maker) -->
+<tr class="hover:bg-blue-50/40 transition-colors bg-slate-50/50">
+<td class="py-3.5 px-4 text-center">
+<input class="rounded border-slate-300 text-primary focus:ring-0" type="checkbox"/>
+</td>
+<td class="py-3.5 px-4">
+<div class="flex items-center space-x-2">
+<div class="w-2 h-2 rounded-full bg-slate-400 shrink-0"></div>
+<div>
+<div class="font-headline-sm text-[14px] text-slate-900 font-bold hover:text-primary cursor-pointer">
+                      Risk Scoring Microservice Event Bus
+                    </div>
+<div class="font-label-sm text-[11px] text-slate-500 font-mono">PRJ-SEC-9021 • Avro Schema Registry</div>
+</div>
+</div>
+</td>
+<td class="py-3.5 px-4">
+<div class="flex items-center space-x-1.5 flex-wrap gap-1">
+<span class="inline-flex items-center px-2 py-0.5 rounded bg-slate-100 border border-slate-200 text-[11px] font-mono text-slate-700">
+                    Risk_Spec_v2.md
+                  </span>
+<span class="inline-flex items-center px-1.5 py-0.5 rounded bg-slate-100 border border-slate-200 text-[10px] text-slate-500 font-mono">+2 files</span>
+</div>
+</td>
+<td class="py-3.5 px-4">
+<span class="inline-flex items-center px-2.5 py-1 rounded-full bg-slate-100 border border-slate-300 text-slate-700 font-label-sm text-[11px] font-medium">
+<span class="w-1.5 h-1.5 rounded-full bg-slate-400 mr-1.5"></span>
+                  Drafting (Maker)
+                </span>
+</td>
+<td class="py-3.5 px-4">
+<div class="flex items-center space-x-2">
+<div class="w-6 h-6 rounded-full bg-blue-50 text-primary border border-blue-200 flex items-center justify-center font-label-sm text-[10px] font-bold">CW</div>
+<div>
+<div class="text-slate-800 font-medium leading-none">Chen Wei</div>
+<span class="text-[10px] font-label-sm text-blue-700 font-semibold">Maker</span>
+</div>
+</div>
+</td>
+<td class="py-3.5 px-4 font-label-sm text-[11px] text-slate-500">
+                3 days ago
+              </td>
+<td class="py-3.5 px-4 text-right space-x-1">
+<button class="px-2.5 py-1 rounded bg-white text-primary border border-blue-200 text-xs font-semibold hover:border-primary transition-all shadow-2xs">
+                  Open Workspace
+                </button>
+<button class="p-1 rounded text-slate-500 hover:text-slate-800 hover:bg-slate-100" title="Export PDF/MD">
+<span class="material-symbols-outlined text-base" data-icon="file_download">file_download</span>
+</button>
+<button class="p-1 rounded text-slate-500 hover:text-slate-800 hover:bg-slate-100" title="Prompt Tuning">
+<span class="material-symbols-outlined text-base" data-icon="tune">tune</span>
+</button>
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+<!-- Pagination & Bottom Quick Stats -->
+<div class="p-3.5 border-t border-glaze-border flex flex-col sm:flex-row items-center justify-between gap-3 text-slate-600 font-label-sm text-[11px] bg-slate-50/50">
+<div class="flex items-center space-x-3">
+<span>Showing <strong class="text-slate-900">1 - 4</strong> of <strong class="text-slate-900">42</strong> enterprise projects</span>
+<span class="text-slate-300">|</span>
+<span class="text-primary font-medium">DuckDB Parquet scan took 1.2ms</span>
+</div>
+<div class="flex items-center space-x-1">
+<button class="px-2.5 py-1 rounded border border-slate-200 bg-white text-slate-400 hover:text-slate-700 disabled:opacity-50 shadow-2xs" disabled="">
+            Previous
+          </button>
+<button class="px-2.5 py-1 rounded border border-primary bg-primary text-white font-bold shadow-2xs">1</button>
+<button class="px-2.5 py-1 rounded border border-slate-200 bg-white hover:text-slate-900 shadow-2xs">2</button>
+<button class="px-2.5 py-1 rounded border border-slate-200 bg-white hover:text-slate-900 shadow-2xs">3</button>
+<span class="px-1 text-slate-400">...</span>
+<button class="px-2.5 py-1 rounded border border-slate-200 bg-white hover:text-slate-900 shadow-2xs">11</button>
+<button class="px-2.5 py-1 rounded border border-slate-200 bg-white hover:text-slate-900 shadow-2xs">
+            Next
+          </button>
+</div>
+</div>
+</section>
+<!-- 4. QUICK WIDGET DOCK (Recent RAG Extraction Feed & Schema Telemetry) -->
+<section class="grid grid-cols-1 lg:grid-cols-3 gap-space-md">
+<!-- Widget 1: Recent RAG Extraction Feed -->
+<div class="lg:col-span-2 bg-white border border-glaze-border rounded-xl p-space-md shadow-2xs">
+<div class="flex items-center justify-between border-b border-glaze-border pb-3 mb-3">
+<div class="flex items-center space-x-2.5">
+<span class="material-symbols-outlined text-primary text-lg" data-icon="hub">hub</span>
+<h5 class="font-headline-sm text-base text-slate-900 font-bold">RAG Extraction Graph Stream</h5>
+</div>
+<span class="font-label-sm text-[11px] text-primary font-medium flex items-center">
+<span class="w-1.5 h-1.5 rounded-full bg-emerald-500 mr-1.5 animate-pulse"></span>
+            Real-time Ingestion Live
+          </span>
+</div>
+<div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+<!-- Card 1 -->
+<div class="p-3 rounded-lg bg-slate-50 border border-glaze-border hover:border-primary/50 transition-colors">
+<div class="flex items-center justify-between text-slate-400 font-label-sm text-[10px]">
+<span class="text-primary font-semibold">REST INTERFACE</span>
+<span>2m ago</span>
+</div>
+<div class="font-headline-sm text-[13px] text-slate-900 font-bold mt-1 truncate">POST /v3/settlements/execute</div>
+<p class="font-body-sm text-[11px] text-slate-600 mt-1 line-clamp-2">
+              Parsed idempotency keys, ISO 20022 message schema bindings, and retry timeouts.
+            </p>
+<div class="mt-2.5 pt-2 border-t border-slate-200 flex items-center justify-between font-label-sm text-[10px]">
+<span class="text-slate-500">Repo: trade-core-api</span>
+<span class="text-primary font-semibold hover:underline cursor-pointer">Inspect RAG</span>
+</div>
+</div>
+<!-- Card 2 -->
+<div class="p-3 rounded-lg bg-slate-50 border border-glaze-border hover:border-primary/50 transition-colors">
+<div class="flex items-center justify-between text-slate-400 font-label-sm text-[10px]">
+<span class="text-secondary font-semibold">DUCKDB DDL</span>
+<span>14m ago</span>
+</div>
+<div class="font-headline-sm text-[13px] text-slate-900 font-bold mt-1 truncate">CREATE TABLE trade_events_v3</div>
+<p class="font-body-sm text-[11px] text-slate-600 mt-1 line-clamp-2">
+              Extracted 32 columnar attributes, partitioned by settlement_date with zstd compression.
+            </p>
+<div class="mt-2.5 pt-2 border-t border-slate-200 flex items-center justify-between font-label-sm text-[10px]">
+<span class="text-slate-500">File: Schema_MDM.sql</span>
+<span class="text-primary font-semibold hover:underline cursor-pointer">Inspect RAG</span>
+</div>
+</div>
+<!-- Card 3 -->
+<div class="p-3 rounded-lg bg-slate-50 border border-glaze-border hover:border-primary/50 transition-colors">
+<div class="flex items-center justify-between text-slate-400 font-label-sm text-[10px]">
+<span class="text-amber-700 font-semibold">CAPABILITY GRAPH</span>
+<span>28m ago</span>
+</div>
+<div class="font-headline-sm text-[13px] text-slate-900 font-bold mt-1 truncate">Multi-Region Active Failover</div>
+<p class="font-body-sm text-[11px] text-slate-600 mt-1 line-clamp-2">
+              Mapped NFR requirement to AWS Route53 latency routing and DuckDB read-replicas.
+            </p>
+<div class="mt-2.5 pt-2 border-t border-slate-200 flex items-center justify-between font-label-sm text-[10px]">
+<span class="text-slate-500">Doc: Trade_FSD_v4.pdf</span>
+<span class="text-primary font-semibold hover:underline cursor-pointer">Inspect RAG</span>
+</div>
+</div>
+</div>
+</div>
+<!-- Widget 2: Ceramic System Integrity & Guardrail Card -->
+<div class="bg-white border border-glaze-border rounded-xl p-space-md shadow-2xs flex flex-col justify-between">
+<div>
+<div class="flex items-center justify-between border-b border-glaze-border pb-3 mb-3">
+<div class="flex items-center space-x-2">
+<span class="material-symbols-outlined text-amber-600 text-lg" data-icon="verified_user">verified_user</span>
+<h5 class="font-headline-sm text-base text-slate-900 font-bold">Checker Guardrails</h5>
+</div>
+<span class="px-2 py-0.5 rounded bg-amber-50 text-amber-700 border border-amber-300 font-label-sm text-[10px] font-semibold">
+              Enforced
+            </span>
+</div>
+<p class="font-body-sm text-[12px] text-slate-600 mb-3">
+            Automated compliance gates prevent hallucinated interfaces or unreferenced databases from passing to Finalized state.
+          </p>
+<div class="space-y-2 font-label-sm text-[12px]">
+<div class="flex items-center justify-between p-2 rounded bg-slate-50 border border-slate-200">
+<span class="text-slate-800">Architecture Review Board Standards</span>
+<span class="text-emerald-600 font-bold">100% Pass</span>
+</div>
+<div class="flex items-center justify-between p-2 rounded bg-slate-50 border border-slate-200">
+<span class="text-slate-800">Data Privacy &amp; PII Column Masking</span>
+<span class="text-emerald-600 font-bold">Protected</span>
+</div>
+<div class="flex items-center justify-between p-2 rounded bg-slate-50 border border-slate-200">
+<span class="text-slate-800">DuckDB In-Memory Schema Verifier</span>
+<span class="text-emerald-600 font-bold">Ready</span>
+</div>
+</div>
+</div>
+<button class="mt-4 w-full py-1.5 rounded-lg border border-blue-200 hover:bg-blue-50 text-primary font-semibold text-[13px] transition-colors flex items-center justify-center space-x-2">
+<span class="material-symbols-outlined text-sm" data-icon="policy">policy</span>
+<span>Open Full Compliance Audit</span>
+</button>
+</div>
+</section>
+</main>
+<!-- ================= DOCKED GLOBAL CHAT WIDGET TRIGGER ================= -->
+<!-- Context-Aware Chat Drawer trigger docked persistently to lower right -->
+<div class="fixed bottom-6 right-6 z-50 flex items-center space-x-3">
+<!-- Guardrail notification tooltip capsule -->
+<div class="hidden sm:flex items-center space-x-2 px-3 py-1.5 rounded-full bg-white border border-blue-200 shadow-lg">
+<span class="material-symbols-outlined text-emerald-600 text-sm" data-icon="shield">shield</span>
+<span class="font-label-sm text-[11px] text-slate-800 font-semibold">RAG Guardrail Active</span>
+<span class="w-1.5 h-1.5 rounded-full bg-primary animate-ping"></span>
+</div>
+<!-- Floating Trigger Disc Button -->
+<button class="relative group w-14 h-14 rounded-full bg-primary text-white border-2 border-white shadow-xl hover:scale-105 active:scale-95 transition-all flex items-center justify-center">
+<!-- Glow effect -->
+<span class="absolute inset-0 rounded-full bg-primary blur opacity-25 group-hover:opacity-40 transition-opacity"></span>
+<span class="relative material-symbols-outlined text-2xl" data-icon="forum" style="font-variation-settings: 'FILL' 1;">forum</span>
+<!-- Glowing blue dot -->
+<span class="absolute top-1 right-1 w-3.5 h-3.5 bg-blue-500 border-2 border-white rounded-full flex items-center justify-center">
+<span class="w-1.5 h-1.5 rounded-full bg-white"></span>
+</span>
+</button>
+</div>
+</body></html>

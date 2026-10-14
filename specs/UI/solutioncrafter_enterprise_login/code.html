@@ -1,0 +1,479 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>SolutionCrafter - Enterprise Architecture &amp; SDD Synthesis Engine</title>
+<!-- Material Symbols Outlined -->
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<!-- Google Fonts: Plus Jakarta Sans, Inter, JetBrains Mono -->
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&amp;family=JetBrains+Mono:wght@400;500;600;700&amp;family=Plus+Jakarta+Sans:wght@500;600;700;800&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<!-- Tailwind CSS v3 -->
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script id="tailwind-config">
+    tailwind.config = {
+      darkMode: "class",
+      theme: {
+        extend: {
+          "colors": {
+            "error": "#ffb4ab",
+            "inverse-primary": "#325ea0",
+            "surface-dim": "#0a122a",
+            "surface-bright": "#313852",
+            "tertiary-container": "#3d4e58",
+            "on-secondary-fixed-variant": "#003ea8",
+            "cobalt-ultramarine": "#2563EB",
+            "surface-variant": "#2c344d",
+            "secondary-fixed-dim": "#b4c5ff",
+            "on-tertiary": "#22333c",
+            "on-secondary": "#002a78",
+            "slate-night": "#1C2541",
+            "inverse-surface": "#dbe1ff",
+            "surface-tint": "#aac7ff",
+            "on-tertiary-fixed-variant": "#384953",
+            "porcelain-pure": "#FFFFFF",
+            "porcelain-ivory": "#F0F4F8",
+            "on-secondary-fixed": "#00174b",
+            "on-tertiary-container": "#adbfca",
+            "on-secondary-container": "#cdd7ff",
+            "outline": "#8d909b",
+            "on-primary-fixed-variant": "#124687",
+            "error-container": "#93000a",
+            "primary-fixed-dim": "#aac7ff",
+            "on-surface": "#dbe1ff",
+            "on-error-container": "#ffdad6",
+            "secondary-container": "#0053db",
+            "slate-midnight": "#0E1626",
+            "surface-container-lowest": "#050d25",
+            "on-primary-container": "#99bdff",
+            "on-primary": "#002f64",
+            "celadon-mist": "#BAE6FD",
+            "on-error": "#690005",
+            "surface": "#0a122a",
+            "cobalt-deep": "#103B75",
+            "primary-container": "#1a4b8c",
+            "on-background": "#dbe1ff",
+            "tertiary-fixed-dim": "#b7c9d5",
+            "on-primary-fixed": "#001b3e",
+            "tertiary": "#b7c9d5",
+            "surface-container-highest": "#2c344d",
+            "on-tertiary-fixed": "#0c1e26",
+            "tertiary-fixed": "#d3e5f1",
+            "surface-container": "#171e37",
+            "inverse-on-surface": "#282f49",
+            "background": "#0a122a",
+            "primary-fixed": "#d6e3ff",
+            "secondary-fixed": "#dbe1ff",
+            "primary": "#aac7ff",
+            "surface-container-low": "#131a33",
+            "secondary": "#b4c5ff",
+            "cinnabar-alert": "#DC2626",
+            "porcelain-glaze": "#FAFCFF",
+            "outline-variant": "#434750",
+            "surface-container-high": "#212942",
+            "ceramic-gold": "#D97706",
+            "on-surface-variant": "#c3c6d2"
+          },
+          "borderRadius": {
+            "DEFAULT": "0.125rem",
+            "lg": "0.25rem",
+            "xl": "0.5rem",
+            "full": "0.75rem"
+          },
+          "spacing": {
+            "gutter-lg": "1.5rem",
+            "margin-lg": "2rem",
+            "space-sm": "0.5rem",
+            "margin-md": "1.5rem",
+            "space-xs": "0.25rem",
+            "margin": "1rem",
+            "space-xl": "2.5rem",
+            "space-lg": "1.5rem",
+            "space-md": "1rem",
+            "gutter": "1rem"
+          },
+          "fontFamily": {
+            "display-hero": ["Plus Jakarta Sans"],
+            "body-sm": ["Inter"],
+            "headline-md": ["Plus Jakarta Sans"],
+            "body-lg": ["Inter"],
+            "body-md": ["Inter"],
+            "label-sm": ["JetBrains Mono"],
+            "label-lg": ["JetBrains Mono"],
+            "label-md": ["JetBrains Mono"],
+            "headline-lg": ["Plus Jakarta Sans"],
+            "headline-sm": ["Plus Jakarta Sans"],
+            "headline-lg-mobile": ["Plus Jakarta Sans"],
+            "display-hero-mobile": ["Plus Jakarta Sans"]
+          },
+          "fontSize": {
+            "display-hero": ["40px", { "lineHeight": "48px", "letterSpacing": "-0.03em", "fontWeight": "700" }],
+            "body-sm": ["12px", { "lineHeight": "18px", "letterSpacing": "0.01em", "fontWeight": "400" }],
+            "headline-md": ["22px", { "lineHeight": "30px", "letterSpacing": "-0.01em", "fontWeight": "600" }],
+            "body-lg": ["16px", { "lineHeight": "24px", "letterSpacing": "-0.005em", "fontWeight": "400" }],
+            "body-md": ["14px", { "lineHeight": "20px", "letterSpacing": "0", "fontWeight": "400" }],
+            "label-sm": ["10px", { "lineHeight": "14px", "letterSpacing": "0.04em", "fontWeight": "600" }],
+            "label-lg": ["14px", { "lineHeight": "20px", "letterSpacing": "-0.01em", "fontWeight": "500" }],
+            "label-md": ["12px", { "lineHeight": "16px", "letterSpacing": "0", "fontWeight": "500" }],
+            "headline-lg": ["32px", { "lineHeight": "40px", "letterSpacing": "-0.02em", "fontWeight": "600" }],
+            "headline-sm": ["18px", { "lineHeight": "26px", "letterSpacing": "0", "fontWeight": "600" }],
+            "headline-lg-mobile": ["24px", { "lineHeight": "32px", "letterSpacing": "-0.01em", "fontWeight": "600" }],
+            "display-hero-mobile": ["30px", { "lineHeight": "38px", "letterSpacing": "-0.02em", "fontWeight": "700" }]
+          }
+        }
+      }
+    };
+  </script>
+<style>
+    /* Material symbol font rendering helper */
+    .material-symbols-outlined {
+      font-family: 'Material Symbols Outlined';
+      font-weight: normal;
+      font-style: normal;
+      font-size: 20px;
+      line-height: 1;
+      display: inline-block;
+      text-transform: none;
+      letter-spacing: normal;
+      word-wrap: normal;
+      white-space: nowrap;
+      direction: ltr;
+      vertical-align: middle;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    /* Vitrified crackle and dotted blueprint mesh */
+    .blueprint-grid {
+      background-image: radial-gradient(rgba(186, 230, 253, 0.12) 1px, transparent 1px);
+      background-size: 20px 20px;
+    }
+
+    .porcelain-glaze-edge {
+      box-shadow: inset 0 1px 0 0 rgba(224, 242, 254, 0.2), 0 8px 32px -4px rgba(11, 19, 43, 0.65);
+    }
+
+    .cobalt-glow {
+      box-shadow: 0 0 25px -4px rgba(37, 99, 235, 0.35);
+    }
+  </style>
+</head>
+<body class="bg-background text-on-surface min-h-screen flex flex-col font-body-md text-body-md antialiased selection:bg-cobalt-ultramarine selection:text-porcelain-pure overflow-x-hidden">
+<!-- Ambient Vitrification Kiln Aura -->
+<div class="fixed inset-0 pointer-events-none z-0 overflow-hidden">
+<div class="absolute -top-40 left-1/4 w-[700px] h-[700px] bg-cobalt-deep/25 rounded-full blur-[140px]"></div>
+<div class="absolute -bottom-32 right-10 w-[550px] h-[550px] bg-secondary-container/15 rounded-full blur-[120px]"></div>
+<div class="absolute inset-0 blueprint-grid opacity-75"></div>
+</div>
+<!-- Top Minimal Utility Bar -->
+<header class="relative z-20 w-full h-14 px-space-lg flex items-center justify-between border-b border-outline-variant/40 bg-surface-container-low/70 backdrop-blur-md">
+<div class="flex items-center gap-space-md">
+<div class="flex items-center gap-2">
+<span class="w-2.5 h-2.5 rounded-full bg-cobalt-ultramarine shadow-[0_0_8px_#2563EB]"></span>
+<span class="font-label-sm text-label-sm text-celadon-mist uppercase tracking-widest">Enterprise Synthesis Gate</span>
+</div>
+<span class="hidden md:inline-block text-outline text-xs">|</span>
+<span class="hidden md:inline-flex items-center gap-1.5 font-label-sm text-label-sm text-on-surface-variant">
+<span class="material-symbols-outlined text-[16px] text-primary">verified_user</span>
+        ISO/IEC 42001 &amp; SOC2 Type II Certified
+      </span>
+</div>
+<div class="flex items-center gap-space-md">
+<div class="flex items-center gap-2 px-2.5 py-1 rounded bg-surface-container-high/80 border border-outline-variant/60">
+<span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping"></span>
+<span class="font-label-sm text-label-sm text-on-surface">RAG-Engine: Ready (14.2k Chunks)</span>
+</div>
+<button class="flex items-center gap-1 px-2 py-1 text-on-surface-variant hover:text-on-surface transition-colors font-label-sm text-label-sm">
+<span class="material-symbols-outlined text-[18px]">help</span>
+<span class="hidden sm:inline">Support</span>
+</button>
+</div>
+</header>
+<!-- Main Viewport Canvas (Split Architecture) -->
+<main class="relative z-10 flex-1 w-full max-w-7xl mx-auto px-space-md sm:px-space-lg py-6 sm:py-10 flex items-center justify-center">
+<div class="w-full grid grid-cols-1 lg:grid-cols-12 gap-8 items-stretch">
+<!-- LEFT SHOWCASE PANEL: Ceramic Architecture Blueprint -->
+<section class="lg:col-span-7 flex flex-col justify-between p-6 sm:p-8 rounded-xl bg-surface-container-low/80 border border-outline-variant/50 backdrop-blur-xl porcelain-glaze-edge relative overflow-hidden">
+<!-- Subtle Cobalt Hairline Watermark Accent -->
+<div class="absolute -right-20 -bottom-20 w-80 h-80 rounded-full border border-cobalt-ultramarine/10 pointer-events-none"></div>
+<div class="absolute -right-10 -bottom-10 w-60 h-60 rounded-full border border-cobalt-ultramarine/15 pointer-events-none"></div>
+<div>
+<!-- Brand Badge Header -->
+<div class="flex items-center gap-3.5 mb-6">
+<div class="w-12 h-12 rounded-lg bg-surface-container border border-cobalt-ultramarine/50 flex items-center justify-center shadow-[0_0_15px_rgba(37,99,235,0.25)] relative group">
+<span class="material-symbols-outlined text-primary text-[28px]">hub</span>
+<span class="absolute -top-1 -right-1 w-2.5 h-2.5 bg-celadon-mist rounded-full"></span>
+</div>
+<div>
+<div class="flex items-center gap-2">
+<h1 class="font-headline-md text-headline-md font-bold text-porcelain-glaze tracking-tight">SolutionCrafter</h1>
+<span class="font-label-sm text-label-sm px-2 py-0.5 rounded bg-primary-container/60 text-celadon-mist border border-cobalt-ultramarine/40">v4.2 PRO</span>
+</div>
+<p class="font-body-sm text-body-sm text-on-surface-variant font-medium">Enterprise Architecture &amp; SDD Synthesis Engine</p>
+</div>
+</div>
+<!-- Headline & Pitch -->
+<div class="space-y-3 mb-8">
+<h2 class="font-headline-lg text-headline-lg text-on-surface font-semibold leading-tight">
+              Clinical Precision in <br/>
+<span class="text-transparent bg-clip-text bg-gradient-to-r from-primary via-celadon-mist to-porcelain-pure">
+                Automated Solution Design
+              </span>
+</h2>
+<p class="font-body-md text-body-md text-on-surface-variant max-w-xl">
+              Synthesize production-grade enterprise Solution Design Documents (SDD) from raw BRDs, interface specs, and system telemetry in minutes—governed by Qinghua precision blueprints.
+            </p>
+</div>
+<!-- Live Specification Bento Architecture -->
+<div class="space-y-4 mb-8">
+<div class="flex items-center justify-between pb-1 border-b border-outline-variant/30">
+<span class="font-label-sm text-label-sm text-celadon-mist uppercase tracking-wider flex items-center gap-1.5">
+<span class="material-symbols-outlined text-[16px] text-cobalt-ultramarine">layers</span>
+                Pre-Loaded Synthesis Kernel
+              </span>
+<span class="font-label-sm text-label-sm text-outline">solution_design_document.md</span>
+</div>
+<!-- Bento Mini Grid -->
+<div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+<!-- Item 1 -->
+<div class="p-3.5 rounded-lg bg-surface-container/70 border border-outline-variant/40 hover:border-cobalt-ultramarine/50 transition-all">
+<div class="flex items-center gap-2 mb-1.5">
+<span class="material-symbols-outlined text-primary text-[18px]">account_tree</span>
+<span class="font-label-md text-label-md text-on-surface font-semibold">Sequence &amp; Exception Flows</span>
+</div>
+<p class="font-body-sm text-body-sm text-on-surface-variant">
+                  Mermaid.js vector graphs auto-derived with failure trees &amp; circuit breakers.
+                </p>
+</div>
+<!-- Item 2 -->
+<div class="p-3.5 rounded-lg bg-surface-container/70 border border-outline-variant/40 hover:border-cobalt-ultramarine/50 transition-all">
+<div class="flex items-center gap-2 mb-1.5">
+<span class="material-symbols-outlined text-primary text-[18px]">database</span>
+<span class="font-label-md text-label-md text-on-surface font-semibold">DuckDB In-Process Schemas</span>
+</div>
+<p class="font-body-sm text-body-sm text-on-surface-variant">
+                  Native GCS HTTPFS parquet persistence &amp; live volumetric calculations.
+                </p>
+</div>
+<!-- Item 3 -->
+<div class="p-3.5 rounded-lg bg-surface-container/70 border border-outline-variant/40 hover:border-cobalt-ultramarine/50 transition-all">
+<div class="flex items-center gap-2 mb-1.5">
+<span class="material-symbols-outlined text-primary text-[18px]">shield_lock</span>
+<span class="font-label-md text-label-md text-on-surface font-semibold">NeMo Guardrails &amp; FMEA</span>
+</div>
+<p class="font-body-sm text-body-sm text-on-surface-variant">
+                  Jailbreak defense, prompt injection immunity &amp; automated threat matrices.
+                </p>
+</div>
+<!-- Item 4 -->
+<div class="p-3.5 rounded-lg bg-surface-container/70 border border-outline-variant/40 hover:border-cobalt-ultramarine/50 transition-all">
+<div class="flex items-center gap-2 mb-1.5">
+<span class="material-symbols-outlined text-primary text-[18px]">balance</span>
+<span class="font-label-md text-label-md text-on-surface font-semibold">NFR Compliance Engine</span>
+</div>
+<p class="font-body-sm text-body-sm text-on-surface-variant">
+                  Latency budgets, RTO/RPO limits, and automated missing section alerts.
+                </p>
+</div>
+</div>
+</div>
+</div>
+<!-- Metric Ticker & RBAC Matrix Banner -->
+<div class="pt-4 border-t border-outline-variant/40 space-y-3">
+<div class="flex flex-wrap items-center justify-between gap-3 text-xs">
+<div class="flex items-center gap-3">
+<span class="font-label-sm text-label-sm text-on-surface-variant">Synthesized Artifacts:</span>
+<span class="px-2 py-0.5 rounded font-label-sm text-label-sm bg-surface-container text-celadon-mist border border-outline-variant">
+                42 Active Architectures
+              </span>
+<span class="px-2 py-0.5 rounded font-label-sm text-label-sm bg-surface-container text-celadon-mist border border-outline-variant hidden sm:inline-block">
+                14,290 RAG Vectors
+              </span>
+</div>
+<div class="flex items-center gap-1.5 text-primary">
+<span class="material-symbols-outlined text-[16px]">bolt</span>
+<span class="font-label-sm text-label-sm">0ms Cache Invalidation</span>
+</div>
+</div>
+<!-- RBAC Capability Tags -->
+<div class="flex items-center gap-2 pt-1 overflow-x-auto no-scrollbar">
+<span class="font-label-sm text-label-sm text-outline mr-1">Supported Personas:</span>
+<span class="px-2 py-0.5 rounded text-[10px] font-label-sm border border-ceramic-gold/40 text-ceramic-gold bg-ceramic-gold/10 font-bold">Admin</span>
+<span class="px-2 py-0.5 rounded text-[10px] font-label-sm border border-cobalt-ultramarine/40 text-primary bg-primary-container/20 font-bold">Checker</span>
+<span class="px-2 py-0.5 rounded text-[10px] font-label-sm border border-celadon-mist/30 text-celadon-mist bg-surface-container-high font-medium">Maker</span>
+<span class="px-2 py-0.5 rounded text-[10px] font-label-sm border border-outline-variant text-on-surface-variant bg-surface-container-high font-medium">Viewer</span>
+</div>
+</div>
+</section>
+<!-- RIGHT AUTHENTICATION CARD: Precision Console -->
+<section class="lg:col-span-5 flex flex-col justify-between p-6 sm:p-8 rounded-xl bg-surface-container/90 border border-outline-variant/60 backdrop-blur-2xl porcelain-glaze-edge relative shadow-2xl">
+<!-- Vitrified hairline accent on top border -->
+<div class="absolute top-0 left-6 right-6 h-[2px] bg-gradient-to-r from-transparent via-cobalt-ultramarine to-transparent"></div>
+<div>
+<!-- Card Header -->
+<div class="mb-6">
+<div class="flex items-center justify-between mb-1.5">
+<h3 class="font-headline-sm text-headline-sm font-semibold text-porcelain-glaze">Sign In to SolutionCrafter</h3>
+<span class="w-2 h-2 rounded-full bg-primary animate-pulse" title="Secure TLS 1.3 Active"></span>
+</div>
+<p class="font-body-sm text-body-sm text-on-surface-variant">
+              Enter your enterprise single sign-on credentials or select your role sandbox.
+            </p>
+</div>
+<!-- Primary Enterprise SSO Action -->
+<button class="w-full h-11 px-4 mb-5 rounded-lg bg-surface-container-high border border-cobalt-ultramarine/40 hover:border-cobalt-ultramarine hover:bg-surface-container-highest text-porcelain-glaze font-label-md text-label-md font-semibold flex items-center justify-center gap-2.5 transition-all duration-200 active:scale-[0.99] group shadow-sm" type="button">
+<span class="material-symbols-outlined text-primary group-hover:scale-110 transition-transform text-[20px]">security</span>
+<span>Continue with Enterprise SSO (Okta / Azure AD)</span>
+</button>
+<!-- Divider -->
+<div class="relative flex py-1 items-center mb-5">
+<div class="flex-grow border-t border-outline-variant/40"></div>
+<span class="flex-shrink mx-3 font-label-sm text-label-sm text-outline uppercase tracking-wider">or sign in with credentials</span>
+<div class="flex-grow border-t border-outline-variant/40"></div>
+</div>
+<!-- Credentials Form -->
+<form class="space-y-4" onsubmit="event.preventDefault();">
+<!-- Email / Enterprise ID Input -->
+<div>
+<div class="flex justify-between items-center mb-1.5">
+<label class="font-label-sm text-label-sm text-on-surface font-semibold tracking-wide" for="enterprise-id">
+                  Enterprise ID / Email
+                </label>
+<span class="font-label-sm text-label-sm text-outline">Corporate UPN</span>
+</div>
+<div class="relative">
+<span class="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none text-outline">
+<span class="material-symbols-outlined text-[18px]">badge</span>
+</span>
+<input class="w-full h-10 pl-10 pr-3 rounded-lg bg-slate-midnight border border-slate-night text-on-surface font-body-md text-body-md placeholder:text-outline/60 focus:outline-none focus:border-cobalt-ultramarine focus:ring-1 focus:ring-cobalt-ultramarine transition-all" id="enterprise-id" placeholder="architect@enterprise.org" required="" type="email" value="chief.architect@enterprise.org"/>
+</div>
+</div>
+<!-- Password Input with Visibility Toggle -->
+<div>
+<div class="flex justify-between items-center mb-1.5">
+<label class="font-label-sm text-label-sm text-on-surface font-semibold tracking-wide" for="password-field">
+                  Master Password / Key
+                </label>
+<a class="font-label-sm text-label-sm text-primary hover:text-celadon-mist transition-colors" href="#">
+                  Forgot credentials?
+                </a>
+</div>
+<div class="relative">
+<span class="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none text-outline">
+<span class="material-symbols-outlined text-[18px]">key</span>
+</span>
+<input class="w-full h-10 pl-10 pr-10 rounded-lg bg-slate-midnight border border-slate-night text-on-surface font-body-md text-body-md placeholder:text-outline/60 focus:outline-none focus:border-cobalt-ultramarine focus:ring-1 focus:ring-cobalt-ultramarine transition-all" id="password-field" placeholder="••••••••••••••••" required="" type="password" value="SynthesisGlaze994#"/>
+<button class="absolute inset-y-0 right-0 flex items-center pr-3 text-outline hover:text-on-surface transition-colors cursor-pointer" id="toggle-password" onclick="const input = document.getElementById('password-field'); input.type = input.type === 'password' ? 'text' : 'password';" type="button">
+<span class="material-symbols-outlined text-[18px]">visibility</span>
+</button>
+</div>
+</div>
+<!-- Active Role Selector Pill Toggle -->
+<div>
+<label class="block font-label-sm text-label-sm text-on-surface font-semibold tracking-wide mb-1.5">
+                Target Workbench Persona (RBAC Scope)
+              </label>
+<div class="grid grid-cols-4 gap-1.5 p-1 rounded-lg bg-slate-midnight border border-slate-night">
+<!-- Admin -->
+<button class="py-1.5 text-center font-label-sm text-label-sm rounded transition-all duration-150 bg-primary-container text-porcelain-glaze font-bold border border-cobalt-ultramarine" id="role-btn-Admin" onclick="selectRole('Admin', 'Full template sequence &amp; prompt tuning access')" type="button">
+                  Admin
+                </button>
+<!-- Maker -->
+<button class="py-1.5 text-center font-label-sm text-label-sm rounded transition-all duration-150 text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high" id="role-btn-Maker" onclick="selectRole('Maker', 'Draft new SDD documents, edit Mermaid flows &amp; DuckDB schemas')" type="button">
+                  Maker
+                </button>
+<!-- Checker -->
+<button class="py-1.5 text-center font-label-sm text-label-sm rounded transition-all duration-150 text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high" id="role-btn-Checker" onclick="selectRole('Checker', 'Compliance evaluation, ARB sign-off &amp; FMEA gate approval')" type="button">
+                  Checker
+                </button>
+<!-- Viewer -->
+<button class="py-1.5 text-center font-label-sm text-label-sm rounded transition-all duration-150 text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high" id="role-btn-Viewer" onclick="selectRole('Viewer', 'Read-only access to published architectural specifications')" type="button">
+                  Viewer
+                </button>
+</div>
+<!-- Persona description dynamic pill banner -->
+<div class="mt-2 flex items-center gap-2 px-2.5 py-1.5 rounded bg-surface-container-low border border-outline-variant/30 text-xs">
+<span class="material-symbols-outlined text-[15px] text-ceramic-gold">verified</span>
+<span class="font-body-sm text-body-sm text-on-surface-variant" id="role-description">
+                  Admin: Full template sequence &amp; prompt tuning access
+                </span>
+</div>
+</div>
+<!-- Remember Device Checkbox -->
+<div class="flex items-center justify-between pt-1">
+<label class="flex items-center gap-2 cursor-pointer select-none">
+<input checked="" class="w-4 h-4 rounded bg-slate-midnight border-outline-variant text-cobalt-ultramarine focus:ring-0 focus:ring-offset-0 cursor-pointer" type="checkbox"/>
+<span class="font-body-sm text-body-sm text-on-surface-variant">Remember device for 14 days</span>
+</label>
+<span class="font-label-sm text-label-sm text-outline flex items-center gap-1">
+<span class="material-symbols-outlined text-[14px]">lock</span> Hardware Key
+              </span>
+</div>
+<!-- Primary Login CTA -->
+<button class="w-full h-12 mt-2 rounded-lg bg-gradient-to-r from-primary-container via-cobalt-ultramarine to-cobalt-deep hover:from-cobalt-ultramarine hover:to-primary-container text-porcelain-pure font-label-md text-label-md font-bold tracking-wide flex items-center justify-center gap-2 transition-all duration-200 active:scale-[0.98] cobalt-glow border border-celadon-mist/30" type="submit">
+<span class="material-symbols-outlined text-[20px]">login</span>
+<span>Authenticate &amp; Enter Workbench</span>
+</button>
+</form>
+</div>
+<!-- Card Footer & Security Verification -->
+<div class="mt-6 pt-4 border-t border-outline-variant/40 space-y-2">
+<div class="flex items-center justify-between text-xs text-on-surface-variant">
+<div class="flex items-center gap-1.5">
+<span class="material-symbols-outlined text-[16px] text-emerald-400">check_circle</span>
+<span class="font-label-sm text-label-sm">FIDO2 &amp; Guardrails AI v2.4 Active</span>
+</div>
+<span class="font-label-sm text-label-sm text-outline">Session: Strict TLS</span>
+</div>
+<div class="flex items-center justify-between text-[11px] text-outline pt-1">
+<a class="hover:text-primary transition-colors" href="#">ARB Guidelines</a>
+<span>•</span>
+<a class="hover:text-primary transition-colors" href="#">Security Policy</a>
+<span>•</span>
+<span class="text-celadon-mist/80">DuckDB Nodes: 100% OK</span>
+</div>
+</div>
+</section>
+</div>
+</main>
+<!-- Global Micro Status Footer Bar -->
+<footer class="relative z-10 w-full px-space-lg py-3 border-t border-outline-variant/30 bg-surface-container-lowest/60 text-center flex flex-col sm:flex-row items-center justify-between gap-2">
+<div class="flex items-center gap-2 text-outline font-label-sm text-label-sm">
+<span class="material-symbols-outlined text-[16px] text-primary">palette</span>
+<span>Qinghua Ceramic Design System • Fired Cobalt Reduction Engine</span>
+</div>
+<div class="flex items-center gap-4 font-label-sm text-label-sm text-outline">
+<span>Synthesis Engine: v4.2.0-rc</span>
+<span class="hidden sm:inline">•</span>
+<span class="hidden sm:inline">NeMo Guardrails Guarded</span>
+<span>•</span>
+<span class="text-on-surface-variant">© 2025 SolutionCrafter Enterprise</span>
+</div>
+</footer>
+<!-- Role Selector Vanilla JavaScript Interaction -->
+<script>
+    const roles = {
+      'Admin': 'Admin: Full template sequence & prompt tuning access',
+      'Maker': 'Maker: Draft new SDD documents, edit Mermaid flows & DuckDB schemas',
+      'Checker': 'Checker: Compliance evaluation, ARB sign-off & FMEA gate approval',
+      'Viewer': 'Viewer: Read-only access to published architectural specifications'
+    };
+
+    function selectRole(selectedRole, description) {
+      // Update description text
+      document.getElementById('role-description').innerText = description;
+
+      // Reset all buttons
+      ['Admin', 'Maker', 'Checker', 'Viewer'].forEach(role => {
+        const btn = document.getElementById(`role-btn-${role}`);
+        if (role === selectedRole) {
+          btn.className = "py-1.5 text-center font-label-sm text-label-sm rounded transition-all duration-150 bg-primary-container text-porcelain-glaze font-bold border border-cobalt-ultramarine";
+        } else {
+          btn.className = "py-1.5 text-center font-label-sm text-label-sm rounded transition-all duration-150 text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high";
+        }
+      });
+    }
+  </script>
+</body></html>

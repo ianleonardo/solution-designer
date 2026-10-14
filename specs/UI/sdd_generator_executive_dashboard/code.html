@@ -1,0 +1,830 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Porcelain SDD Gen - Enterprise Workbench</title>
+<!-- Material Symbols Outlined -->
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<!-- Google Fonts: Inter, Plus Jakarta Sans, JetBrains Mono -->
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&amp;family=JetBrains+Mono:wght@400;500;600&amp;family=Plus+Sans:wght@500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<!-- Tailwind CSS with form & container query plugins -->
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script id="tailwind-config">
+    tailwind.config = {
+      darkMode: "class",
+      theme: {
+        extend: {
+          "colors": {
+            "surface-container-low": "#131a33",
+            "on-error-container": "#ffdad6",
+            "on-tertiary": "#22333c",
+            "secondary": "#b4c5ff",
+            "on-surface-variant": "#c3c6d2",
+            "inverse-surface": "#dbe1ff",
+            "surface-variant": "#2c344d",
+            "surface-container-highest": "#2c344d",
+            "outline": "#8d909b",
+            "primary-fixed-dim": "#aac7ff",
+            "surface-tint": "#aac7ff",
+            "on-tertiary-fixed": "#0c1e26",
+            "tertiary": "#b7c9d5",
+            "error-container": "#93000a",
+            "on-error": "#690005",
+            "tertiary-fixed-dim": "#b7c9d5",
+            "secondary-fixed-dim": "#b4c5ff",
+            "porcelain-pure": "#FFFFFF",
+            "secondary-fixed": "#dbe1ff",
+            "surface-container": "#171e37",
+            "on-primary-container": "#99bdff",
+            "on-tertiary-fixed-variant": "#384953",
+            "outline-variant": "#434750",
+            "primary-container": "#1a4b8c",
+            "porcelain-ivory": "#F0F4F8",
+            "celadon-mist": "#BAE6FD",
+            "on-secondary": "#002a78",
+            "on-tertiary-container": "#adbfca",
+            "primary-fixed": "#d6e3ff",
+            "cobalt-ultramarine": "#2563EB",
+            "secondary-container": "#0053db",
+            "slate-midnight": "#0E1626",
+            "error": "#ffb4ab",
+            "cobalt-deep": "#103B75",
+            "surface-bright": "#313852",
+            "surface-container-lowest": "#050d25",
+            "on-surface": "#dbe1ff",
+            "surface-container-high": "#212942",
+            "inverse-primary": "#325ea0",
+            "inverse-on-surface": "#282f49",
+            "cinnabar-alert": "#DC2626",
+            "on-secondary-fixed": "#00174b",
+            "background": "#0a122a",
+            "on-secondary-fixed-variant": "#003ea8",
+            "on-background": "#dbe1ff",
+            "tertiary-container": "#3d4e58",
+            "surface-dim": "#0a122a",
+            "on-primary-fixed-variant": "#124687",
+            "on-primary-fixed": "#001b3e",
+            "ceramic-gold": "#D97706",
+            "tertiary-fixed": "#d3e5f1",
+            "surface": "#0a122a",
+            "on-primary": "#002f64",
+            "primary": "#aac7ff",
+            "slate-night": "#1C2541",
+            "porcelain-glaze": "#FAFCFF",
+            "on-secondary-container": "#cdd7ff"
+          },
+          "borderRadius": {
+            "DEFAULT": "0.125rem",
+            "lg": "0.25rem",
+            "xl": "0.5rem",
+            "full": "0.75rem"
+          },
+          "spacing": {
+            "space-md": "1rem",
+            "space-lg": "1.5rem",
+            "margin-md": "1.5rem",
+            "space-sm": "0.5rem",
+            "margin-lg": "2rem",
+            "margin": "1rem",
+            "gutter-lg": "1.5rem",
+            "space-xs": "0.25rem",
+            "gutter": "1rem",
+            "space-xl": "2.5rem"
+          },
+          "fontFamily": {
+            "body-md": ["Inter"],
+            "headline-lg-mobile": ["Plus Jakarta Sans"],
+            "display-hero": ["Plus Jakarta Sans"],
+            "label-md": ["JetBrains Mono"],
+            "label-lg": ["JetBrains Mono"],
+            "label-sm": ["JetBrains Mono"],
+            "headline-md": ["Plus Jakarta Sans"],
+            "headline-lg": ["Plus Jakarta Sans"],
+            "body-sm": ["Inter"],
+            "body-lg": ["Inter"],
+            "display-hero-mobile": ["Plus Jakarta Sans"],
+            "headline-sm": ["Plus Jakarta Sans"]
+          },
+          "fontSize": {
+            "body-md": ["14px", { "lineHeight": "20px", "letterSpacing": "0", "fontWeight": "400" }],
+            "headline-lg-mobile": ["24px", { "lineHeight": "32px", "letterSpacing": "-0.01em", "fontWeight": "600" }],
+            "display-hero": ["40px", { "lineHeight": "48px", "letterSpacing": "-0.03em", "fontWeight": "700" }],
+            "label-md": ["12px", { "lineHeight": "16px", "letterSpacing": "0", "fontWeight": "500" }],
+            "label-lg": ["14px", { "lineHeight": "20px", "letterSpacing": "-0.01em", "fontWeight": "500" }],
+            "label-sm": ["10px", { "lineHeight": "14px", "letterSpacing": "0.04em", "fontWeight": "600" }],
+            "headline-md": ["22px", { "lineHeight": "30px", "letterSpacing": "-0.01em", "fontWeight": "600" }],
+            "headline-lg": ["32px", { "lineHeight": "40px", "letterSpacing": "-0.02em", "fontWeight": "600" }],
+            "body-sm": ["12px", { "lineHeight": "18px", "letterSpacing": "0.01em", "fontWeight": "400" }],
+            "body-lg": ["16px", { "lineHeight": "24px", "letterSpacing": "-0.005em", "fontWeight": "400" }],
+            "display-hero-mobile": ["30px", { "lineHeight": "38px", "letterSpacing": "-0.02em", "fontWeight": "700" }],
+            "headline-sm": ["18px", { "lineHeight": "26px", "letterSpacing": "0", "fontWeight": "600" }]
+          }
+        }
+      }
+    }
+  </script>
+<style>
+    /* Vitrified hairline grid texture */
+    .porcelain-grid-bg {
+      background-size: 24px 24px;
+      background-image: 
+        radial-gradient(circle, rgba(170, 199, 255, 0.08) 1px, transparent 1px);
+    }
+    .custom-scrollbar::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    .custom-scrollbar::-webkit-scrollbar-track {
+      background: #0E1626;
+    }
+    .custom-scrollbar::-webkit-scrollbar-thumb {
+      background: #253556;
+      border-radius: 2px;
+    }
+    .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+      background: #1a4b8c;
+    }
+  </style>
+</head>
+<body class="bg-background text-on-background font-body-md text-body-md antialiased min-h-screen selection:bg-cobalt-ultramarine selection:text-porcelain-glaze">
+<!-- ================= TOP APP BAR (Shared Component: TopNavBar) ================= -->
+<header class="fixed top-0 left-0 w-full h-16 flex items-center justify-between px-space-lg border-b border-outline-variant z-40 bg-surface-container shadow-sm">
+<!-- Brand and Left Search Cluster -->
+<div class="flex items-center space-x-6">
+<div class="flex items-center space-x-3 cursor-pointer select-none">
+<!-- Qinghua Cobalt knot emblem motif -->
+<div class="w-8 h-8 rounded-lg bg-surface-container-highest border border-cobalt-ultramarine/40 flex items-center justify-center shadow-inner">
+<span class="material-symbols-outlined text-primary text-xl" data-icon="polyline" style="font-variation-settings: 'FILL' 1;">polyline</span>
+</div>
+<div class="flex flex-col">
+<span class="font-headline-sm text-headline-sm text-porcelain-glaze tracking-tight font-bold">Porcelain SDD Gen</span>
+<span class="font-label-sm text-label-sm text-celadon-mist/70 tracking-widest uppercase">Qinghua Studio v4.2</span>
+</div>
+</div>
+<!-- Search Bar -->
+<div class="hidden lg:flex items-center relative w-96">
+<span class="material-symbols-outlined absolute left-3 text-on-surface-variant text-base" data-icon="search">search</span>
+<input class="w-full h-9 pl-9 pr-8 bg-slate-midnight text-on-surface border border-outline-variant rounded-lg font-body-sm text-body-sm focus:border-cobalt-ultramarine focus:ring-1 focus:ring-celadon-mist/20 transition-all placeholder:text-outline" placeholder="Search projects, RAG interfaces, duckdb schemas..." type="text"/>
+<span class="absolute right-2.5 px-1.5 py-0.5 rounded bg-surface-container-high border border-outline-variant text-on-surface-variant font-label-sm text-label-sm select-none">⌘K</span>
+</div>
+</div>
+<!-- Center Navigation Links -->
+<nav class="hidden md:flex items-center space-x-6 h-full">
+<a class="h-full flex items-center px-1 text-primary border-b-2 border-primary font-label-md text-label-md transition-colors duration-150" href="#">
+        Workspace
+      </a>
+<a class="h-full flex items-center px-1 text-on-surface-variant hover:text-on-surface font-label-md text-label-md transition-colors duration-150" href="#">
+        Architecture Blueprints
+      </a>
+<a class="h-full flex items-center px-1 text-on-surface-variant hover:text-on-surface font-label-md text-label-md transition-colors duration-150" href="#">
+        Compliance Gate
+      </a>
+<a class="h-full flex items-center px-1 text-on-surface-variant hover:text-on-surface font-label-md text-label-md transition-colors duration-150" href="#">
+        Model Benchmarks
+      </a>
+</nav>
+<!-- Right Controls Cluster -->
+<div class="flex items-center space-x-3">
+<!-- Role Indicator Pill -->
+<div class="hidden xl:flex items-center space-x-1.5 px-2.5 py-1 rounded-full bg-surface-container-low border border-ceramic-gold/40 text-ceramic-gold font-label-sm text-label-sm">
+<span class="w-1.5 h-1.5 rounded-full bg-ceramic-gold animate-pulse"></span>
+<span>Role: Admin / Lead Architect</span>
+</div>
+<!-- Action: Export -->
+<button class="hidden sm:inline-flex items-center space-x-1.5 px-3 py-1.5 rounded-lg border border-cobalt-ultramarine/35 text-celadon-mist hover:bg-surface-container-high font-label-md text-label-md transition-all duration-150 ease-in-out active:scale-95">
+<span class="material-symbols-outlined text-sm" data-icon="file_download">file_download</span>
+<span>Export</span>
+</button>
+<!-- Action: Generate / Infer Primary Button -->
+<button class="inline-flex items-center space-x-1.5 px-3.5 py-1.5 rounded-lg bg-primary-container text-porcelain-pure border border-cobalt-ultramarine font-label-md text-label-md shadow-sm hover:bg-cobalt-deep transition-all duration-150 ease-in-out active:scale-95">
+<span class="material-symbols-outlined text-sm" data-icon="auto_awesome" style="font-variation-settings: 'FILL' 1;">auto_awesome</span>
+<span>Generate / Infer</span>
+</button>
+<!-- Icon Actions -->
+<div class="flex items-center space-x-1 pl-2 border-l border-outline-variant">
+<!-- Notifications with badge -->
+<button class="relative p-2 rounded-lg text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors" title="Notifications">
+<span class="material-symbols-outlined text-xl" data-icon="notifications">notifications</span>
+<span class="absolute top-1.5 right-1.5 w-4 h-4 bg-cinnabar-alert text-porcelain-pure font-label-sm text-[9px] flex items-center justify-center rounded-full font-bold">3</span>
+</button>
+<!-- Dark / Light Mode Toggle -->
+<button class="p-2 rounded-lg text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors" title="Toggle theme">
+<span class="material-symbols-outlined text-xl" data-icon="dark_mode">dark_mode</span>
+</button>
+<!-- Tuning parameters -->
+<button class="p-2 rounded-lg text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors" title="Runtime Tuning">
+<span class="material-symbols-outlined text-xl" data-icon="tune">tune</span>
+</button>
+<!-- Account Circle / User profile with Admin Badge -->
+<div class="relative ml-1 cursor-pointer flex items-center group">
+<div class="w-8 h-8 rounded-full border border-celadon-mist/40 bg-surface-container-high flex items-center justify-center text-primary font-headline-sm overflow-hidden ring-1 ring-cobalt-ultramarine/50">
+<span class="material-symbols-outlined text-2xl" data-icon="account_circle">account_circle</span>
+</div>
+<span class="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 bg-ceramic-gold rounded-full ring-2 ring-surface-container" title="Chief Architect profile avatar with Admin badge"></span>
+</div>
+</div>
+</div>
+</header>
+<!-- ================= SIDEBAR RAIL (Shared Component: SideNavBar) ================= -->
+<aside class="fixed top-16 left-0 bottom-0 w-64 p-space-md flex flex-col justify-between border-r border-outline-variant z-30 bg-surface-container-low shadow-none">
+<!-- Top Branding / CTA Segment -->
+<div class="space-y-4">
+<div class="px-2 py-1 flex items-center space-x-3 border-b border-outline-variant/50 pb-3">
+<div class="w-7 h-7 rounded bg-cobalt-deep/60 border border-primary/30 flex items-center justify-center text-primary">
+<span class="material-symbols-outlined text-lg" data-icon="deployed_code" style="font-variation-settings: 'FILL' 1;">deployed_code</span>
+</div>
+<div>
+<h2 class="font-headline-sm text-headline-sm text-primary font-semibold leading-tight">SDD Workbench</h2>
+<p class="font-body-sm text-body-sm text-on-surface-variant/80">Enterprise Synthesis v4.2</p>
+</div>
+</div>
+<!-- CTA Button -->
+<button class="w-full flex items-center justify-center space-x-2 py-2 px-3 rounded-lg bg-surface-container-high border border-cobalt-ultramarine/40 text-porcelain-glaze hover:border-cobalt-ultramarine hover:bg-cobalt-deep/40 transition-all font-label-md text-label-md shadow-sm">
+<span class="material-symbols-outlined text-sm text-primary" data-icon="add">add</span>
+<span>New SDD Project</span>
+</button>
+<!-- Primary Sidebar Navigation Tabs -->
+<nav class="space-y-1">
+<!-- Active: Dashboard -->
+<a class="flex items-center space-x-3 px-3 py-2 bg-primary-container text-on-primary-container border-r-2 border-primary font-label-md text-label-md rounded-lg transition-all duration-150" href="#">
+<span class="material-symbols-outlined text-lg" data-icon="dashboard" style="font-variation-settings: 'FILL' 1;">dashboard</span>
+<span>Dashboard</span>
+</a>
+<!-- Inactive: Projects -->
+<a class="flex items-center space-x-3 px-3 py-2 text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high font-label-md text-label-md rounded-lg transition-colors duration-150" href="#">
+<span class="material-symbols-outlined text-lg" data-icon="folder_open">folder_open</span>
+<span>Projects</span>
+</a>
+<!-- Inactive: Knowledge Base RAG -->
+<a class="flex items-center justify-between px-3 py-2 text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high font-label-md text-label-md rounded-lg transition-colors duration-150" href="#">
+<div class="flex items-center space-x-3">
+<span class="material-symbols-outlined text-lg" data-icon="hub">hub</span>
+<span>Knowledge Base RAG</span>
+</div>
+<span class="px-1.5 py-0.5 rounded bg-surface-variant text-[10px] text-celadon-mist font-label-sm">14k</span>
+</a>
+<!-- Inactive: Template Sequences -->
+<a class="flex items-center space-x-3 px-3 py-2 text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high font-label-md text-label-md rounded-lg transition-colors duration-150" href="#">
+<span class="material-symbols-outlined text-lg" data-icon="account_tree">account_tree</span>
+<span>Template Sequences</span>
+</a>
+<!-- Inactive: LLM & Prompts -->
+<a class="flex items-center space-x-3 px-3 py-2 text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high font-label-md text-label-md rounded-lg transition-colors duration-150" href="#">
+<span class="material-symbols-outlined text-lg" data-icon="tune">tune</span>
+<span>LLM &amp; Prompts</span>
+</a>
+<!-- Extension: DuckDB Metrics -->
+<a class="flex items-center space-x-3 px-3 py-2 text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high font-label-md text-label-md rounded-lg transition-colors duration-150" href="#">
+<span class="material-symbols-outlined text-lg" data-icon="monitoring">monitoring</span>
+<span>DuckDB Metrics</span>
+</a>
+</nav>
+</div>
+<!-- Footer Segment (Audit Trail, System Status, Settings) -->
+<div class="border-t border-outline-variant/60 pt-3 space-y-1">
+<a class="flex items-center space-x-3 px-3 py-1.5 text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high font-label-md text-label-md rounded-lg transition-colors" href="#">
+<span class="material-symbols-outlined text-base" data-icon="history">history</span>
+<span>Audit Trail</span>
+</a>
+<div class="flex items-center justify-between px-3 py-1.5 text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high font-label-md text-label-md rounded-lg cursor-pointer transition-colors">
+<div class="flex items-center space-x-3">
+<span class="material-symbols-outlined text-base" data-icon="dns">dns</span>
+<span>System Status</span>
+</div>
+<span class="w-2 h-2 rounded-full bg-emerald-400"></span>
+</div>
+<a class="flex items-center space-x-3 px-3 py-1.5 text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high font-label-md text-label-md rounded-lg transition-colors" href="#">
+<span class="material-symbols-outlined text-base" data-icon="settings">settings</span>
+<span>Settings</span>
+</a>
+</div>
+</aside>
+<!-- ================= MAIN CONTENT CANVAS ================= -->
+<main class="ml-64 mt-16 p-space-lg max-w-[1720px] pb-24 porcelain-grid-bg min-h-[calc(100vh-4rem)]">
+<!-- 1. HEADER STATS BAR (Bento Metrics Row) -->
+<section class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-3 mb-space-lg">
+<!-- Stat 1: Total Projects -->
+<div class="bg-surface-container border border-outline-variant/80 rounded-xl p-3.5 flex flex-col justify-between hover:border-cobalt-ultramarine/50 transition-colors shadow-sm">
+<div class="flex items-center justify-between text-on-surface-variant">
+<span class="font-label-sm text-label-sm uppercase tracking-wider">Total Projects</span>
+<span class="material-symbols-outlined text-primary text-base" data-icon="folder_copy">folder_copy</span>
+</div>
+<div class="mt-2 flex items-baseline justify-between">
+<span class="font-headline-lg text-headline-lg text-porcelain-glaze font-bold">42</span>
+<span class="inline-flex items-center text-emerald-400 font-label-sm text-label-sm">
+<span class="material-symbols-outlined text-xs mr-0.5" data-icon="trending_up">trending_up</span>+12%
+          </span>
+</div>
+<div class="mt-1 font-body-sm text-body-sm text-on-surface-variant">3 new initiated this week</div>
+</div>
+<!-- Stat 2: Documents Generated -->
+<div class="bg-surface-container border border-outline-variant/80 rounded-xl p-3.5 flex flex-col justify-between hover:border-cobalt-ultramarine/50 transition-colors shadow-sm">
+<div class="flex items-center justify-between text-on-surface-variant">
+<span class="font-label-sm text-label-sm uppercase tracking-wider">Documents Generated</span>
+<span class="material-symbols-outlined text-secondary text-base" data-icon="description">description</span>
+</div>
+<div class="mt-2 flex items-baseline justify-between">
+<span class="font-headline-lg text-headline-lg text-porcelain-glaze font-bold">128</span>
+<span class="font-label-sm text-label-sm text-celadon-mist">SDDs Compiled</span>
+</div>
+<div class="mt-1 font-body-sm text-body-sm text-on-surface-variant">Avg synthesis: 4.8s</div>
+</div>
+<!-- Stat 3: Pending Checker Approvals -->
+<div class="bg-surface-container border border-outline-variant/80 rounded-xl p-3.5 flex flex-col justify-between hover:border-cobalt-ultramarine/50 transition-colors shadow-sm">
+<div class="flex items-center justify-between text-on-surface-variant">
+<span class="font-label-sm text-label-sm uppercase tracking-wider">Checker Gate</span>
+<span class="material-symbols-outlined text-ceramic-gold text-base" data-icon="pending_actions">pending_actions</span>
+</div>
+<div class="mt-2 flex items-baseline justify-between">
+<span class="font-headline-lg text-headline-lg text-ceramic-gold font-bold">5</span>
+<span class="inline-flex items-center px-1.5 py-0.5 rounded bg-ceramic-gold/15 border border-ceramic-gold/40 text-ceramic-gold font-label-sm text-[10px]">Action Req</span>
+</div>
+<div class="mt-1 font-body-sm text-body-sm text-on-surface-variant">Requiring formal review</div>
+</div>
+<!-- Stat 4: Active RAG Embeddings -->
+<div class="bg-surface-container border border-outline-variant/80 rounded-xl p-3.5 flex flex-col justify-between hover:border-cobalt-ultramarine/50 transition-colors shadow-sm">
+<div class="flex items-center justify-between text-on-surface-variant">
+<span class="font-label-sm text-label-sm uppercase tracking-wider">RAG Entities</span>
+<span class="material-symbols-outlined text-primary text-base" data-icon="schema">schema</span>
+</div>
+<div class="mt-2 flex items-baseline justify-between">
+<span class="font-headline-lg text-headline-lg text-porcelain-glaze font-bold">14,290</span>
+<span class="font-label-sm text-label-sm text-celadon-mist">Vectors</span>
+</div>
+<div class="mt-1 font-body-sm text-body-sm text-on-surface-variant truncate">Interfaces, Schemas, Repos</div>
+</div>
+<!-- Stat 5: Active LLM Engine -->
+<div class="bg-surface-container border border-outline-variant/80 rounded-xl p-3.5 flex flex-col justify-between hover:border-cobalt-ultramarine/50 transition-colors shadow-sm">
+<div class="flex items-center justify-between text-on-surface-variant">
+<span class="font-label-sm text-label-sm uppercase tracking-wider">In-Process Engine</span>
+<span class="material-symbols-outlined text-emerald-400 text-base" data-icon="memory">memory</span>
+</div>
+<div class="mt-2">
+<div class="font-label-md text-label-md text-porcelain-glaze font-semibold flex items-center">
+<span class="w-1.5 h-1.5 rounded-full bg-emerald-400 mr-1.5"></span>
+            Claude 3.5 Sonnet
+          </div>
+<div class="font-label-sm text-[11px] text-celadon-mist/80 truncate mt-0.5">DuckDB v1.1 • GCS Synced</div>
+</div>
+<div class="mt-1 font-body-sm text-body-sm text-on-surface-variant truncate">Lat: 28ms | Cache 100%</div>
+</div>
+</section>
+<!-- 2. QUICK ACTIONS & INGESTION BANNER -->
+<section class="bg-gradient-to-r from-surface-container-high via-surface-container to-surface-container-low border border-cobalt-ultramarine/30 rounded-xl p-space-md mb-space-lg flex flex-col md:flex-row items-start md:items-center justify-between gap-4 shadow-md backdrop-blur-md">
+<div class="flex items-center space-x-4">
+<div class="w-12 h-12 rounded-xl bg-cobalt-deep/70 border border-cobalt-ultramarine flex items-center justify-center text-primary-fixed shrink-0">
+<span class="material-symbols-outlined text-2xl" data-icon="cloud_upload">cloud_upload</span>
+</div>
+<div>
+<div class="flex items-center space-x-2">
+<h3 class="font-headline-sm text-headline-sm text-porcelain-glaze font-bold">Solution Design Document Ingestion Pipeline</h3>
+<span class="px-2 py-0.5 rounded bg-primary-container/60 border border-primary/40 text-primary-fixed-dim font-label-sm text-label-sm">
+              Zero-Shot SDD Generator
+            </span>
+</div>
+<p class="font-body-md text-body-md text-on-surface-variant mt-0.5">
+            Drop Business Requirements (BRD), Functional Specs (FSD), or Jira Epics in PDF, Markdown, or Excel format.
+          </p>
+</div>
+</div>
+<div class="flex flex-wrap items-center gap-2.5 shrink-0 w-full md:w-auto">
+<!-- Status alert chip -->
+<div class="px-3 py-1.5 rounded-lg bg-slate-midnight border border-outline-variant flex items-center space-x-2 text-on-surface-variant font-label-sm text-label-sm">
+<span class="w-2 h-2 rounded-full bg-emerald-400"></span>
+<span>Dynamic In-Memory Cache: Synced</span>
+<span class="text-outline">|</span>
+<span class="text-celadon-mist">0ms restart</span>
+</div>
+<!-- Secondary Button -->
+<button class="px-3.5 py-1.5 rounded-lg bg-surface-container border border-outline-variant hover:border-cobalt-ultramarine text-on-surface hover:text-porcelain-glaze font-label-md text-label-md transition-all">
+          Manage Template Sequences
+        </button>
+<!-- Primary Button -->
+<button class="px-4 py-1.5 rounded-lg bg-cobalt-ultramarine hover:bg-cobalt-deep text-porcelain-pure font-label-md text-label-md border border-celadon-mist/40 shadow-sm flex items-center space-x-2 transition-all active:scale-95">
+<span class="material-symbols-outlined text-sm" data-icon="post_add">post_add</span>
+<span>New Project &amp; Upload Baseline</span>
+</button>
+</div>
+</section>
+<!-- 3. MAIN PROJECTS DATA GRID (PRD Section 2.1) -->
+<section class="bg-surface-container border border-outline-variant/80 rounded-xl overflow-hidden shadow-lg mb-space-lg">
+<!-- Table Header Controls Bar -->
+<div class="p-space-md border-b border-outline-variant/60 flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4 bg-surface-container-high/40">
+<div class="flex items-center space-x-3">
+<span class="material-symbols-outlined text-primary text-xl" data-icon="table_chart">table_chart</span>
+<div>
+<h4 class="font-headline-sm text-headline-sm text-porcelain-glaze font-bold">Active SDD Project Architecture Registry</h4>
+<p class="font-body-sm text-body-sm text-on-surface-variant">Real-time compilation and verification status across enterprise domains</p>
+</div>
+</div>
+<!-- Filter Controls -->
+<div class="flex flex-wrap items-center gap-2">
+<!-- Status Filter -->
+<div class="flex items-center rounded-lg bg-slate-midnight border border-outline-variant p-0.5 text-on-surface-variant font-label-sm text-label-sm">
+<button class="px-2.5 py-1 rounded bg-primary-container text-porcelain-pure font-medium">All (42)</button>
+<button class="px-2.5 py-1 rounded hover:text-on-surface">In Progress</button>
+<button class="px-2.5 py-1 rounded hover:text-on-surface text-ceramic-gold font-medium">Pending Approval (5)</button>
+<button class="px-2.5 py-1 rounded hover:text-on-surface">Finalized</button>
+</div>
+<!-- Owner Dropdown -->
+<button class="flex items-center space-x-1.5 px-3 py-1.5 rounded-lg bg-slate-midnight border border-outline-variant text-on-surface font-label-sm text-label-sm hover:border-outline">
+<span>Owner: All Roles</span>
+<span class="material-symbols-outlined text-sm" data-icon="arrow_drop_down">arrow_drop_down</span>
+</button>
+<!-- Inventory Type -->
+<button class="flex items-center space-x-1.5 px-3 py-1.5 rounded-lg bg-slate-midnight border border-outline-variant text-on-surface font-label-sm text-label-sm hover:border-outline">
+<span>Inventory: Event Bus / DuckDB</span>
+<span class="material-symbols-outlined text-sm" data-icon="arrow_drop_down">arrow_drop_down</span>
+</button>
+<!-- Refresh action -->
+<button class="p-1.5 rounded-lg bg-slate-midnight border border-outline-variant text-on-surface-variant hover:text-on-surface" title="Re-query DuckDB">
+<span class="material-symbols-outlined text-base" data-icon="refresh">refresh</span>
+</button>
+</div>
+</div>
+<!-- Data Table -->
+<div class="overflow-x-auto custom-scrollbar">
+<table class="w-full text-left border-collapse">
+<thead>
+<tr class="bg-surface-container-high/90 border-b border-outline-variant text-on-surface-variant font-label-sm text-label-sm uppercase tracking-wider">
+<th class="py-3 px-4 font-semibold w-12 text-center">
+<input class="rounded bg-slate-midnight border-outline-variant text-cobalt-ultramarine focus:ring-0" type="checkbox"/>
+</th>
+<th class="py-3 px-4 font-semibold min-w-[280px]">Project Name &amp; Code</th>
+<th class="py-3 px-4 font-semibold min-w-[220px]">Baseline Inputs</th>
+<th class="py-3 px-4 font-semibold min-w-[180px]">SDD Status</th>
+<th class="py-3 px-4 font-semibold min-w-[170px]">Owner &amp; Role</th>
+<th class="py-3 px-4 font-semibold min-w-[130px]">Last Modified</th>
+<th class="py-3 px-4 font-semibold min-w-[200px] text-right">Actions</th>
+</tr>
+</thead>
+<tbody class="divide-y divide-outline-variant/40 font-body-sm text-body-sm">
+<!-- Row 1: Pending Approval (Checker) -->
+<tr class="hover:bg-surface-container-high/50 transition-colors bg-surface-container">
+<td class="py-3.5 px-4 text-center">
+<input class="rounded bg-slate-midnight border-outline-variant text-cobalt-ultramarine focus:ring-0" type="checkbox"/>
+</td>
+<td class="py-3.5 px-4">
+<div class="flex items-center space-x-2">
+<div class="w-2 h-2 rounded-full bg-ceramic-gold shrink-0"></div>
+<div>
+<div class="font-headline-sm text-[14px] text-porcelain-glaze font-semibold hover:text-primary cursor-pointer">
+                      Global Trade Settlement Core v3.2
+                    </div>
+<div class="font-label-sm text-[11px] text-outline font-mono">PRJ-FIN-7890 • DuckDB Parquet Sink</div>
+</div>
+</div>
+</td>
+<td class="py-3.5 px-4">
+<div class="flex items-center space-x-1.5 flex-wrap gap-1">
+<span class="inline-flex items-center px-2 py-0.5 rounded bg-slate-midnight border border-outline-variant text-[11px] font-mono text-celadon-mist">
+<span class="material-symbols-outlined text-[12px] mr-1 text-red-400" data-icon="picture_as_pdf">picture_as_pdf</span>
+                    Trade_FSD_v4.pdf
+                  </span>
+<span class="inline-flex items-center px-1.5 py-0.5 rounded bg-slate-midnight border border-outline-variant text-[10px] text-outline font-mono">+1 xlsx</span>
+</div>
+</td>
+<td class="py-3.5 px-4">
+<span class="inline-flex items-center px-2.5 py-1 rounded-full bg-cobalt-deep/40 border border-primary/50 text-celadon-mist font-label-sm text-[11px]">
+<span class="w-1.5 h-1.5 rounded-full bg-primary mr-1.5 animate-pulse"></span>
+                  Pending Approval (Checker)
+                </span>
+</td>
+<td class="py-3.5 px-4">
+<div class="flex items-center space-x-2">
+<div class="w-6 h-6 rounded-full bg-surface-variant flex items-center justify-center font-label-sm text-[10px] text-secondary font-bold">SJ</div>
+<div>
+<div class="text-on-surface font-medium leading-none">Sarah Jenkins</div>
+<span class="text-[10px] font-label-sm text-secondary">Checker</span>
+</div>
+</div>
+</td>
+<td class="py-3.5 px-4 font-label-sm text-[11px] text-outline">
+                12 mins ago
+              </td>
+<td class="py-3.5 px-4 text-right space-x-1">
+<button class="px-2.5 py-1 rounded bg-primary-container text-porcelain-glaze border border-cobalt-ultramarine text-xs font-label-sm hover:bg-cobalt-deep transition-all">
+                  Open Workspace
+                </button>
+<button class="p-1 rounded text-on-surface-variant hover:text-on-surface hover:bg-slate-midnight" title="Export PDF/MD">
+<span class="material-symbols-outlined text-base" data-icon="file_download">file_download</span>
+</button>
+<button class="p-1 rounded text-on-surface-variant hover:text-on-surface hover:bg-slate-midnight" title="Prompt Tuning">
+<span class="material-symbols-outlined text-base" data-icon="tune">tune</span>
+</button>
+</td>
+</tr>
+<!-- Row 2: Approved (Admin) -->
+<tr class="hover:bg-surface-container-high/50 transition-colors bg-surface-container-low/40">
+<td class="py-3.5 px-4 text-center">
+<input class="rounded bg-slate-midnight border-outline-variant text-cobalt-ultramarine focus:ring-0" type="checkbox"/>
+</td>
+<td class="py-3.5 px-4">
+<div class="flex items-center space-x-2">
+<div class="w-2 h-2 rounded-full bg-emerald-400 shrink-0"></div>
+<div>
+<div class="font-headline-sm text-[14px] text-porcelain-glaze font-semibold hover:text-primary cursor-pointer">
+                      Omnichannel Payment Gateway Modernization
+                    </div>
+<div class="font-label-sm text-[11px] text-outline font-mono">PRJ-PAY-1120 • Kafka + REST Gateway</div>
+</div>
+</div>
+</td>
+<td class="py-3.5 px-4">
+<div class="flex items-center space-x-1.5 flex-wrap gap-1">
+<span class="inline-flex items-center px-2 py-0.5 rounded bg-slate-midnight border border-outline-variant text-[11px] font-mono text-celadon-mist">
+<span class="material-symbols-outlined text-[12px] mr-1 text-emerald-400" data-icon="table_view">table_view</span>
+                    Payment_BRD.xlsx
+                  </span>
+<span class="inline-flex items-center px-2 py-0.5 rounded bg-slate-midnight border border-outline-variant text-[11px] font-mono text-on-surface-variant">
+                    Epics.md
+                  </span>
+</div>
+</td>
+<td class="py-3.5 px-4">
+<span class="inline-flex items-center px-2.5 py-1 rounded-full bg-emerald-950/40 border border-emerald-500/50 text-emerald-300 font-label-sm text-[11px]">
+<span class="w-1.5 h-1.5 rounded-full bg-emerald-400 mr-1.5"></span>
+                  Approved (Admin)
+                </span>
+</td>
+<td class="py-3.5 px-4">
+<div class="flex items-center space-x-2">
+<div class="w-6 h-6 rounded-full bg-ceramic-gold/20 text-ceramic-gold border border-ceramic-gold/40 flex items-center justify-center font-label-sm text-[10px] font-bold">AR</div>
+<div>
+<div class="text-on-surface font-medium leading-none">Alex Rivera</div>
+<span class="text-[10px] font-label-sm text-ceramic-gold">Admin</span>
+</div>
+</div>
+</td>
+<td class="py-3.5 px-4 font-label-sm text-[11px] text-outline">
+                2 hours ago
+              </td>
+<td class="py-3.5 px-4 text-right space-x-1">
+<button class="px-2.5 py-1 rounded bg-slate-midnight text-celadon-mist border border-outline-variant text-xs font-label-sm hover:border-cobalt-ultramarine transition-all">
+                  Open Workspace
+                </button>
+<button class="p-1 rounded text-on-surface-variant hover:text-on-surface hover:bg-slate-midnight" title="Export PDF/MD">
+<span class="material-symbols-outlined text-base" data-icon="file_download">file_download</span>
+</button>
+<button class="p-1 rounded text-on-surface-variant hover:text-on-surface hover:bg-slate-midnight" title="Prompt Tuning">
+<span class="material-symbols-outlined text-base" data-icon="tune">tune</span>
+</button>
+</td>
+</tr>
+<!-- Row 3: Missing Info Warning (Cinnabar) -->
+<tr class="hover:bg-surface-container-high/50 transition-colors bg-surface-container">
+<td class="py-3.5 px-4 text-center">
+<input class="rounded bg-slate-midnight border-outline-variant text-cobalt-ultramarine focus:ring-0" type="checkbox"/>
+</td>
+<td class="py-3.5 px-4">
+<div class="flex items-center space-x-2">
+<div class="w-2 h-2 rounded-full bg-cinnabar-alert shrink-0"></div>
+<div>
+<div class="font-headline-sm text-[14px] text-porcelain-glaze font-semibold hover:text-primary cursor-pointer">
+                      Customer MDM DuckDB Pipeline
+                    </div>
+<div class="font-label-sm text-[11px] text-outline font-mono">PRJ-DATA-4402 • Columnar Lakehouse</div>
+</div>
+</div>
+</td>
+<td class="py-3.5 px-4">
+<div class="flex items-center space-x-1.5 flex-wrap gap-1">
+<span class="inline-flex items-center px-2 py-0.5 rounded bg-slate-midnight border border-outline-variant text-[11px] font-mono text-celadon-mist">
+<span class="material-symbols-outlined text-[12px] mr-1 text-primary" data-icon="code">code</span>
+                    Schema_MDM.sql
+                  </span>
+</div>
+</td>
+<td class="py-3.5 px-4">
+<span class="inline-flex items-center px-2.5 py-1 rounded-full bg-error-container/30 border border-cinnabar-alert text-error font-label-sm text-[11px]">
+<span class="material-symbols-outlined text-xs mr-1 text-cinnabar-alert" data-icon="warning">warning</span>
+                  Missing Info Warning
+                </span>
+</td>
+<td class="py-3.5 px-4">
+<div class="flex items-center space-x-2">
+<div class="w-6 h-6 rounded-full bg-surface-variant flex items-center justify-center font-label-sm text-[10px] text-celadon-mist font-bold">CW</div>
+<div>
+<div class="text-on-surface font-medium leading-none">Chen Wei</div>
+<span class="text-[10px] font-label-sm text-celadon-mist">Maker</span>
+</div>
+</div>
+</td>
+<td class="py-3.5 px-4 font-label-sm text-[11px] text-outline">
+                Yesterday
+              </td>
+<td class="py-3.5 px-4 text-right space-x-1">
+<button class="px-2.5 py-1 rounded bg-slate-midnight text-cinnabar-alert border border-cinnabar-alert/50 text-xs font-label-sm hover:bg-error-container/20 transition-all">
+                  Fix Inputs
+                </button>
+<button class="p-1 rounded text-on-surface-variant hover:text-on-surface hover:bg-slate-midnight" title="Export PDF/MD">
+<span class="material-symbols-outlined text-base" data-icon="file_download">file_download</span>
+</button>
+<button class="p-1 rounded text-on-surface-variant hover:text-on-surface hover:bg-slate-midnight" title="Prompt Tuning">
+<span class="material-symbols-outlined text-base" data-icon="tune">tune</span>
+</button>
+</td>
+</tr>
+<!-- Row 4: Drafting (Maker) -->
+<tr class="hover:bg-surface-container-high/50 transition-colors bg-surface-container-low/40">
+<td class="py-3.5 px-4 text-center">
+<input class="rounded bg-slate-midnight border-outline-variant text-cobalt-ultramarine focus:ring-0" type="checkbox"/>
+</td>
+<td class="py-3.5 px-4">
+<div class="flex items-center space-x-2">
+<div class="w-2 h-2 rounded-full bg-celadon-mist shrink-0"></div>
+<div>
+<div class="font-headline-sm text-[14px] text-porcelain-glaze font-semibold hover:text-primary cursor-pointer">
+                      Risk Scoring Microservice Event Bus
+                    </div>
+<div class="font-label-sm text-[11px] text-outline font-mono">PRJ-SEC-9021 • Avro Schema Registry</div>
+</div>
+</div>
+</td>
+<td class="py-3.5 px-4">
+<div class="flex items-center space-x-1.5 flex-wrap gap-1">
+<span class="inline-flex items-center px-2 py-0.5 rounded bg-slate-midnight border border-outline-variant text-[11px] font-mono text-celadon-mist">
+                    Risk_Spec_v2.md
+                  </span>
+<span class="inline-flex items-center px-1.5 py-0.5 rounded bg-slate-midnight border border-outline-variant text-[10px] text-outline font-mono">+2 files</span>
+</div>
+</td>
+<td class="py-3.5 px-4">
+<span class="inline-flex items-center px-2.5 py-1 rounded-full bg-surface-variant border border-outline-variant text-on-surface-variant font-label-sm text-[11px]">
+<span class="w-1.5 h-1.5 rounded-full bg-outline mr-1.5"></span>
+                  Drafting (Maker)
+                </span>
+</td>
+<td class="py-3.5 px-4">
+<div class="flex items-center space-x-2">
+<div class="w-6 h-6 rounded-full bg-surface-variant flex items-center justify-center font-label-sm text-[10px] text-celadon-mist font-bold">CW</div>
+<div>
+<div class="text-on-surface font-medium leading-none">Chen Wei</div>
+<span class="text-[10px] font-label-sm text-celadon-mist">Maker</span>
+</div>
+</div>
+</td>
+<td class="py-3.5 px-4 font-label-sm text-[11px] text-outline">
+                3 days ago
+              </td>
+<td class="py-3.5 px-4 text-right space-x-1">
+<button class="px-2.5 py-1 rounded bg-slate-midnight text-celadon-mist border border-outline-variant text-xs font-label-sm hover:border-cobalt-ultramarine transition-all">
+                  Open Workspace
+                </button>
+<button class="p-1 rounded text-on-surface-variant hover:text-on-surface hover:bg-slate-midnight" title="Export PDF/MD">
+<span class="material-symbols-outlined text-base" data-icon="file_download">file_download</span>
+</button>
+<button class="p-1 rounded text-on-surface-variant hover:text-on-surface hover:bg-slate-midnight" title="Prompt Tuning">
+<span class="material-symbols-outlined text-base" data-icon="tune">tune</span>
+</button>
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+<!-- Pagination & Bottom Quick Stats -->
+<div class="p-3.5 border-t border-outline-variant/60 flex flex-col sm:flex-row items-center justify-between gap-3 text-on-surface-variant font-label-sm text-label-sm bg-surface-container-high/20">
+<div class="flex items-center space-x-3">
+<span>Showing <strong class="text-on-surface">1 - 4</strong> of <strong class="text-on-surface">42</strong> enterprise projects</span>
+<span class="text-outline">|</span>
+<span class="text-celadon-mist">DuckDB Parquet scan took 1.2ms</span>
+</div>
+<div class="flex items-center space-x-1">
+<button class="px-2.5 py-1 rounded border border-outline-variant bg-slate-midnight text-outline hover:text-on-surface disabled:opacity-50" disabled="">
+            Previous
+          </button>
+<button class="px-2.5 py-1 rounded border border-primary bg-primary-container text-porcelain-glaze font-bold">1</button>
+<button class="px-2.5 py-1 rounded border border-outline-variant bg-slate-midnight hover:text-on-surface">2</button>
+<button class="px-2.5 py-1 rounded border border-outline-variant bg-slate-midnight hover:text-on-surface">3</button>
+<span class="px-1 text-outline">...</span>
+<button class="px-2.5 py-1 rounded border border-outline-variant bg-slate-midnight hover:text-on-surface">11</button>
+<button class="px-2.5 py-1 rounded border border-outline-variant bg-slate-midnight hover:text-on-surface">
+            Next
+          </button>
+</div>
+</div>
+</section>
+<!-- 4. QUICK WIDGET DOCK (Recent RAG Extraction Feed & Schema Telemetry) -->
+<section class="grid grid-cols-1 lg:grid-cols-3 gap-space-md">
+<!-- Widget 1: Recent RAG Extraction Feed -->
+<div class="lg:col-span-2 bg-surface-container border border-outline-variant/80 rounded-xl p-space-md shadow-sm">
+<div class="flex items-center justify-between border-b border-outline-variant/50 pb-3 mb-3">
+<div class="flex items-center space-x-2.5">
+<span class="material-symbols-outlined text-primary text-lg" data-icon="hub">hub</span>
+<h5 class="font-headline-sm text-headline-sm text-porcelain-glaze font-bold">RAG Extraction Graph Stream</h5>
+</div>
+<span class="font-label-sm text-label-sm text-celadon-mist flex items-center">
+<span class="w-1.5 h-1.5 rounded-full bg-emerald-400 mr-1.5 animate-pulse"></span>
+            Real-time Ingestion Live
+          </span>
+</div>
+<div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+<!-- Card 1 -->
+<div class="p-3 rounded-lg bg-slate-midnight border border-outline-variant hover:border-cobalt-ultramarine/60 transition-colors">
+<div class="flex items-center justify-between text-outline font-label-sm text-[10px]">
+<span class="text-celadon-mist">REST INTERFACE</span>
+<span>2m ago</span>
+</div>
+<div class="font-headline-sm text-[13px] text-porcelain-pure font-semibold mt-1 truncate">POST /v3/settlements/execute</div>
+<p class="font-body-sm text-body-sm text-on-surface-variant mt-1 text-[11px] line-clamp-2">
+              Parsed idempotency keys, ISO 20022 message schema bindings, and retry timeouts.
+            </p>
+<div class="mt-2.5 pt-2 border-t border-outline-variant/40 flex items-center justify-between font-label-sm text-[10px]">
+<span class="text-outline">Repo: trade-core-api</span>
+<span class="text-primary hover:underline cursor-pointer">Inspect RAG</span>
+</div>
+</div>
+<!-- Card 2 -->
+<div class="p-3 rounded-lg bg-slate-midnight border border-outline-variant hover:border-cobalt-ultramarine/60 transition-colors">
+<div class="flex items-center justify-between text-outline font-label-sm text-[10px]">
+<span class="text-secondary">DUCKDB DDL</span>
+<span>14m ago</span>
+</div>
+<div class="font-headline-sm text-[13px] text-porcelain-pure font-semibold mt-1 truncate">CREATE TABLE trade_events_v3</div>
+<p class="font-body-sm text-body-sm text-on-surface-variant mt-1 text-[11px] line-clamp-2">
+              Extracted 32 columnar attributes, partitioned by settlement_date with zstd compression.
+            </p>
+<div class="mt-2.5 pt-2 border-t border-outline-variant/40 flex items-center justify-between font-label-sm text-[10px]">
+<span class="text-outline">File: Schema_MDM.sql</span>
+<span class="text-primary hover:underline cursor-pointer">Inspect RAG</span>
+</div>
+</div>
+<!-- Card 3 -->
+<div class="p-3 rounded-lg bg-slate-midnight border border-outline-variant hover:border-cobalt-ultramarine/60 transition-colors">
+<div class="flex items-center justify-between text-outline font-label-sm text-[10px]">
+<span class="text-ceramic-gold">CAPABILITY GRAPH</span>
+<span>28m ago</span>
+</div>
+<div class="font-headline-sm text-[13px] text-porcelain-pure font-semibold mt-1 truncate">Multi-Region Active Failover</div>
+<p class="font-body-sm text-body-sm text-on-surface-variant mt-1 text-[11px] line-clamp-2">
+              Mapped NFR requirement to AWS Route53 latency routing and DuckDB read-replicas.
+            </p>
+<div class="mt-2.5 pt-2 border-t border-outline-variant/40 flex items-center justify-between font-label-sm text-[10px]">
+<span class="text-outline">Doc: Trade_FSD_v4.pdf</span>
+<span class="text-primary hover:underline cursor-pointer">Inspect RAG</span>
+</div>
+</div>
+</div>
+</div>
+<!-- Widget 2: Ceramic System Integrity & Guardrail Card -->
+<div class="bg-surface-container border border-outline-variant/80 rounded-xl p-space-md shadow-sm flex flex-col justify-between">
+<div>
+<div class="flex items-center justify-between border-b border-outline-variant/50 pb-3 mb-3">
+<div class="flex items-center space-x-2">
+<span class="material-symbols-outlined text-ceramic-gold text-lg" data-icon="verified_user">verified_user</span>
+<h5 class="font-headline-sm text-headline-sm text-porcelain-glaze font-bold">Checker Guardrails</h5>
+</div>
+<span class="px-2 py-0.5 rounded bg-ceramic-gold/15 text-ceramic-gold border border-ceramic-gold/30 font-label-sm text-[10px]">
+              Enforced
+            </span>
+</div>
+<p class="font-body-sm text-body-sm text-on-surface-variant mb-3">
+            Automated compliance gates prevent hallucinated interfaces or unreferenced databases from passing to Finalized state.
+          </p>
+<div class="space-y-2 font-label-sm text-label-sm">
+<div class="flex items-center justify-between p-2 rounded bg-slate-midnight border border-outline-variant/60">
+<span class="text-on-surface">Architecture Review Board Standards</span>
+<span class="text-emerald-400 font-bold">100% Pass</span>
+</div>
+<div class="flex items-center justify-between p-2 rounded bg-slate-midnight border border-outline-variant/60">
+<span class="text-on-surface">Data Privacy &amp; PII Column Masking</span>
+<span class="text-emerald-400 font-bold">Protected</span>
+</div>
+<div class="flex items-center justify-between p-2 rounded bg-slate-midnight border border-outline-variant/60">
+<span class="text-on-surface">DuckDB In-Memory Schema Verifier</span>
+<span class="text-emerald-400 font-bold">Ready</span>
+</div>
+</div>
+</div>
+<button class="mt-4 w-full py-1.5 rounded-lg border border-cobalt-ultramarine/40 hover:bg-surface-container-high text-celadon-mist font-label-md text-label-md transition-colors flex items-center justify-center space-x-2">
+<span class="material-symbols-outlined text-sm" data-icon="policy">policy</span>
+<span>Open Full Compliance Audit</span>
+</button>
+</div>
+</section>
+</main>
+<!-- ================= DOCKED GLOBAL CHAT WIDGET TRIGGER ================= -->
+<!-- Context-Aware Chat Drawer trigger docked persistently to lower right -->
+<div class="fixed bottom-6 right-6 z-50 flex items-center space-x-3">
+<!-- Guardrail notification tooltip capsule -->
+<div class="hidden sm:flex items-center space-x-2 px-3 py-1.5 rounded-full bg-slate-midnight/90 border border-cobalt-ultramarine/50 shadow-2xl backdrop-blur-md">
+<span class="material-symbols-outlined text-emerald-400 text-sm" data-icon="shield">shield</span>
+<span class="font-label-sm text-[11px] text-porcelain-glaze">RAG Guardrail Active</span>
+<span class="w-1.5 h-1.5 rounded-full bg-cobalt-ultramarine animate-ping"></span>
+</div>
+<!-- Floating Trigger Disc Button -->
+<button class="relative group w-14 h-14 rounded-full bg-primary-container text-porcelain-pure border-2 border-cobalt-ultramarine shadow-xl hover:scale-105 active:scale-95 transition-all flex items-center justify-center">
+<!-- Glow effect -->
+<span class="absolute inset-0 rounded-full bg-cobalt-ultramarine blur opacity-40 group-hover:opacity-75 transition-opacity"></span>
+<span class="relative material-symbols-outlined text-2xl" data-icon="forum" style="font-variation-settings: 'FILL' 1;">forum</span>
+<!-- Glowing cobalt dot -->
+<span class="absolute top-1 right-1 w-3.5 h-3.5 bg-cobalt-ultramarine border-2 border-slate-midnight rounded-full flex items-center justify-center">
+<span class="w-1.5 h-1.5 rounded-full bg-porcelain-glaze"></span>
+</span>
+</button>
+</div>
+</body></html>

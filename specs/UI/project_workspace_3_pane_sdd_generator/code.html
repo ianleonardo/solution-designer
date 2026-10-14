@@ -1,0 +1,772 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Porcelain SDD Gen - Project Workspace</title>
+<!-- Material Symbols Outlined -->
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<!-- Fonts: Inter, Plus Jakarta Sans, JetBrains Mono -->
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&amp;family=JetBrains+Mono:wght@400;500;600&amp;family=Plus+Jakarta+Sans:wght@500;600;700;800&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<!-- Tailwind CSS with Forms and Container Queries -->
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script id="tailwind-config">
+    tailwind.config = {
+      darkMode: "class",
+      theme: {
+        extend: {
+          "colors": {
+            "surface-container-low": "#131a33",
+            "on-error-container": "#ffdad6",
+            "on-tertiary": "#22333c",
+            "secondary": "#b4c5ff",
+            "on-surface-variant": "#c3c6d2",
+            "inverse-surface": "#dbe1ff",
+            "surface-variant": "#2c344d",
+            "surface-container-highest": "#2c344d",
+            "outline": "#8d909b",
+            "primary-fixed-dim": "#aac7ff",
+            "surface-tint": "#aac7ff",
+            "on-tertiary-fixed": "#0c1e26",
+            "tertiary": "#b7c9d5",
+            "error-container": "#93000a",
+            "on-error": "#690005",
+            "tertiary-fixed-dim": "#b7c9d5",
+            "secondary-fixed-dim": "#b4c5ff",
+            "porcelain-pure": "#FFFFFF",
+            "secondary-fixed": "#dbe1ff",
+            "surface-container": "#171e37",
+            "on-primary-container": "#99bdff",
+            "on-tertiary-fixed-variant": "#384953",
+            "outline-variant": "#434750",
+            "primary-container": "#1a4b8c",
+            "porcelain-ivory": "#F0F4F8",
+            "celadon-mist": "#BAE6FD",
+            "on-secondary": "#002a78",
+            "on-tertiary-container": "#adbfca",
+            "primary-fixed": "#d6e3ff",
+            "cobalt-ultramarine": "#2563EB",
+            "secondary-container": "#0053db",
+            "slate-midnight": "#0E1626",
+            "error": "#ffb4ab",
+            "cobalt-deep": "#103B75",
+            "surface-bright": "#313852",
+            "surface-container-lowest": "#050d25",
+            "on-surface": "#dbe1ff",
+            "surface-container-high": "#212942",
+            "inverse-primary": "#325ea0",
+            "inverse-on-surface": "#282f49",
+            "cinnabar-alert": "#DC2626",
+            "on-secondary-fixed": "#00174b",
+            "background": "#0a122a",
+            "on-secondary-fixed-variant": "#003ea8",
+            "on-background": "#dbe1ff",
+            "tertiary-container": "#3d4e58",
+            "surface-dim": "#0a122a",
+            "on-primary-fixed-variant": "#124687",
+            "on-primary-fixed": "#001b3e",
+            "ceramic-gold": "#D97706",
+            "tertiary-fixed": "#d3e5f1",
+            "surface": "#0a122a",
+            "on-primary": "#002f64",
+            "primary": "#aac7ff",
+            "slate-night": "#1C2541",
+            "porcelain-glaze": "#FAFCFF",
+            "on-secondary-container": "#cdd7ff"
+          },
+          "borderRadius": {
+            "DEFAULT": "0.125rem",
+            "lg": "0.25rem",
+            "xl": "0.5rem",
+            "full": "0.75rem"
+          },
+          "spacing": {
+            "space-md": "1rem",
+            "space-lg": "1.5rem",
+            "margin-md": "1.5rem",
+            "space-sm": "0.5rem",
+            "margin-lg": "2rem",
+            "margin": "1rem",
+            "gutter-lg": "1.5rem",
+            "space-xs": "0.25rem",
+            "gutter": "1rem",
+            "space-xl": "2.5rem"
+          },
+          "fontFamily": {
+            "body-md": ["Inter"],
+            "headline-lg-mobile": ["Plus Jakarta Sans"],
+            "display-hero": ["Plus Jakarta Sans"],
+            "label-md": ["JetBrains Mono"],
+            "label-lg": ["JetBrains Mono"],
+            "label-sm": ["JetBrains Mono"],
+            "headline-md": ["Plus Jakarta Sans"],
+            "headline-lg": ["Plus Jakarta Sans"],
+            "body-sm": ["Inter"],
+            "body-lg": ["Inter"],
+            "display-hero-mobile": ["Plus Jakarta Sans"],
+            "headline-sm": ["Plus Jakarta Sans"]
+          },
+          "fontSize": {
+            "body-md": ["14px", { "lineHeight": "20px", "letterSpacing": "0", "fontWeight": "400" }],
+            "headline-lg-mobile": ["24px", { "lineHeight": "32px", "letterSpacing": "-0.01em", "fontWeight": "600" }],
+            "display-hero": ["40px", { "lineHeight": "48px", "letterSpacing": "-0.03em", "fontWeight": "700" }],
+            "label-md": ["12px", { "lineHeight": "16px", "letterSpacing": "0", "fontWeight": "500" }],
+            "label-lg": ["14px", { "lineHeight": "20px", "letterSpacing": "-0.01em", "fontWeight": "500" }],
+            "label-sm": ["10px", { "lineHeight": "14px", "letterSpacing": "0.04em", "fontWeight": "600" }],
+            "headline-md": ["22px", { "lineHeight": "30px", "letterSpacing": "-0.01em", "fontWeight": "600" }],
+            "headline-lg": ["32px", { "lineHeight": "40px", "letterSpacing": "-0.02em", "fontWeight": "600" }],
+            "body-sm": ["12px", { "lineHeight": "18px", "letterSpacing": "0.01em", "fontWeight": "400" }],
+            "body-lg": ["16px", { "lineHeight": "24px", "letterSpacing": "-0.005em", "fontWeight": "400" }],
+            "display-hero-mobile": ["30px", { "lineHeight": "38px", "letterSpacing": "-0.02em", "fontWeight": "700" }],
+            "headline-sm": ["18px", { "lineHeight": "26px", "letterSpacing": "0", "fontWeight": "600" }]
+          }
+        }
+      }
+    }
+  </script>
+<style>
+    .material-symbols-outlined {
+      font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 20;
+      display: inline-block;
+      vertical-align: middle;
+      line-height: 1;
+    }
+    .custom-scrollbar::-webkit-scrollbar {
+      width: 4px;
+      height: 4px;
+    }
+    .custom-scrollbar::-webkit-scrollbar-track {
+      background: #0E1626;
+    }
+    .custom-scrollbar::-webkit-scrollbar-thumb {
+      background: #253556;
+      border-radius: 2px;
+    }
+    .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+      background: #2563EB;
+    }
+    .blueprint-grid {
+      background-color: #0E1626;
+      background-image: radial-gradient(rgba(186, 230, 253, 0.09) 1px, transparent 1px);
+      background-size: 16px 16px;
+    }
+  </style>
+</head>
+<body class="bg-background text-on-surface antialiased flex flex-col h-screen overflow-hidden select-none">
+<!-- TOP APP BAR (Shared Components: TopNavBar) -->
+<header class="w-full h-16 flex items-center justify-between px-space-lg border-b border-outline-variant dark:border-outline-variant z-40 bg-surface-container dark:bg-surface-container shrink-0">
+<div class="flex items-center space-x-6">
+<!-- Porcelain Kiln Brand & Title -->
+<div class="flex items-center space-x-3">
+<div class="w-9 h-9 rounded-lg bg-primary-container border border-cobalt-ultramarine/40 flex items-center justify-center shadow-sm">
+<span class="material-symbols-outlined text-primary text-xl" data-icon="hub">hub</span>
+</div>
+<div class="flex flex-col">
+<span class="text-headline-sm font-headline-sm text-porcelain-glaze tracking-tight">Porcelain SDD Gen</span>
+<span class="text-label-sm font-label-sm text-tertiary">Enterprise Synthesis v4.2</span>
+</div>
+</div>
+<!-- Navigation Links -->
+<nav class="hidden lg:flex items-center space-x-1 pl-4 border-l border-outline-variant/60">
+<a class="px-3 py-1.5 text-primary border-b-2 border-primary font-label-md text-label-md transition-all" href="#">Workspace</a>
+<a class="px-3 py-1.5 text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high font-label-md text-label-md transition-colors rounded-lg" href="#">Architecture Blueprints</a>
+<a class="px-3 py-1.5 text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high font-label-md text-label-md transition-colors rounded-lg" href="#">Compliance Gate</a>
+<a class="px-3 py-1.5 text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high font-label-md text-label-md transition-colors rounded-lg" href="#">Model Benchmarks</a>
+</nav>
+</div>
+<!-- Project Identity & Top Actions -->
+<div class="flex items-center space-x-3">
+<!-- Trailing Primary & Secondary from PRD -->
+<div class="flex items-center space-x-2">
+<button class="px-3 py-1.5 bg-surface-container-high hover:bg-surface-variant text-on-surface border border-outline-variant/60 rounded text-label-md font-label-md flex items-center space-x-1.5 transition-all active:scale-95">
+<span class="material-symbols-outlined text-sm" data-icon="refresh">refresh</span>
+<span>Regenerate All Sections</span>
+</button>
+<button class="px-3 py-1.5 bg-surface-container-high hover:bg-surface-variant text-on-surface border border-outline-variant/60 rounded text-label-md font-label-md flex items-center space-x-1.5 transition-all active:scale-95">
+<span class="material-symbols-outlined text-sm text-celadon-mist" data-icon="verified">verified</span>
+<span>Validate Completeness</span>
+</button>
+<!-- Export Dropdown -->
+<div class="relative group">
+<button class="px-3 py-1.5 bg-surface-container-high hover:bg-surface-variant text-on-surface border border-outline-variant/60 rounded text-label-md font-label-md flex items-center space-x-1 transition-all active:scale-95">
+<span class="material-symbols-outlined text-sm" data-icon="file_download">file_download</span>
+<span>Export SDD</span>
+<span class="material-symbols-outlined text-xs" data-icon="expand_more">expand_more</span>
+</button>
+<div class="hidden group-hover:block absolute right-0 mt-1 w-36 bg-surface-container border border-outline-variant rounded shadow-lg py-1 z-50">
+<a class="block px-3 py-1 text-label-sm font-label-sm text-on-surface hover:bg-primary-container" href="#">PDF (Vitrified)</a>
+<a class="block px-3 py-1 text-label-sm font-label-sm text-on-surface hover:bg-primary-container" href="#">HTML Archive</a>
+<a class="block px-3 py-1 text-label-sm font-label-sm text-on-surface hover:bg-primary-container" href="#">Markdown Bundle</a>
+</div>
+</div>
+<!-- Submit to Checker Primary Button -->
+<button class="px-4 py-1.5 bg-primary-container hover:bg-cobalt-deep text-porcelain-pure border border-cobalt-ultramarine font-label-md text-label-md rounded flex items-center space-x-1.5 shadow-sm transition-all active:scale-95">
+<span class="material-symbols-outlined text-sm" data-icon="send">send</span>
+<span>Submit to Checker</span>
+</button>
+</div>
+<!-- Icon Actions and Profile -->
+<div class="flex items-center space-x-1 pl-3 border-l border-outline-variant/60">
+<button class="w-8 h-8 rounded flex items-center justify-center text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high transition-colors" title="Notifications">
+<span class="material-symbols-outlined text-lg" data-icon="notifications">notifications</span>
+</button>
+<button class="w-8 h-8 rounded flex items-center justify-center text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high transition-colors" title="Toggle Theme">
+<span class="material-symbols-outlined text-lg" data-icon="dark_mode">dark_mode</span>
+</button>
+<button class="w-8 h-8 rounded flex items-center justify-center text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high transition-colors" title="Tuning">
+<span class="material-symbols-outlined text-lg" data-icon="tune">tune</span>
+</button>
+<div class="w-8 h-8 ml-1 rounded-full bg-slate-midnight border border-cobalt-ultramarine/60 flex items-center justify-center text-primary font-label-sm text-label-sm cursor-pointer" title="Chief Architect (Admin)">
+<span class="material-symbols-outlined text-lg text-primary" data-icon="account_circle">account_circle</span>
+</div>
+</div>
+</div>
+</header>
+<!-- SECONDARY CONTEXT SUB-BAR (Project Meta & Baseline Docs) -->
+<div class="w-full bg-surface-container-low border-b border-outline-variant/60 px-space-lg py-2 flex flex-wrap items-center justify-between gap-2 shrink-0">
+<div class="flex items-center space-x-4">
+<div class="flex items-center space-x-2">
+<span class="text-label-md font-label-md text-tertiary">PROJECT:</span>
+<h1 class="text-headline-sm font-headline-sm text-porcelain-glaze tracking-tight">Global Trade Settlement Core v3.2</h1>
+</div>
+<!-- Amber Ceramic Seal Tag Status -->
+<div class="flex items-center space-x-1 px-2.5 py-0.5 rounded-full bg-ceramic-gold/15 border border-ceramic-gold/60 text-ceramic-gold text-label-sm font-label-sm">
+<span class="w-1.5 h-1.5 rounded-full bg-ceramic-gold animate-pulse"></span>
+<span>Maker Editing / 1 Warning</span>
+</div>
+<!-- RBAC Badge -->
+<span class="px-2 py-0.5 rounded bg-cobalt-ultramarine/20 border border-cobalt-ultramarine/50 text-celadon-mist text-label-sm font-label-sm">
+        RBAC: Principal Architect
+      </span>
+</div>
+<!-- Baseline Docs Attached -->
+<div class="flex items-center space-x-2 text-label-sm font-label-sm">
+<span class="text-tertiary">Baselines:</span>
+<div class="flex items-center space-x-1 px-2 py-0.5 rounded bg-surface-container border border-outline-variant/40 text-on-surface">
+<span class="material-symbols-outlined text-xs text-secondary" data-icon="picture_as_pdf">picture_as_pdf</span>
+<span>Trade_FSD_v4.pdf</span>
+<span class="text-tertiary text-[9px]">(14.2MB)</span>
+</div>
+<div class="flex items-center space-x-1 px-2 py-0.5 rounded bg-surface-container border border-outline-variant/40 text-on-surface">
+<span class="material-symbols-outlined text-xs text-celadon-mist" data-icon="table_chart">table_chart</span>
+<span>Settlement_Epics.xlsx</span>
+</div>
+</div>
+</div>
+<!-- ALERT BANNER (PRD Section 1.4) -->
+<div class="w-full bg-surface-container-lowest border-b border-cinnabar-alert/40 px-space-lg py-2 flex items-center justify-between shrink-0">
+<div class="flex items-center space-x-2.5">
+<div class="w-5 h-5 rounded-full bg-error-container flex items-center justify-center text-error">
+<span class="material-symbols-outlined text-xs" data-icon="warning">warning</span>
+</div>
+<p class="text-body-sm font-body-sm text-on-surface">
+<span class="font-semibold text-error">Missing Information Alert:</span> Uploaded baseline documents lack Non-Functional Volumetric projections and DuckDB growth estimates for <span class="font-mono text-celadon-mist">Section 4.3 Database Sizing</span>. Inferred defaults applied based on RAG knowledge base.
+      </p>
+</div>
+<button class="px-2.5 py-1 text-label-sm font-label-sm bg-cinnabar-alert/15 hover:bg-cinnabar-alert/25 text-error border border-cinnabar-alert/50 rounded flex items-center space-x-1 transition-colors">
+<span>Review Gap &amp; Provide Input</span>
+<span class="material-symbols-outlined text-xs" data-icon="arrow_forward">arrow_forward</span>
+</button>
+</div>
+<!-- INTERACTIVE 3-PANE WORKSPACE (PRD Section 2.2) -->
+<main class="flex-1 flex overflow-hidden">
+<!-- PANE 1: LEFT PANE (Document Outline & Sequence Index) - Fixed 280px -->
+<aside class="w-[280px] bg-surface-container-low border-r border-outline-variant/60 flex flex-col shrink-0">
+<div class="p-3 border-b border-outline-variant/40 flex items-center justify-between">
+<div class="flex items-center space-x-2">
+<span class="material-symbols-outlined text-primary text-sm" data-icon="format_list_numbered">format_list_numbered</span>
+<span class="text-label-md font-label-md text-on-surface font-semibold tracking-wide">Document Outline</span>
+</div>
+<span class="px-1.5 py-0.5 rounded bg-surface-container text-tertiary text-label-sm font-label-sm">Admin Reorder</span>
+</div>
+<div class="flex-1 overflow-y-auto custom-scrollbar p-2 space-y-1">
+<!-- Outline Item 1 -->
+<div class="p-2 rounded bg-surface-container/40 hover:bg-surface-container border border-transparent hover:border-outline-variant/40 flex items-start space-x-2 cursor-pointer transition-all">
+<span class="material-symbols-outlined text-tertiary text-xs mt-0.5 cursor-grab" data-icon="drag_indicator">drag_indicator</span>
+<div class="flex-1 min-w-0">
+<div class="flex items-center justify-between">
+<span class="text-body-sm font-body-sm text-on-surface truncate font-medium">1. Executive Summary &amp; Business Requirements</span>
+<span class="material-symbols-outlined text-celadon-mist text-xs ml-1" data-icon="check_circle" data-weight="fill">check_circle</span>
+</div>
+<span class="text-label-sm font-label-sm text-tertiary">1,240 words • RAG verified</span>
+</div>
+</div>
+<!-- Outline Item 2 -->
+<div class="p-2 rounded bg-surface-container/40 hover:bg-surface-container border border-transparent hover:border-outline-variant/40 flex items-start space-x-2 cursor-pointer transition-all">
+<span class="material-symbols-outlined text-tertiary text-xs mt-0.5 cursor-grab" data-icon="drag_indicator">drag_indicator</span>
+<div class="flex-1 min-w-0">
+<div class="flex items-center justify-between">
+<span class="text-body-sm font-body-sm text-on-surface truncate font-medium">2. High Level Architecture &amp; Flows</span>
+<span class="material-symbols-outlined text-celadon-mist text-xs ml-1" data-icon="check_circle" data-weight="fill">check_circle</span>
+</div>
+<span class="text-label-sm font-label-sm text-tertiary">C4 Model • Complete</span>
+</div>
+</div>
+<!-- Outline Item 3 -->
+<div class="p-2 rounded bg-surface-container/40 hover:bg-surface-container border border-transparent hover:border-outline-variant/40 flex items-start space-x-2 cursor-pointer transition-all">
+<span class="material-symbols-outlined text-tertiary text-xs mt-0.5 cursor-grab" data-icon="drag_indicator">drag_indicator</span>
+<div class="flex-1 min-w-0">
+<div class="flex items-center justify-between">
+<span class="text-body-sm font-body-sm text-on-surface truncate font-medium">3. Inventory of Interfaces</span>
+<span class="material-symbols-outlined text-celadon-mist text-xs ml-1" data-icon="check_circle" data-weight="fill">check_circle</span>
+</div>
+<span class="text-label-sm font-label-sm text-tertiary">12 endpoints documented</span>
+</div>
+</div>
+<!-- Outline Item 4 (ACTIVE) -->
+<div class="p-2 rounded bg-primary-container/40 border-l-2 border-l-cobalt-ultramarine border-t border-r border-b border-cobalt-ultramarine/50 flex items-start space-x-2 cursor-pointer transition-all shadow-sm">
+<span class="material-symbols-outlined text-primary text-xs mt-0.5 cursor-grab" data-icon="drag_indicator">drag_indicator</span>
+<div class="flex-1 min-w-0">
+<div class="flex items-center justify-between">
+<span class="text-body-sm font-body-sm text-porcelain-glaze font-semibold truncate">4. Sequence Flows: Happy &amp; Exception Paths</span>
+<span class="material-symbols-outlined text-primary text-xs ml-1" data-icon="schema">schema</span>
+</div>
+<div class="flex items-center space-x-1 mt-0.5">
+<span class="px-1.5 py-0.2 rounded bg-cobalt-ultramarine/30 text-celadon-mist text-[9px] font-mono">Mermaid Ready</span>
+<span class="text-label-sm font-label-sm text-primary">Active</span>
+</div>
+</div>
+</div>
+<!-- Outline Item 5 (WARNING) -->
+<div class="p-2 rounded bg-surface-container/40 hover:bg-surface-container border border-error/30 flex items-start space-x-2 cursor-pointer transition-all">
+<span class="material-symbols-outlined text-tertiary text-xs mt-0.5 cursor-grab" data-icon="drag_indicator">drag_indicator</span>
+<div class="flex-1 min-w-0">
+<div class="flex items-center justify-between">
+<span class="text-body-sm font-body-sm text-on-surface truncate font-medium">5. Database &amp; DuckDB Storage Architecture</span>
+<span class="material-symbols-outlined text-error text-xs ml-1" data-icon="warning">warning</span>
+</div>
+<span class="text-label-sm font-label-sm text-error">Missing Volumetrics</span>
+</div>
+</div>
+<!-- Outline Item 6 -->
+<div class="p-2 rounded bg-surface-container/40 hover:bg-surface-container border border-transparent hover:border-outline-variant/40 flex items-start space-x-2 cursor-pointer transition-all">
+<span class="material-symbols-outlined text-tertiary text-xs mt-0.5 cursor-grab" data-icon="drag_indicator">drag_indicator</span>
+<div class="flex-1 min-w-0">
+<div class="flex items-center justify-between">
+<span class="text-body-sm font-body-sm text-on-surface truncate font-medium">6. Redundancy, Failover &amp; Resiliency</span>
+<span class="material-symbols-outlined text-tertiary text-xs ml-1" data-icon="edit_note">edit_note</span>
+</div>
+<span class="text-label-sm font-label-sm text-tertiary">Draft in progress</span>
+</div>
+</div>
+<!-- Outline Item 7 -->
+<div class="p-2 rounded bg-surface-container/40 hover:bg-surface-container border border-transparent hover:border-outline-variant/40 flex items-start space-x-2 cursor-pointer transition-all">
+<span class="material-symbols-outlined text-tertiary text-xs mt-0.5 cursor-grab" data-icon="drag_indicator">drag_indicator</span>
+<div class="flex-1 min-w-0">
+<div class="flex items-center justify-between">
+<span class="text-body-sm font-body-sm text-on-surface truncate font-medium">7. Deployment Guidelines</span>
+<span class="material-symbols-outlined text-tertiary text-xs ml-1" data-icon="cloud">cloud</span>
+</div>
+<span class="text-label-sm font-label-sm text-tertiary">Cloud Run + GCS HTTPFS</span>
+</div>
+</div>
+</div>
+<!-- Left Rail Footer -->
+<div class="p-3 border-t border-outline-variant/40 bg-surface-container-lowest flex items-center justify-between">
+<button class="w-full py-1.5 bg-surface-container hover:bg-surface-container-high border border-outline-variant/60 rounded text-label-sm font-label-sm text-on-surface flex items-center justify-center space-x-1.5 transition-colors">
+<span class="material-symbols-outlined text-sm" data-icon="add_circle">add_circle</span>
+<span>Add Custom Architecture Section</span>
+</button>
+</div>
+</aside>
+<!-- PANE 2: CENTER PANE (WYSIWYG / Markdown Hybrid Editor + Mermaid Canvas) -->
+<section class="flex-1 bg-surface-container-lowest flex flex-col min-w-0 overflow-hidden">
+<!-- Section Header & Mode Toggle -->
+<div class="h-12 border-b border-outline-variant/60 bg-surface-container-low px-space-lg flex items-center justify-between shrink-0">
+<div class="flex items-center space-x-2 overflow-hidden">
+<span class="text-label-md font-label-md text-tertiary">SECTION:</span>
+<h2 class="text-headline-sm font-headline-sm text-porcelain-glaze truncate">4. Sequence Flow: Happy Path Settlement Event Stream</h2>
+</div>
+<!-- Mode Toggle -->
+<div class="flex items-center p-0.5 bg-slate-midnight rounded border border-outline-variant/60">
+<button class="px-2.5 py-1 rounded text-label-sm font-label-sm text-on-surface-variant hover:text-on-surface transition-colors">
+            WYSIWYG View
+          </button>
+<button class="px-2.5 py-1 rounded bg-primary-container text-porcelain-pure font-semibold text-label-sm font-label-sm border border-cobalt-ultramarine/60 shadow-sm transition-all">
+            Mermaid Diagram Visual Editor
+          </button>
+<button class="px-2.5 py-1 rounded text-label-sm font-label-sm text-on-surface-variant hover:text-on-surface transition-colors">
+            Raw Markdown / Code
+          </button>
+</div>
+</div>
+<!-- Editor Content Scroll Area -->
+<div class="flex-1 overflow-y-auto custom-scrollbar p-6 space-y-6">
+<!-- Document Canvas Container constrained for optimal readability -->
+<div class="max-w-[920px] mx-auto space-y-6">
+<!-- Section Narrative WYSIWYG Header -->
+<div class="bg-surface-container/60 border border-outline-variant/40 rounded-lg p-4 space-y-2">
+<div class="flex items-center justify-between text-label-sm font-label-sm text-tertiary">
+<span>Section Overview &amp; Latency SLAs</span>
+<span class="text-celadon-mist">Auto-synced with DuckDB schema #settle_v4</span>
+</div>
+<p class="text-body-md font-body-md text-on-surface leading-relaxed">
+              This sequence specifies the sub-second idempotent settlement pipeline across the global trading fabric. Events are captured via FastAPI ingress, validated against strict Pydantic v2 schemas, and directly streamed to DuckDB in-memory analytical partitions with GCS parquet durability.
+            </p>
+</div>
+<!-- DIAGRAM CANVAS: Visual Interactive Sequence Diagram -->
+<div class="border border-outline-variant rounded-lg overflow-hidden bg-slate-midnight shadow-md">
+<!-- Diagram Canvas Header Toolbar -->
+<div class="h-10 bg-surface-container border-b border-outline-variant/60 px-3 flex items-center justify-between">
+<div class="flex items-center space-x-2">
+<span class="material-symbols-outlined text-primary text-sm" data-icon="polyline">polyline</span>
+<span class="text-label-md font-label-md text-porcelain-glaze font-medium">Vitrified Blueprint Canvas</span>
+<span class="text-label-sm font-label-sm text-tertiary">(Interactive Sequence Flow)</span>
+</div>
+<div class="flex items-center space-x-1.5">
+<button class="px-2 py-0.5 bg-surface-container-high hover:bg-surface-variant border border-outline-variant/60 rounded text-label-sm font-label-sm text-on-surface flex items-center space-x-1">
+<span class="material-symbols-outlined text-xs" data-icon="add">add</span>
+<span>Add Step</span>
+</button>
+<button class="px-2 py-0.5 bg-surface-container-high hover:bg-surface-variant border border-outline-variant/60 rounded text-label-sm font-label-sm text-on-surface flex items-center space-x-1">
+<span class="material-symbols-outlined text-xs" data-icon="code">code</span>
+<span>Edit Mermaid Syntax</span>
+</button>
+<button class="p-1 hover:bg-surface-container-high rounded text-on-surface-variant" title="Zoom In">
+<span class="material-symbols-outlined text-sm" data-icon="zoom_in">zoom_in</span>
+</button>
+<button class="p-1 hover:bg-surface-container-high rounded text-on-surface-variant" title="Zoom Out">
+<span class="material-symbols-outlined text-sm" data-icon="zoom_out">zoom_out</span>
+</button>
+<button class="p-1 hover:bg-surface-container-high rounded text-on-surface-variant" title="Fit to Viewport">
+<span class="material-symbols-outlined text-sm" data-icon="fit_screen">fit_screen</span>
+</button>
+</div>
+</div>
+<!-- Blueprint Grid Canvas Area -->
+<div class="blueprint-grid p-6 min-h-[380px] flex flex-col justify-between relative overflow-x-auto">
+<!-- Actor Nodes Row -->
+<div class="grid grid-cols-4 gap-4 pb-4">
+<!-- Actor 1 -->
+<div class="flex flex-col items-center">
+<div class="px-3 py-2 rounded bg-surface-container border border-cobalt-ultramarine/60 shadow-sm text-center w-full max-w-[160px]">
+<span class="material-symbols-outlined text-celadon-mist text-lg" data-icon="terminal">terminal</span>
+<p class="text-label-md font-label-md text-porcelain-glaze font-bold">Client Portal</p>
+<p class="text-label-sm font-label-sm text-tertiary">React / Wasm</p>
+</div>
+<div class="w-0.5 h-64 border-l border-dashed border-cobalt-ultramarine/40 mt-2"></div>
+</div>
+<!-- Actor 2 -->
+<div class="flex flex-col items-center">
+<div class="px-3 py-2 rounded bg-surface-container border border-cobalt-ultramarine/60 shadow-sm text-center w-full max-w-[160px]">
+<span class="material-symbols-outlined text-celadon-mist text-lg" data-icon="api">api</span>
+<p class="text-label-md font-label-md text-porcelain-glaze font-bold">API Gateway</p>
+<p class="text-label-sm font-label-sm text-tertiary">FastAPI / Cloud Run</p>
+</div>
+<div class="w-0.5 h-64 border-l border-dashed border-cobalt-ultramarine/40 mt-2"></div>
+</div>
+<!-- Actor 3 -->
+<div class="flex flex-col items-center">
+<div class="px-3 py-2 rounded bg-primary-container/70 border border-primary text-center w-full max-w-[170px] shadow-sm">
+<span class="material-symbols-outlined text-celadon-mist text-lg" data-icon="database">database</span>
+<p class="text-label-md font-label-md text-porcelain-glaze font-bold">DuckDB / GCS</p>
+<p class="text-label-sm font-label-sm text-celadon-mist">In-Process Engine</p>
+</div>
+<div class="w-0.5 h-64 border-l border-dashed border-cobalt-ultramarine/40 mt-2"></div>
+</div>
+<!-- Actor 4 -->
+<div class="flex flex-col items-center">
+<div class="px-3 py-2 rounded bg-surface-container border border-cobalt-ultramarine/60 shadow-sm text-center w-full max-w-[160px]">
+<span class="material-symbols-outlined text-celadon-mist text-lg" data-icon="account_balance">account_balance</span>
+<p class="text-label-md font-label-md text-porcelain-glaze font-bold">Core Ledger</p>
+<p class="text-label-sm font-label-sm text-tertiary">Settlement Queue</p>
+</div>
+<div class="w-0.5 h-64 border-l border-dashed border-cobalt-ultramarine/40 mt-2"></div>
+</div>
+</div>
+<!-- Overlaid Flow Lines and Interactions -->
+<div class="absolute inset-0 pt-24 px-12 pointer-events-none flex flex-col space-y-6">
+<!-- Message Flow 1: Client -> API Gateway -->
+<div class="relative w-[28%] left-[10%] flex items-center justify-center">
+<div class="w-full h-0.5 bg-cobalt-ultramarine relative">
+<div class="absolute right-0 -top-1 w-2 h-2 border-t-2 border-r-2 border-cobalt-ultramarine transform rotate-45"></div>
+</div>
+<span class="absolute -top-3.5 px-1.5 py-0.5 rounded bg-surface-container border border-outline-variant/60 text-[9px] font-mono text-celadon-mist pointer-events-auto cursor-pointer hover:border-primary">
+                    POST /api/v3/trade/settle (JSON)
+                  </span>
+</div>
+<!-- Message Flow 2: API Gateway -> DuckDB Engine -->
+<div class="relative w-[28%] left-[36%] flex items-center justify-center">
+<div class="w-full h-0.5 bg-cobalt-ultramarine relative">
+<div class="absolute right-0 -top-1 w-2 h-2 border-t-2 border-r-2 border-cobalt-ultramarine transform rotate-45"></div>
+</div>
+<span class="absolute -top-3.5 px-1.5 py-0.5 rounded bg-surface-container border border-outline-variant/60 text-[9px] font-mono text-celadon-mist pointer-events-auto cursor-pointer hover:border-primary">
+                    DuckDB Appender INSERT (Microbatch)
+                  </span>
+</div>
+<!-- Message Flow 3: DuckDB Engine -> Core Ledger -->
+<div class="relative w-[28%] left-[62%] flex items-center justify-center">
+<div class="w-full h-0.5 bg-cobalt-ultramarine relative">
+<div class="absolute right-0 -top-1 w-2 h-2 border-t-2 border-r-2 border-cobalt-ultramarine transform rotate-45"></div>
+</div>
+<span class="absolute -top-3.5 px-1.5 py-0.5 rounded bg-surface-container border border-outline-variant/60 text-[9px] font-mono text-celadon-mist pointer-events-auto cursor-pointer hover:border-primary">
+                    Dispatched to Kafka #settle-tx-raw
+                  </span>
+</div>
+<!-- Message Flow 4: Core Ledger ACK -> DuckDB -->
+<div class="relative w-[28%] left-[62%] flex items-center justify-center">
+<div class="w-full h-0.5 bg-celadon-mist/70 border-b border-dashed border-celadon-mist relative">
+<div class="absolute left-0 -top-1 w-2 h-2 border-b-2 border-l-2 border-celadon-mist transform rotate-45"></div>
+</div>
+<span class="absolute -top-3.5 px-1.5 py-0.5 rounded bg-surface-container border border-outline-variant/60 text-[9px] font-mono text-on-surface pointer-events-auto cursor-pointer hover:border-primary">
+                    Ledger ACK (Commit UUID)
+                  </span>
+</div>
+<!-- Message Flow 5: Callback loop 200 OK -> Client Portal -->
+<div class="relative w-[54%] left-[10%] flex items-center justify-center">
+<div class="w-full h-0.5 bg-emerald-500/80 relative">
+<div class="absolute left-0 -top-1 w-2 h-2 border-b-2 border-l-2 border-emerald-500 transform rotate-45"></div>
+</div>
+<span class="absolute -top-3.5 px-1.5 py-0.5 rounded bg-surface-container border border-emerald-500/40 text-[9px] font-mono text-emerald-300 pointer-events-auto cursor-pointer">
+                    HTTP 200 OK { status: 'settled', latency_ms: 12.4 }
+                  </span>
+</div>
+</div>
+<!-- Canvas Bottom Mini-Legend -->
+<div class="pt-4 flex items-center justify-between text-label-sm font-label-sm text-tertiary border-t border-outline-variant/40 mt-12">
+<div class="flex items-center space-x-4">
+<div class="flex items-center space-x-1.5">
+<span class="w-2.5 h-2.5 rounded-full bg-cobalt-ultramarine"></span>
+<span>Synchronous Ingress</span>
+</div>
+<div class="flex items-center space-x-1.5">
+<span class="w-2.5 h-2.5 rounded-full bg-emerald-400"></span>
+<span>200 Settlement Verified</span>
+</div>
+<div class="flex items-center space-x-1.5">
+<span class="w-2.5 h-2.5 rounded-full bg-cinnabar-alert"></span>
+<span>400/503 Idempotency Re-try Loop</span>
+</div>
+</div>
+<span class="font-mono text-[10px]">Mermaid AST v10.8 compiled in 18ms</span>
+</div>
+</div>
+</div>
+<!-- INLINE TABLE EDITOR (PRD Section 1.5): Inventory of Interfaces Table -->
+<div class="border border-outline-variant rounded-lg bg-surface-container-low overflow-hidden shadow-sm">
+<div class="p-3 bg-surface-container border-b border-outline-variant flex items-center justify-between">
+<div class="flex items-center space-x-2">
+<span class="material-symbols-outlined text-primary text-sm" data-icon="table_chart">table_chart</span>
+<h3 class="text-label-md font-label-md text-porcelain-glaze font-semibold">Inventory of Interfaces &amp; Capability Matrix</h3>
+<span class="px-1.5 py-0.2 rounded bg-surface-container-high text-tertiary text-label-sm font-label-sm">DuckDB Synced</span>
+</div>
+<button class="px-2.5 py-1 bg-surface-container-high hover:bg-surface-variant border border-outline-variant/60 rounded text-label-sm font-label-sm text-celadon-mist flex items-center space-x-1 transition-colors">
+<span class="material-symbols-outlined text-xs" data-icon="add">add</span>
+<span>Add Row</span>
+</button>
+</div>
+<!-- Razor 1px Data Grid with Zebra striping -->
+<div class="overflow-x-auto">
+<table class="w-full text-left border-collapse text-body-sm font-body-sm">
+<thead>
+<tr class="bg-slate-midnight border-b border-outline-variant text-label-sm font-label-sm text-tertiary">
+<th class="py-2.5 px-3 border-r border-outline-variant/40 uppercase">System</th>
+<th class="py-2.5 px-3 border-r border-outline-variant/40 uppercase">Country / Reg</th>
+<th class="py-2.5 px-3 border-r border-outline-variant/40 uppercase">Protocol</th>
+<th class="py-2.5 px-3 border-r border-outline-variant/40 uppercase">Purpose</th>
+<th class="py-2.5 px-3 border-r border-outline-variant/40 uppercase">Request/Response Schema</th>
+<th class="py-2.5 px-3 text-right uppercase">Actions</th>
+</tr>
+</thead>
+<tbody class="divide-y divide-outline-variant/40">
+<!-- Row 1 -->
+<tr class="bg-surface-container-low hover:bg-surface-container transition-colors">
+<td class="py-2 px-3 border-r border-outline-variant/40 font-mono text-primary font-medium">SYS_TRADE_PORTAL</td>
+<td class="py-2 px-3 border-r border-outline-variant/40 text-on-surface">Global (US/UK/SG)</td>
+<td class="py-2 px-3 border-r border-outline-variant/40 font-mono text-celadon-mist">REST / HTTPS (mTLS)</td>
+<td class="py-2 px-3 border-r border-outline-variant/40 text-on-surface">Client Order &amp; Settlement Ingress</td>
+<td class="py-2 px-3 border-r border-outline-variant/40 font-mono text-tertiary text-xs">trade_order_v3.json / 200_ack.json</td>
+<td class="py-2 px-3 text-right space-x-1">
+<button class="p-1 hover:text-primary text-tertiary" title="Inline Edit"><span class="material-symbols-outlined text-xs" data-icon="edit">edit</span></button>
+<button class="p-1 hover:text-error text-tertiary" title="Delete"><span class="material-symbols-outlined text-xs" data-icon="delete">delete</span></button>
+</td>
+</tr>
+<!-- Row 2 -->
+<tr class="bg-slate-midnight hover:bg-surface-container transition-colors">
+<td class="py-2 px-3 border-r border-outline-variant/40 font-mono text-primary font-medium">CORE_LEDGER_TX</td>
+<td class="py-2 px-3 border-r border-outline-variant/40 text-on-surface">Frankfurt (EU)</td>
+<td class="py-2 px-3 border-r border-outline-variant/40 font-mono text-celadon-mist">gRPC / Protobuf v3</td>
+<td class="py-2 px-3 border-r border-outline-variant/40 text-on-surface">Atomic Multi-Currency Posting</td>
+<td class="py-2 px-3 border-r border-outline-variant/40 font-mono text-tertiary text-xs">ledger_event.proto:LedgerPost</td>
+<td class="py-2 px-3 text-right space-x-1">
+<button class="p-1 hover:text-primary text-tertiary" title="Inline Edit"><span class="material-symbols-outlined text-xs" data-icon="edit">edit</span></button>
+<button class="p-1 hover:text-error text-tertiary" title="Delete"><span class="material-symbols-outlined text-xs" data-icon="delete">delete</span></button>
+</td>
+</tr>
+<!-- Row 3 -->
+<tr class="bg-surface-container-low hover:bg-surface-container transition-colors">
+<td class="py-2 px-3 border-r border-outline-variant/40 font-mono text-primary font-medium">DUCKDB_ANALYTICS</td>
+<td class="py-2 px-3 border-r border-outline-variant/40 text-on-surface">US-East &amp; Local Node</td>
+<td class="py-2 px-3 border-r border-outline-variant/40 font-mono text-celadon-mist">HTTPFS Parquet Pipe</td>
+<td class="py-2 px-3 border-r border-outline-variant/40 text-on-surface">NFR Audit Stream &amp; Volumetrics</td>
+<td class="py-2 px-3 border-r border-outline-variant/40 font-mono text-tertiary text-xs">settlement_duckdb_schema.sql</td>
+<td class="py-2 px-3 text-right space-x-1">
+<button class="p-1 hover:text-primary text-tertiary" title="Inline Edit"><span class="material-symbols-outlined text-xs" data-icon="edit">edit</span></button>
+<button class="p-1 hover:text-error text-tertiary" title="Delete"><span class="material-symbols-outlined text-xs" data-icon="delete">delete</span></button>
+</td>
+</tr>
+<!-- Row 4 -->
+<tr class="bg-slate-midnight hover:bg-surface-container transition-colors">
+<td class="py-2 px-3 border-r border-outline-variant/40 font-mono text-primary font-medium">COMPLIANCE_SCREEN</td>
+<td class="py-2 px-3 border-r border-outline-variant/40 text-on-surface">UK / OFAC Engine</td>
+<td class="py-2 px-3 border-r border-outline-variant/40 font-mono text-celadon-mist">Kafka Async Event</td>
+<td class="py-2 px-3 border-r border-outline-variant/40 text-on-surface">Sanctions &amp; AML Validation Filter</td>
+<td class="py-2 px-3 border-r border-outline-variant/40 font-mono text-tertiary text-xs">aml_screening_req.avsc</td>
+<td class="py-2 px-3 text-right space-x-1">
+<button class="p-1 hover:text-primary text-tertiary" title="Inline Edit"><span class="material-symbols-outlined text-xs" data-icon="edit">edit</span></button>
+<button class="p-1 hover:text-error text-tertiary" title="Delete"><span class="material-symbols-outlined text-xs" data-icon="delete">delete</span></button>
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+<div class="p-2 bg-surface-container border-t border-outline-variant/60 flex items-center justify-between text-label-sm font-label-sm text-tertiary">
+<span>Showing 4 of 12 interfaces</span>
+<a class="text-primary hover:underline flex items-center space-x-1" href="#">
+<span>View Full Enterprise Data Dictionary</span>
+<span class="material-symbols-outlined text-xs" data-icon="open_in_new">open_in_new</span>
+</a>
+</div>
+</div>
+</div>
+</div>
+</section>
+<!-- PANE 3: RIGHT PANE (Admin Section Prompt & LLM Flyout Panel) - Fixed 380px -->
+<aside class="w-[380px] bg-surface-container-low border-l border-outline-variant/60 flex flex-col shrink-0">
+<!-- Flyout Header -->
+<div class="p-3 border-b border-outline-variant/60 bg-surface-container flex items-center justify-between">
+<div class="flex items-center space-x-2">
+<span class="material-symbols-outlined text-primary text-sm" data-icon="tune">tune</span>
+<div class="flex flex-col">
+<span class="text-label-md font-label-md text-porcelain-glaze font-semibold">Sub-Layout LLM Prompt &amp; Tuning</span>
+<span class="text-label-sm font-label-sm text-ceramic-gold font-mono">Admin Mode Active</span>
+</div>
+</div>
+<button class="p-1 hover:bg-surface-container-high rounded text-on-surface-variant" title="Collapse Panel">
+<span class="material-symbols-outlined text-sm" data-icon="chevron_right">chevron_right</span>
+</button>
+</div>
+<!-- Flyout Form Controls Area -->
+<div class="flex-1 overflow-y-auto custom-scrollbar p-4 space-y-4">
+<!-- Active Section Context Indicator -->
+<div class="p-2.5 rounded bg-surface-container border border-outline-variant/60">
+<label class="block text-label-sm font-label-sm text-tertiary mb-1">Target Section Context</label>
+<div class="flex items-center justify-between">
+<span class="text-body-sm font-body-sm text-porcelain-glaze font-medium">Sequence Flow Generator</span>
+<span class="px-1.5 py-0.5 rounded bg-cobalt-ultramarine/20 border border-cobalt-ultramarine/40 text-celadon-mist text-label-sm font-label-sm">Sec 4.0</span>
+</div>
+</div>
+<!-- Model Selector Dropdown -->
+<div>
+<label class="block text-label-sm font-label-sm text-tertiary mb-1 font-mono uppercase">Inference Foundation Model</label>
+<div class="relative">
+<select class="w-full bg-slate-midnight border border-outline-variant rounded p-2 text-label-md font-label-md text-on-surface focus:border-cobalt-ultramarine focus:ring-1 focus:ring-cobalt-ultramarine">
+<option selected="">Claude 3.5 Sonnet (Architect Recommended)</option>
+<option>GPT-4o (Reasoning Specialized)</option>
+<option>Gemini 1.5 Pro (2M Context Window)</option>
+</select>
+</div>
+</div>
+<!-- Hyperparameter Tuning: Temperature & Max Words -->
+<div class="space-y-3 p-3 rounded bg-surface-container/60 border border-outline-variant/40">
+<div>
+<div class="flex justify-between items-center mb-1">
+<span class="text-label-sm font-label-sm text-tertiary">Temperature:</span>
+<span class="font-mono text-label-sm font-label-sm text-celadon-mist">0.20 (Deterministic)</span>
+</div>
+<input class="w-full accent-cobalt-ultramarine bg-slate-midnight rounded h-1 cursor-pointer" max="1" min="0" step="0.05" type="range" value="0.2"/>
+<div class="flex justify-between text-[9px] text-tertiary font-mono mt-1">
+<span>0.0 (Strict Code)</span>
+<span>1.0 (Creative)</span>
+</div>
+</div>
+<div>
+<div class="flex justify-between items-center mb-1">
+<span class="text-label-sm font-label-sm text-tertiary">Max Token Limit:</span>
+<span class="font-mono text-label-sm font-label-sm text-celadon-mist">1,500 Words (~2,000 tok)</span>
+</div>
+<input class="w-full accent-cobalt-ultramarine bg-slate-midnight rounded h-1 cursor-pointer" max="4000" min="500" step="250" type="range" value="1500"/>
+</div>
+</div>
+<!-- Custom Sub-Layout Prompt Textarea with Syntax Highlighting Look -->
+<div>
+<div class="flex items-center justify-between mb-1">
+<label class="text-label-sm font-label-sm text-tertiary font-mono uppercase">System Instruction Directive</label>
+<span class="text-label-sm font-label-sm text-celadon-mist">v3.4 Applied</span>
+</div>
+<div class="relative rounded bg-slate-midnight border border-outline-variant p-2 font-mono text-xs text-on-surface leading-relaxed focus-within:border-cobalt-ultramarine">
+<textarea class="w-full bg-transparent border-0 p-0 text-xs font-mono text-on-surface focus:ring-0 resize-none" rows="6" spellcheck="false">Focus on enterprise resilient error handling, retry backoff protocols, and strict JSON schema conformance. For Section 4, strictly output Mermaid sequenceDiagram markdown blocks modeling the DuckDB in-memory buffer commit flow and 400 error loop.</textarea>
+</div>
+</div>
+<!-- Dynamic In-Memory Cache Status Box -->
+<div class="p-2.5 rounded bg-surface-container border border-celadon-mist/20 flex items-start space-x-2">
+<span class="material-symbols-outlined text-celadon-mist text-sm mt-0.5" data-icon="memory">memory</span>
+<div class="flex-1">
+<p class="text-label-sm font-label-sm text-celadon-mist font-semibold">Dynamic Cache Status</p>
+<p class="text-[11px] text-tertiary leading-tight mt-0.5">Reloaded into In-Memory Cache (No Server Restart Required).</p>
+</div>
+</div>
+<!-- Action Button: Regenerate with Tuned Prompt -->
+<button class="w-full py-2 bg-primary-container hover:bg-cobalt-deep text-porcelain-pure border border-cobalt-ultramarine rounded font-label-md text-label-md flex items-center justify-center space-x-2 shadow-sm transition-all active:scale-95">
+<span class="material-symbols-outlined text-sm" data-icon="auto_awesome">auto_awesome</span>
+<span>Regenerate Section 4 with Tuned Prompt</span>
+</button>
+</div>
+<!-- Flyout Footer: Token Metrics -->
+<div class="p-3 border-t border-outline-variant/60 bg-surface-container-lowest flex items-center justify-between text-label-sm font-label-sm text-tertiary font-mono">
+<span>Prompt: 684 tok</span>
+<span>Context RAG: 4.1k tok</span>
+<span class="text-celadon-mist">$0.014 est</span>
+</div>
+</aside>
+</main>
+<!-- PERSISTENT FLOATING BOTTOM-RIGHT COPILOT CHAT WIDGET -->
+<div class="fixed bottom-4 right-6 z-50 flex flex-col items-end">
+<!-- Collapsible Chat Box (Docked Preview) -->
+<div class="w-[390px] bg-slate-night/95 backdrop-blur-md border border-celadon-mist/30 rounded-lg shadow-2xl flex flex-col overflow-hidden mb-2 transition-all" id="copilot-drawer">
+<!-- Widget Header -->
+<div class="px-3 py-2 bg-surface-container-high border-b border-outline-variant flex items-center justify-between">
+<div class="flex items-center space-x-2">
+<div class="w-6 h-6 rounded-full bg-primary-container border border-cobalt-ultramarine flex items-center justify-center">
+<span class="material-symbols-outlined text-xs text-primary" data-icon="smart_toy">smart_toy</span>
+</div>
+<span class="text-label-md font-label-md text-porcelain-glaze font-semibold">Porcelain Architecture Copilot</span>
+</div>
+<div class="flex items-center space-x-1">
+<button class="p-1 hover:bg-surface-variant rounded text-on-surface-variant" onclick="document.getElementById('copilot-drawer').classList.toggle('hidden')">
+<span class="material-symbols-outlined text-xs" data-icon="close">close</span>
+</button>
+</div>
+</div>
+<!-- Guardrails Indicator -->
+<div class="px-3 py-1 bg-surface-container-lowest border-b border-outline-variant/40 flex items-center space-x-1.5 text-[10px] font-mono text-tertiary">
+<span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
+<span class="text-emerald-400 font-semibold">Guardrails AI:</span>
+<span class="truncate">Prompt injection filter active • RAG Llama-index v3</span>
+</div>
+<!-- Message History (Mini-Thread) -->
+<div class="p-3 space-y-2.5 max-h-48 overflow-y-auto custom-scrollbar text-body-sm font-body-sm">
+<div class="p-2 rounded bg-surface-container border border-outline-variant/30 text-on-surface text-xs leading-relaxed">
+<span class="text-primary font-mono font-semibold block text-[10px] mb-0.5">COPILOT (RAG SYNTHESIS)</span>
+          Identified missing DuckDB volumetric metrics for <strong>Section 4.3</strong>. Defaulting to 15,000 TPS baseline from FSD Section 8. Would you like me to populate the storage partition calculation?
+        </div>
+</div>
+<!-- Input Bar -->
+<div class="p-2 bg-surface-container border-t border-outline-variant flex items-center space-x-1.5">
+<input class="flex-1 bg-slate-midnight border border-outline-variant/80 rounded px-2.5 py-1 text-xs font-mono text-on-surface placeholder:text-tertiary focus:border-cobalt-ultramarine focus:ring-0" placeholder="Query context or prompt architecture rewrite..." type="text"/>
+<button class="p-1.5 bg-primary-container hover:bg-cobalt-deep text-porcelain-pure rounded border border-cobalt-ultramarine transition-all active:scale-95">
+<span class="material-symbols-outlined text-xs" data-icon="send">send</span>
+</button>
+</div>
+</div>
+<!-- Persistent Floating Porcelain Ceramic Icon Pill -->
+<button class="px-3 py-2 bg-primary-container hover:bg-cobalt-deep text-porcelain-pure border border-cobalt-ultramarine rounded-full shadow-lg flex items-center space-x-2 transition-all duration-150 active:scale-95" onclick="document.getElementById('copilot-drawer').classList.toggle('hidden')">
+<span class="material-symbols-outlined text-base" data-icon="psychology">psychology</span>
+<span class="text-label-sm font-label-sm font-semibold tracking-wide">Context Copilot</span>
+<span class="w-2 h-2 rounded-full bg-celadon-mist animate-ping"></span>
+</button>
+</div>
+</body></html>
