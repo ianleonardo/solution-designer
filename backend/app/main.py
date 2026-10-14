@@ -7,6 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from app import cache, db
+from app.audit_middleware import AuditMiddleware
 from app.config import load_dotenv
 from app.errors import AppError
 from app.routers import admin, chat, projects, sdd
@@ -32,6 +33,7 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="SolutionCrafter", lifespan=lifespan)
+app.add_middleware(AuditMiddleware)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],

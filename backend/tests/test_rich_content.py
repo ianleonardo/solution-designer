@@ -3,23 +3,23 @@ from tests.conftest import auth, login
 
 
 def _doc(client):
-    maker = login(client, "Maker")
-    project_id = client.post("/api/projects", json={"project_name": "Rich"}, headers=auth(maker)).json()["project_id"]
-    document = client.get(f"/api/projects/{project_id}/documents", headers=auth(maker)).json()[0]
-    return maker, f"/api/projects/{project_id}/documents/{document['document_id']}"
+    writer = login(client, "Write")
+    project_id = client.post("/api/projects", json={"project_name": "Rich"}, headers=auth(writer)).json()["project_id"]
+    document = client.get(f"/api/projects/{project_id}/documents", headers=auth(writer)).json()[0]
+    return writer, f"/api/projects/{project_id}/documents/{document['document_id']}"
 
 
 def test_header_size_chosen_in_the_document_is_kept(client):
-    maker, base = _doc(client)
-    section = client.post(f"{base}/sections", json={"section_name": "Sized", "blocks": [{"type": "header", "text": "T", "level": 1}]}, headers=auth(maker)).json()
+    writer, base = _doc(client)
+    section = client.post(f"{base}/sections", json={"section_name": "Sized", "blocks": [{"type": "header", "text": "T", "level": 1}]}, headers=auth(writer)).json()
     sid = next(item["template_id"] for item in section["templates"] if item["section_name"] == "Sized")
     content = section["content_json"]
     assert content["sections"][sid]["blocks"][0]["level"] == 1
     content["sections"][sid]["blocks"][0].update({"text": "Bigger", "level": 3})
-    saved = client.put(base, json={"content_json": content}, headers=auth(maker)).json()
+    saved = client.put(base, json={"content_json": content}, headers=auth(writer)).json()
     assert saved["content_json"]["sections"][sid]["blocks"][0] == {"type": "header", "text": "Bigger", "level": 3}
     content["sections"][sid]["blocks"][0]["level"] = 9
-    clamped = client.put(base, json={"content_json": content}, headers=auth(maker)).json()
+    clamped = client.put(base, json={"content_json": content}, headers=auth(writer)).json()
     assert clamped["content_json"]["sections"][sid]["blocks"][0]["level"] == 3
 
 

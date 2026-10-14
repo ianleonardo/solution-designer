@@ -21,8 +21,8 @@ export function DashboardPage() {
       <section className="grid grid-cols-1 md:grid-cols-3 gap-3">
         {[
           ["Total Projects", data?.total_projects ?? "—"],
+          ["Total Documents", data?.total_documents ?? "—"],
           ["Documents Generated", data?.documents_generated ?? "—"],
-          ["Pending Approvals", data?.pending_approvals ?? "—"],
         ].map(([label, value]) => (
           <article key={String(label)} className="bg-panel border border-hairline rounded-lg p-4">
             <p className="font-label text-[10px] uppercase text-muted">{label}</p>

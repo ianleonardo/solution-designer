@@ -1,14 +1,39 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Request
 
 from app.deps import create_token, current_user
-from app.services import projects
+from app.errors import AppError
+from app.services import audit, projects
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
 
 @router.post("/login")
-def login(body: dict):
-    user = projects.authenticate(str(body.get("login_id") or body.get("email") or ""), str(body.get("password") or ""))
+def login(body: dict, request: Request):
+    login_id = str(body.get("login_id") or body.get("email") or "")
+    address = request.client.host if request.client else None
+    try:
+        user = projects.authenticate(login_id, str(body.get("password") or ""))
+    except AppError:
+        audit.record(
+            action="login_failed",
+            summary=f"Failed sign-in for '{login_id.strip()[:100]}'",
+            login_id=login_id.strip()[:100] or None,
+            method="POST",
+            path="/api/auth/login",
+            entity_type="user",
+            ip_address=address,
+        )
+        raise
+    audit.record(
+        action="login",
+        summary="Signed in",
+        user=user,
+        method="POST",
+        path="/api/auth/login",
+        entity_type="user",
+        entity_id=user["user_id"],
+        ip_address=address,
+    )
     return {"access_token": create_token(user), "user": user}
 
 

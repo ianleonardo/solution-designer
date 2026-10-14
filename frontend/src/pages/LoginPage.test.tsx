@@ -52,4 +52,20 @@ describe("LoginPage", () => {
     expect(root.contains("jade")).toBe(false);
     expect(localStorage.getItem("theme")).toBe("dark");
   });
+
+  it("sets the SolutionCrafter name as tall as the logo icon", () => {
+    render(
+      <ThemeProvider>
+        <AuthProvider>
+          <MemoryRouter>
+            <LoginPage />
+          </MemoryRouter>
+        </AuthProvider>
+      </ThemeProvider>,
+    );
+    const name = screen.getByTestId("wordmark");
+    expect((name.previousElementSibling as HTMLElement).className).toContain("h-10");
+    expect(name.className).toContain("leading-10");
+    expect(name.className).toContain("text-[40px]");
+  });
 });

@@ -102,11 +102,6 @@ export function DocumentTabs({
               onClick={() => onSelect(item.document_id)}
             >
               {item.name}
-              {item.status !== "draft" && (
-                <span className="ml-2 rounded-full border border-hairline px-1.5 py-0.5 text-[10px] uppercase text-gold">
-                  {item.status === "pending_approval" ? "Pending" : "Approved"}
-                </span>
-              )}
             </button>
           );
         })}

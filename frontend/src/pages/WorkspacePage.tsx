@@ -51,8 +51,8 @@ export function WorkspacePage() {
   const [deletingSection, setDeletingSection] = useState<Template | null>(null);
   const [structureBusy, setStructureBusy] = useState(false);
   const timer = useRef<number | null>(null);
-  const documentLocked = user?.role_name === "Viewer" || user?.role_name === "Admin";
-  const canEditStructure = user?.role_name === "Maker" || user?.role_name === "Checker";
+  const documentLocked = user?.role_name !== "Write";
+  const canEditStructure = user?.role_name === "Write";
   const canFill = canEditStructure;
 
   useEffect(() => {
@@ -234,7 +234,7 @@ export function WorkspacePage() {
         for (const [id, item] of Object.entries(saved.content_json.sections)) {
           if (sections[id]) sections[id] = { ...sections[id], missing: item.missing };
         }
-        return { ...current, status: saved.status, last_modified: saved.last_modified, content_json: { sections } };
+        return { ...current, last_modified: saved.last_modified, content_json: { sections } };
       });
       setSaveState("saved");
     } catch (err) {
@@ -305,15 +305,6 @@ export function WorkspacePage() {
     }
   }
 
-  async function transition(action: "submit" | "approve") {
-    setError("");
-    try {
-      mergeDoc(await api<Sdd>(`${base}/${action}`, { method: "POST" }));
-    } catch (err) {
-      setError(err instanceof ApiError ? err.message : "The action failed");
-    }
-  }
-
   async function addDocument(layoutId: string) {
     const created = await api<ProjectDocument>(`/api/projects/${projectId}/documents`, {
       method: "POST",
@@ -331,7 +322,7 @@ export function WorkspacePage() {
   }
 
   async function commitTitle(nextTitleRaw: string) {
-    if (!data || user?.role_name === "Viewer") return;
+    if (!data || user?.role_name !== "Write") return;
     const nextTitle = nextTitleRaw.trim();
     if (!nextTitle || nextTitle === data.project.project_name) {
       setTitle(data.project.project_name);
@@ -370,7 +361,7 @@ export function WorkspacePage() {
               className="font-headline text-xl font-semibold bg-transparent border-b border-transparent focus:border-hairline outline-none min-w-[16rem]"
               aria-label="Project title"
               value={title}
-              readOnly={user.role_name === "Viewer"}
+              readOnly={user.role_name !== "Write"}
               onChange={(event) => setTitle(event.target.value)}
               onBlur={(event) => void commitTitle(event.currentTarget.value)}
               onKeyDown={(event) => {
@@ -398,16 +389,6 @@ export function WorkspacePage() {
           <button type="button" className="btn" onClick={() => setPreview("md")}>Markdown</button>
           <button type="button" className="btn" onClick={() => setPreview("html")}>HTML</button>
           <button type="button" className="btn" onClick={() => setPreview("pdf")}>PDF</button>
-          {!documentLocked && doc.status === "draft" && (
-            <button type="button" className="btn btn-primary" title="Changes take effect once a Checker approves them" onClick={() => void transition("submit")}>
-              Submit to Checker
-            </button>
-          )}
-          {user.role_name === "Checker" && doc.status === "pending_approval" && (
-            <button type="button" className="btn btn-primary" onClick={() => void transition("approve")}>
-              Approve
-            </button>
-          )}
           {user.role_name === "Admin" && (
             <button type="button" className="btn" onClick={() => setFlyoutOpen(true)}>
               <span className="material-symbols-outlined">tune</span>
@@ -428,7 +409,6 @@ export function WorkspacePage() {
       {saveState !== "idle" && (
         <p className="px-4 py-1 border-b border-hairline text-xs text-muted" role="status">
           {saveState === "saving" ? "Saving…" : "Saved"}
-          {saveState === "saved" && canEditStructure && doc.status === "draft" && " · Submit to the Checker for these changes to be approved."}
         </p>
       )}
       {error && <p className="px-4 py-2 text-alert border-b border-hairline">{error}</p>}
@@ -585,7 +565,7 @@ export function WorkspacePage() {
         <ReferencesPanel
           projectId={projectId}
           references={data.references}
-          canEdit={user.role_name === "Maker" || user.role_name === "Checker"}
+          canEdit={user.role_name === "Write"}
           onChange={(references) => setData((current) => (current ? { ...current, references } : current))}
           onClose={() => setReferencesOpen(false)}
         />

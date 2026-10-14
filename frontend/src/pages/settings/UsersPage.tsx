@@ -7,14 +7,14 @@ import type { Role, User } from "../../types";
 export const USER_PAGE_SIZE = 20;
 export const LOGIN_ID_PATTERN = /^[A-Za-z0-9]{3,64}$/;
 const LOGIN_ID_HELP = "Login ID must be 3-64 letters or numbers, with no spaces or special characters";
-const ROLES: Role[] = ["Admin", "Checker", "Maker", "Viewer"];
+const ROLES: Role[] = ["Admin", "Write", "Read"];
 
 function UserDialog({ user, onSaved, onClose }: { user: User | null; onSaved: (user: User) => void; onClose: () => void }) {
   const editing = user !== null;
   const [loginId, setLoginId] = useState(user?.login_id ?? "");
   const [name, setName] = useState(user?.username ?? "");
   const [password, setPassword] = useState("");
-  const [role, setRole] = useState<Role>(user?.role_name ?? "Maker");
+  const [role, setRole] = useState<Role>(user?.role_name ?? "Write");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
 

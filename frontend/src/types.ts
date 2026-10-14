@@ -1,42 +1,12 @@
-export type Role = "Admin" | "Checker" | "Maker" | "Viewer";
-
-export type SequenceNode = {
-  id: string;
-  position: { x: number; y: number };
-  data: { label: string; actor: boolean };
-};
-
-export type SequenceEdge = {
-  id: string;
-  source: string;
-  target: string;
-  label: string;
-  data: { kind: "request" | "reply" };
-};
-
-export type SequenceFlow = { nodes: SequenceNode[]; edges: SequenceEdge[] };
-
-export type FlowchartShape = "rect" | "round" | "decision";
-
-export type FlowchartNode = {
-  id: string;
-  position: { x: number; y: number };
-  data: { label: string; shape: FlowchartShape };
-};
-
-export type FlowchartEdge = { id: string; source: string; target: string; label: string };
-
-export type Flowchart = { direction: "LR" | "TB"; nodes: FlowchartNode[]; edges: FlowchartEdge[] };
-
-/** What a diagram block stores next to its Mermaid text: a sequence flow, or a drawn flowchart. */
-export type DiagramFlow = SequenceFlow | Flowchart;
+export type Role = "Admin" | "Write" | "Read";
 
 export type Block =
   | { type: "header"; text: string; level: number }
   | { type: "image"; url: string; caption: string; alt: string }
   | { type: "prose"; markdown: string }
   | { type: "table"; columns: string[]; rows: string[][] }
-  | { type: "diagram"; sequence: boolean; mermaid: string; flow: DiagramFlow | null };
+  /** `sequence` only picks the starter text of a new diagram; any Mermaid can be written in the block. */
+  | { type: "diagram"; sequence: boolean; mermaid: string };
 
 export type MissingInfo = { field: string; message: string };
 
@@ -54,12 +24,8 @@ export type Sdd = {
   layout_id: string;
   name: string;
   content_json: { sections: Record<string, Section> };
-  status: "draft" | "pending_approval" | "approved";
   last_modified: string;
   generated_at: string | null;
-  submitted_by: string | null;
-  approved_by: string | null;
-  approved_at: string | null;
 };
 
 export type Template = {
@@ -84,7 +50,6 @@ export type Project = {
   owner_id: string;
   owner_name: string;
   owner_role: Role;
-  status: string;
   created_at: string;
   last_modified: string;
 };
@@ -173,8 +138,8 @@ export type Guideline = {
 
 export type Dashboard = {
   total_projects: number;
+  total_documents: number;
   documents_generated: number;
-  pending_approvals: number;
 };
 
 export type LlmProvider = {
@@ -227,4 +192,21 @@ export type ReindexStatus = {
   started_at: string | null;
   finished_at: string | null;
   message: string;
+};
+
+export type AuditEntry = {
+  audit_id: string;
+  occurred_at: string;
+  user_id: string | null;
+  username: string | null;
+  login_id: string | null;
+  role_name: string | null;
+  action: string;
+  method: string | null;
+  path: string | null;
+  entity_type: string | null;
+  entity_id: string | null;
+  summary: string;
+  detail: Record<string, unknown> | null;
+  ip_address: string | null;
 };

@@ -4,16 +4,33 @@ import { MemoryRouter } from "react-router-dom";
 import { SideNav } from "./SideNav";
 
 describe("SideNav", () => {
-  it("hides admin destinations from a viewer", () => {
+  it("hides admin destinations from a reader", () => {
     render(
       <MemoryRouter>
-        <SideNav role="Viewer" />
+        <SideNav role="Read" />
       </MemoryRouter>,
     );
     expect(screen.getByText("Dashboard")).toBeTruthy();
     expect(screen.getByText("Projects")).toBeTruthy();
     expect(screen.queryByText("Settings")).toBeNull();
     expect(screen.queryByText("Knowledge Base")).toBeNull();
+    expect(screen.queryByText("Audit Log")).toBeNull();
+  });
+
+  it("gives the Audit Log to an admin only", () => {
+    const { unmount } = render(
+      <MemoryRouter initialEntries={["/settings/audit"]}>
+        <SideNav role="Admin" />
+      </MemoryRouter>,
+    );
+    expect(screen.getByRole("link", { name: "Audit Log" }).getAttribute("class")).toContain("bg-cobalt");
+    unmount();
+    render(
+      <MemoryRouter>
+        <SideNav role="Write" />
+      </MemoryRouter>,
+    );
+    expect(screen.queryByRole("link", { name: "Audit Log" })).toBeNull();
   });
 
   it("shows knowledge base and settings groups to an admin", () => {

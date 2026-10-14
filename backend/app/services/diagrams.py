@@ -1,7 +1,7 @@
 """Draws a diagram block as a picture for the HTML and PDF exports.
 
-Mermaid needs a browser to draw, which an export does not have, so the diagram is drawn from the stored drawing
-(`flow`) instead, or from the Mermaid text when it is simple enough to read. The result is a `Scene`: a list of simple
+Mermaid needs a browser to draw, which an export does not have, so the diagram is drawn from the Mermaid text when
+it is simple enough to read (flowcharts and sequence diagrams of the common kind). The result is a `Scene`: a list of simple
 shapes that become an inline SVG for HTML (and WeasyPrint) or are drawn with FPDF when WeasyPrint is not available.
 Diagrams that cannot be read are left to the caller, which prints the Mermaid source.
 """
@@ -198,15 +198,12 @@ def sequence_scene(flow: dict) -> Scene | None:
 
 
 def scene_for_block(block: dict) -> Scene | None:
-    """A picture of a diagram block, or None when its content cannot be drawn."""
+    """A picture of a diagram block, or None when its Mermaid cannot be drawn here (the caller prints the source)."""
     mermaid = str(block.get("mermaid") or "")
-    flow = block.get("flow")
-    if block.get("sequence"):
-        if not (isinstance(flow, dict) and "direction" not in flow and flow.get("nodes")):
-            flow = mermaid_to_flow(mermaid)
+    if mermaid.lstrip().startswith("sequenceDiagram"):
+        flow = mermaid_to_flow(mermaid)
         return sequence_scene(flow) if flow else None
-    chart = normalize_flowchart(flow) if isinstance(flow, dict) and "direction" in flow else None
-    chart = chart or mermaid_to_flowchart(mermaid)
+    chart = mermaid_to_flowchart(mermaid)
     return flowchart_scene(chart) if chart else None
 
 

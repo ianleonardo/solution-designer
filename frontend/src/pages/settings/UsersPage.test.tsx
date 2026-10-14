@@ -5,7 +5,7 @@ import { UsersPage } from "./UsersPage";
 
 const base: User[] = [
   { user_id: "u1", username: "Admin", login_id: "admin", role_name: "Admin", created_at: "2026-10-13T12:00:00" },
-  { user_id: "u2", username: "Maya", login_id: "maya", role_name: "Maker", created_at: "2026-10-13T12:00:00" },
+  { user_id: "u2", username: "Maya", login_id: "maya", role_name: "Write", created_at: "2026-10-13T12:00:00" },
 ];
 
 function json(body: unknown) {
@@ -31,18 +31,18 @@ describe("UsersPage", () => {
   });
 
   it("opens a popup with Login ID, Name, Password and Role, then posts the new user", async () => {
-    const fetchMock = setup((_url, init) => (init?.method === "POST" ? json({ user_id: "u3", username: "Lee", login_id: "lee", role_name: "Viewer", created_at: "2026-10-13T12:00:00" }) : undefined));
+    const fetchMock = setup((_url, init) => (init?.method === "POST" ? json({ user_id: "u3", username: "Lee", login_id: "lee", role_name: "Read", created_at: "2026-10-13T12:00:00" }) : undefined));
     await waitFor(() => expect(screen.getByText("maya")).toBeTruthy());
     fireEvent.click(screen.getByRole("button", { name: "Add user" }));
     expect(screen.getByRole("dialog", { name: "Add user" })).toBeTruthy();
     fireEvent.change(screen.getByLabelText("Login ID"), { target: { value: "lee" } });
     fireEvent.change(screen.getByLabelText("Name"), { target: { value: "Lee" } });
     fireEvent.change(screen.getByLabelText("Password"), { target: { value: "Password123!" } });
-    fireEvent.change(screen.getByLabelText("Role"), { target: { value: "Viewer" } });
+    fireEvent.change(screen.getByLabelText("Role"), { target: { value: "Read" } });
     fireEvent.click(screen.getAllByRole("button", { name: "Add user" })[1]);
     await waitFor(() => expect(screen.getByText("Lee")).toBeTruthy());
     const post = fetchMock.mock.calls.find((call) => (call[1] as RequestInit | undefined)?.method === "POST");
-    expect(JSON.parse(String((post?.[1] as RequestInit).body))).toEqual({ login_id: "lee", username: "Lee", password: "Password123!", role_name: "Viewer" });
+    expect(JSON.parse(String((post?.[1] as RequestInit).body))).toEqual({ login_id: "lee", username: "Lee", password: "Password123!", role_name: "Read" });
   });
 
   it.each(["ian chen", "ian.chen", "ian@bank.com", "ian_1", "ab"])("rejects the Login ID %j without calling the API", async (value) => {
@@ -63,19 +63,19 @@ describe("UsersPage", () => {
   });
 
   it("edits only name and role; the Login ID is read-only", async () => {
-    const fetchMock = setup((_url, init) => (init?.method === "PATCH" ? json({ ...base[1], username: "Maya K", role_name: "Checker" }) : undefined));
+    const fetchMock = setup((_url, init) => (init?.method === "PATCH" ? json({ ...base[1], username: "Maya K", role_name: "Write" }) : undefined));
     await waitFor(() => expect(screen.getByText("maya")).toBeTruthy());
     fireEvent.click(screen.getByRole("button", { name: "Edit maya" }));
     const loginId = screen.getByLabelText("Login ID") as HTMLInputElement;
     expect(loginId.readOnly).toBe(true);
     expect(screen.queryByLabelText("Password")).toBeNull();
     fireEvent.change(screen.getByLabelText("Name"), { target: { value: "Maya K" } });
-    fireEvent.change(screen.getByLabelText("Role"), { target: { value: "Checker" } });
+    fireEvent.change(screen.getByLabelText("Role"), { target: { value: "Write" } });
     fireEvent.click(screen.getByRole("button", { name: "Save" }));
     await waitFor(() => expect(screen.getByText("Maya K")).toBeTruthy());
     const patch = fetchMock.mock.calls.find((call) => (call[1] as RequestInit | undefined)?.method === "PATCH");
     expect(patch?.[0]).toBe("/api/users/u2");
-    expect(JSON.parse(String((patch?.[1] as RequestInit).body))).toEqual({ username: "Maya K", role_name: "Checker" });
+    expect(JSON.parse(String((patch?.[1] as RequestInit).body))).toEqual({ username: "Maya K", role_name: "Write" });
   });
 
   it("confirms before deleting a user", async () => {
@@ -90,7 +90,7 @@ describe("UsersPage", () => {
   it("filters the list with search", async () => {
     setup();
     await waitFor(() => expect(screen.getByText("maya")).toBeTruthy());
-    fireEvent.change(screen.getByLabelText("Search users"), { target: { value: "maker" } });
+    fireEvent.change(screen.getByLabelText("Search users"), { target: { value: "write" } });
     expect(screen.getByText("maya")).toBeTruthy();
     expect(screen.queryByText("admin@x.local")).toBeNull();
   });

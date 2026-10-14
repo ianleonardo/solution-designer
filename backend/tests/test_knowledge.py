@@ -38,5 +38,5 @@ def test_unknown_inventory_type_is_rejected(client):
 
 
 def test_only_admin_can_upload_to_the_knowledge_base(client):
-    maker = login(client, "Maker")
-    assert _upload(client, maker, "Screens").status_code == 403
+    writer = login(client, "Write")
+    assert _upload(client, writer, "Screens").status_code == 403

@@ -31,7 +31,7 @@ test("read-only roles cannot upload or remove", () => {
   render(<ReferencesPanel projectId="p1" references={[reference]} canEdit={false} onChange={() => undefined} onClose={() => undefined} />);
   expect(screen.queryByLabelText("Upload reference")).toBeNull();
   expect(screen.queryByLabelText("Remove brd.md")).toBeNull();
-  expect(screen.getByText(/Only Makers and Checkers/)).toBeTruthy();
+  expect(screen.getByText(/Only Write users/)).toBeTruthy();
 });
 
 test("uploading posts to the references endpoint", async () => {

@@ -1,27 +1,27 @@
 # SolutionCrafter
 
-SolutionCrafter generates enterprise documents, such as **Solution Design Documents (SDDs)** and **Interface Specifications**, with an LLM. It works from each project's own reference documents (BRD, FSD, epic/story lists) and a shared architecture knowledge base. Generated documents can be edited section by section, routed through a Maker → Checker approval flow, and exported as Markdown, HTML or PDF.
+SolutionCrafter generates enterprise documents, such as **Solution Design Documents (SDDs)** and **Interface Specifications**, with an LLM. It works from each project's own reference documents (BRD, FSD, epic/story lists) and a shared architecture knowledge base. Generated documents can be edited section by section, and exported as Markdown, HTML or PDF.
 
 ---
 
 ## Features
 
 ### Projects, documents and generation
-- A project holds several documents, one per document layout: the **Solution Design Document** and the **Interface Specifications Document** are built in. Documents appear as tabs in the project workspace. Maker and Checker can add or remove them.
+- A project holds several documents, one per document layout: the **Solution Design Document** and the **Interface Specifications Document** are built in. Documents appear as tabs in the project workspace. Write users can add or remove them.
 - **A document keeps its own copy of the layout.** Its sections are copied from the layout when the document is created (older documents are copied once on upgrade). Changing, deleting or reordering sections in **Settings > Document Layouts** later does not touch documents that already exist; only documents created afterwards use the new layout. There is no re-sync from the layout.
-- **Editing a document's structure.** Maker and Checker can use **Edit structure** in the outline to rename, add, delete and reorder sections and sub-sections (two levels), indent or outdent a sub-section, and open a section's settings (name, blocks, hint, prompt, temperature, word limit). Content stays with the blocks that remain; a removed block type loses its content. Admin can still change a section's prompt, temperature and word limit, but nothing else.
-- **Project references.** Maker and Checker upload reference documents to a project (**PDF, Markdown, Excel**). Each file is split into chunks, embedded when an embedding model is configured, and searched only for that project. Admin and Viewer can see the list but not change it. Without an embedding model the chunks are searched by keyword only.
-- **Auto fill** (Maker and Checker). *Auto fill document* streams progress section by section and, by default, fills only the empty sections so your edits are kept; choose *Regenerate every section* to replace everything. *Auto fill* on a single section accepts an optional extra instruction that applies to that run only. A confirmation warns before content is replaced. A section counts as empty when it holds only blanks, the layout's starter table rows or the starter diagram.
+- **Editing a document's structure.** Write users can use **Edit structure** in the outline to rename, add, delete and reorder sections and sub-sections (two levels), indent or outdent a sub-section, and open a section's settings (name, blocks, hint, prompt, temperature, word limit). Content stays with the blocks that remain; a removed block type loses its content. Admin can still change a section's prompt, temperature and word limit, but nothing else.
+- **Project references.** Write users upload reference documents to a project (**PDF, Markdown, Excel**). Each file is split into chunks, embedded when an embedding model is configured, and searched only for that project. Admin and Read users can see the list but not change it. Without an embedding model the chunks are searched by keyword only.
+- **Auto fill** (Write). *Auto fill document* streams progress section by section and, by default, fills only the empty sections so your edits are kept; choose *Regenerate every section* to replace everything. *Auto fill* on a single section accepts an optional extra instruction that applies to that run only. A confirmation warns before content is replaced. A section counts as empty when it holds only blanks, the layout's starter table rows or the starter diagram.
 - Each section is built from the global system prompt, the section prompt, the most relevant project reference chunks and the most relevant knowledge-base entries (hybrid keyword + embedding retrieval).
 - **Missing information alerts** flag mandatory SDD content the references don't supply, such as NFR volumetrics and DB growth estimates.
-- Submitting, approving, exporting and generating all apply to the open document. A project shows `approved` only when all its documents are approved.
+- Exporting and generating apply to the open document. There is no approval workflow and documents have no status.
 
 ### Interactive editor (3-pane workspace)
 - **Left:** the document outline. It follows the document's own layout and shows missing-information warnings.
 - **Center:** section editors.
   - A WYSIWYG prose editor (TipTap) with headings, bold, italic, strike, lists, quotes, links, code and rules. It is stored as Markdown.
-  - Editable data grids for tables. Cells are rich text too (click a cell to format it), and rows can be added, moved and deleted.
-  - Flowcharts have a drag-and-drop editor (React Flow): add boxes (rectangle, rounded or decision), drag them, draw arrows between them, label boxes and arrows, and flip the direction. The Mermaid text stays available under *Edit Mermaid* and the two stay in sync. Mermaid that uses features the drawing cannot show (such as subgraphs or styles) is edited as text only, and you can start a new drawing from it. Sequence diagrams have a similar editor with a Request/Reply toggle per message. Both kinds have an **Edit Mermaid** box: edits to the script redraw the diagram, and a script the drawing cannot read (notes, loops, subgraphs, styles) stays as text. **HTML and PDF exports draw diagrams as pictures** from the stored drawing (or from the script when it is simple enough); only a diagram that cannot be read is printed as its Mermaid source. Markdown export keeps a `mermaid` code fence. Both kinds have an **Edit Mermaid** box: edits to the script redraw the diagram, and a script the drawing cannot read (notes, loops, subgraphs, styles) stays as text. **HTML and PDF exports draw diagrams as pictures** from the stored drawing (or from the script when it is simple enough); only a diagram that cannot be read is printed as its Mermaid source. Markdown export keeps a `mermaid` code fence.
+  - Editable data grids for tables. Cells are rich text too (click a cell to format it), and rows can be added and deleted, and moved by dragging the handle at the start of the row (or with the arrow keys while the handle has focus). A table whose first column is **SN** (also `S/N`, `No`, `#` or `Serial No`) numbers its rows automatically: the column is read-only and the numbers update when you add, delete or move a row.
+  - Diagrams are edited as **Mermaid** text. The editor has line numbers, a live preview that shows the error and its line when the syntax is wrong, a *Diagram template* picker (flowchart, sequence, class, state, ER, Gantt, pie) and a *Syntax help* panel. Any Mermaid diagram type is allowed in any diagram block. **HTML and PDF exports draw flowcharts and sequence diagrams as pictures** from the Mermaid text; other diagram types are printed as their Mermaid source. Markdown export keeps a `mermaid` code fence.
   - Header blocks (with a size picker), and image blocks you upload (PNG, JPEG, GIF or WEBP, up to 5 MB). The model never writes headers or images.
 - **Right (Admin):** tune a section's prompt, temperature and word limit.
 
@@ -29,12 +29,16 @@ SolutionCrafter generates enterprise documents, such as **Solution Design Docume
 
 | Role | Capabilities |
 |---|---|
-| **Admin** | Settings, users, document layouts, knowledge base. Admin does not create, edit or delete projects or documents and does not approve them; Admin only tunes a section's prompt, temperature and word limit. |
-| **Maker** | Create projects, upload project references, generate and edit documents, submit for approval |
-| **Checker** | Everything a Maker can do, plus approve submitted documents |
-| **Viewer** | Read-only access to the dashboard and documents |
+| **Admin** | Settings, users, document layouts, knowledge base. Admin does not create, edit or delete projects or documents; Admin only tunes a section's prompt, temperature and word limit. |
+| **Write** | Create, edit and delete projects and documents, upload project references, generate (auto fill) and edit content and structure |
+| **Read** | Read-only access to the dashboard, projects and documents |
 
-Status flow, per document: `draft → pending_approval → approved`. If a non-Admin edits a document's content or structure while it is pending or approved, it goes back to `draft`; a Maker or Checker submits it again and a Checker approves it, and the changes take effect for the approved version at that point. Prompt-only edits do not reset approval.
+Admin does not create, edit or delete projects or documents. There is no approval workflow: Write users edit documents directly and documents have no status.
+
+Existing databases are migrated on start: `Maker` and `Checker` users become `Write` and `Viewer` users become `Read`.
+
+### Audit log (Admin only)
+Every change by every user is recorded: who (user and role), when (UTC), what (action, project or other entity and a short summary) and from which IP address. This covers projects, documents, references, knowledge base, layouts, users, settings and exports, plus **sign-ins and failed sign-ins**. Requests that fail are not logged as changes. Passwords, API keys and tokens are never stored, and large content (document text, table rows, diagram blocks) is left out of the details. Admin opens **Settings > Audit Log** to filter by action and date range, search and expand an entry for its details. The API is `GET /api/audit` (Admin only).
 
 ### Knowledge base (RAG): Admin only
 - The **Knowledge Base** menu has one screen per type: **Systems, Capabilities, Interfaces, Table Definitions, Screens, Batches, Reports, Guidelines**. Capabilities, Table Definitions, Screens, Batches and Reports each have an upload, search, and a sortable table with 50 rows per page.
@@ -56,10 +60,10 @@ Status flow, per document: `draft → pending_approval → approved`. If a non-A
 - Changes take effect right away without a server restart, through an in-process cache that is cleared on update.
 
 ### Other
-- **Export:** Markdown, HTML, PDF. PDF uses WeasyPrint and falls back to fpdf2 if WeasyPrint isn't available.
+- **Export:** Markdown, HTML, PDF. PDF uses WeasyPrint and falls back to fpdf2 if WeasyPrint isn't available. PDF text is set at 75% of the size used in the HTML export.
 - **Chat with analyst:** opened from the round button at the bottom right. It answers IT solutioning and architecture questions. General questions are answered from the model's own knowledge. Questions about specific systems, interfaces, capabilities, tables and similar are answered from everything in the knowledge base: systems (with their upstream and downstream systems), interfaces, capabilities, table definitions, screens, batches, reports and guidelines. The model also gets a summary of what the knowledge base holds. The current project's documents and references are added when you chat inside a project. Messages first pass guardrails against prompt injection, unethical requests and off-topic questions.
 - **Global system prompt (Settings > LLM):** sets the shared role and grounding rules for both generation and chat. It no longer contains an output format. The app adds the JSON and grounding rules when generating sections, and plain-text rules for chat. A prompt you have edited is never overwritten. An unedited copy of the old default is upgraded on start-up.
-- **Dashboard:** total projects, documents generated and pending approvals.
+- **Dashboard:** total projects, total documents and documents generated.
 - **Projects list:** sortable columns, search and 30 projects per page.
 - **Themes:** dark by default. The theme button in the top bar (and on the login page) cycles **dark, light, jade green**, and the choice is remembered in the browser.
 
@@ -69,7 +73,7 @@ Status flow, per document: `draft → pending_approval → approved`. If a non-A
 
 | Layer | Stack |
 |---|---|
-| Frontend | React 18, TypeScript, Vite 6, Tailwind CSS 3, React Router 6, TipTap 2, Mermaid 11, @xyflow/react 12 |
+| Frontend | React 18, TypeScript, Vite 6, Tailwind CSS 3, React Router 6, TipTap 2, Mermaid 11 |
 | Frontend tests and lint | Vitest + Testing Library (jsdom), ESLint 9 |
 | Backend | Python 3.12, FastAPI, Uvicorn |
 | Database | DuckDB (a single file: `$DATA_DIR/solutioncrafter.duckdb`) |
@@ -94,7 +98,7 @@ backend/
     content.py, missing.py, flow.py
     seed_layouts.py      the seeded Interface Specifications layout
     crypto.py            Fernet encryption for stored API keys
-    routers/             auth, projects, sdd (document generate/export/approve), admin (settings, layouts, users), chat
+    routers/             auth, projects, sdd (document generate/export), admin (settings, layouts, users), chat
     services/            llm (facade) + llm_adapters (gemini, anthropic, spirare), llm_settings, generate,
                          retrieve, project_rag, documents, layouts, images, files, export, guardrails, gcs, projects
   tests/
@@ -139,7 +143,7 @@ The repository includes a ready-to-use `.env` in the project root. The backend r
 | `LLM_API_KEY` | Optional fallback key for the Spirare provider. A key saved in **Settings > LLM** takes precedence. |
 | `EMBEDDING_API_KEY` | Optional fallback embedding key for Spirare. Defaults to `LLM_API_KEY`. |
 | `GCS_BUCKET`, `GCS_DB_PATH` | Leave `GCS_BUCKET` empty for local development |
-| `SEED_*_LOGIN_ID` / `SEED_*_PASSWORD` | Login ID and password for the four users created on first start |
+| `SEED_*_LOGIN_ID` / `SEED_*_PASSWORD` | Login ID and password for the three users created on first start |
 
 Models, URLs and API keys are **not** required in the environment. An Admin sets them for each provider under **Settings > LLM** after logging in. Spirare starts with `gpt-4o-mini` at `https://api.openai.com/v1`.
 
@@ -172,11 +176,10 @@ Default seed accounts (unless you overrode them in `.env`):
 | Role | Login ID | Password |
 |---|---|---|
 | Admin | admin | AdminPass123! |
-| Checker | checker | CheckerPass123! |
-| Maker | maker | MakerPass123! |
-| Viewer | viewer | ViewerPass123! |
+| Write | writer | WritePass123! |
+| Read | reader | ReadPass123! |
 
-Login IDs are plain IDs, not emails: 3-64 letters or numbers, no spaces or special characters, and unique regardless of case (`Maya` and `maya` are the same ID). Sign-in is also case-insensitive. Databases seeded earlier with `admin@solutioncrafter.local`-style IDs are renamed to `admin`, `checker`, `maker` and `viewer` on the next start. Users are seeded only on an empty database. Change these passwords in any shared environment.
+Login IDs are plain IDs, not emails: 3-64 letters or numbers, no spaces or special characters, and unique regardless of case (`Maya` and `maya` are the same ID). Sign-in is also case-insensitive. Databases seeded earlier with `admin@solutioncrafter.local`-style IDs are renamed to plain IDs on the next start. Users are seeded only on an empty database, so an existing database keeps its users (their old roles are migrated to Write or Read). Change these passwords in any shared environment.
 
 ### Alternative: Docker Compose
 

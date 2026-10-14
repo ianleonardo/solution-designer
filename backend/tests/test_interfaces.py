@@ -90,7 +90,7 @@ def test_system_used_by_an_interface_cannot_be_deleted(client):
 def test_only_admin_can_use_interfaces(client):
     admin = login(client, "Admin")
     _systems(client, admin)
-    for role in ("Maker", "Checker", "Viewer"):
+    for role in ("Write", "Read"):
         token = login(client, role)
         assert client.get("/api/interfaces/SPL", headers=auth(token)).status_code == 403
         assert _upload(client, token, "SPL", _excel([["SG", "x", "", "API", "SPL", "DGE"]])).status_code == 403

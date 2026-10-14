@@ -30,6 +30,7 @@ export function navItems(role: string): NavEntry[] {
         { to: "/settings/llm", label: "LLM" },
         { to: "/settings/layouts", label: "Document Layouts" },
         { to: "/settings/users", label: "Users" },
+        { to: "/settings/audit", label: "Audit Log" },
       ],
     });
   }

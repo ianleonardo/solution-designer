@@ -63,7 +63,7 @@ def test_system_cannot_be_deleted_while_another_system_lists_it(client):
 def test_only_admin_can_use_systems(client):
     admin = login(client, "Admin")
     _create(client, admin, "SPL")
-    for role in ("Maker", "Checker", "Viewer"):
+    for role in ("Write", "Read"):
         token = auth(login(client, role))
         assert client.get("/api/systems", headers=token).status_code == 403
         assert client.post("/api/systems", json={"system_code": "X", "system_name": "x"}, headers=token).status_code == 403

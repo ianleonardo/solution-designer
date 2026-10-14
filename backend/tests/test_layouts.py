@@ -12,14 +12,14 @@ def _create(client, name="Runbook", **extra):
 
 
 def test_builtin_layouts_are_seeded(client):
-    maker = auth(login(client, "Maker"))
-    layouts = client.get("/api/layouts", headers=maker).json()
+    writer = auth(login(client, "Write"))
+    layouts = client.get("/api/layouts", headers=writer).json()
     by_id = {item["layout_id"]: item for item in layouts}
     assert by_id["sdd"]["name"] == "Solution Design Document"
     assert by_id["interface-spec"]["name"] == "Interface Specifications Document"
     assert by_id["interface-spec"]["section_count"] >= 15
     assert all(item["is_system"] for item in by_id.values())
-    assert client.get("/api/layouts/interface-spec", headers=maker).status_code == 403
+    assert client.get("/api/layouts/interface-spec", headers=writer).status_code == 403
     detail = client.get("/api/layouts/interface-spec", headers=_admin(client)).json()
     purpose = next(item for item in detail["templates"] if item["section_name"] == "Purpose")
     assert purpose["parent_id"] == "interface-spec--introduction"
@@ -42,11 +42,11 @@ def test_create_update_delete_layout(client):
 
 
 def test_only_admin_edits_layouts(client):
-    maker = auth(login(client, "Maker"))
-    assert client.post("/api/layouts", json={"name": "Nope"}, headers=maker).status_code == 403
-    assert client.post("/api/layouts/sdd/templates", json={"section_name": "x"}, headers=maker).status_code == 403
-    assert client.put("/api/layouts/sdd/order", json={"sections": []}, headers=maker).status_code == 403
-    assert client.delete("/api/templates/key-non-functional-requirements", headers=maker).status_code == 403
+    writer = auth(login(client, "Write"))
+    assert client.post("/api/layouts", json={"name": "Nope"}, headers=writer).status_code == 403
+    assert client.post("/api/layouts/sdd/templates", json={"section_name": "x"}, headers=writer).status_code == 403
+    assert client.put("/api/layouts/sdd/order", json={"sections": []}, headers=writer).status_code == 403
+    assert client.delete("/api/templates/key-non-functional-requirements", headers=writer).status_code == 403
 
 
 def test_copy_layout_clones_sections_with_new_ids(client):

@@ -32,12 +32,12 @@ export function LoginPage() {
       <button type="button" className="btn absolute top-4 right-4" aria-label="Toggle theme" title={`Switch to ${THEME_LABELS[next]}`} onClick={toggle}>
         <span className="material-symbols-outlined">{themeIcon(next)}</span>
       </button>
-      <form onSubmit={(event) => void onSubmit(event)} className="w-full max-w-md bg-panel border border-hairline rounded-lg shadow-glaze p-8">
+      <form onSubmit={(event) => void onSubmit(event)} className="w-full max-w-lg bg-panel border border-hairline rounded-lg shadow-glaze p-8">
         <div className="flex items-center gap-3 mb-6">
           <span className="h-10 w-10 rounded bg-cobalt text-on-cobalt flex items-center justify-center">
             <span className="material-symbols-outlined">hub</span>
           </span>
-          <h1 className="font-headline text-2xl font-semibold leading-none">SolutionCrafter</h1>
+          <h1 className="font-headline text-[40px] font-semibold leading-10 whitespace-nowrap" data-testid="wordmark">SolutionCrafter</h1>
         </div>
         <label className="block mb-3">
           <span className="font-label text-[10px] uppercase text-muted">Login ID</span>

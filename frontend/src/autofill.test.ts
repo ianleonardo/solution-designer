@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { sectionIsEmpty } from "./autofill";
-import { defaultFlow, defaultFlowchart, flowToMermaid, flowchartToMermaid } from "./flow";
+import { STARTER_FLOWCHART, STARTER_SEQUENCE } from "./mermaidTemplates";
 import type { Section, Template } from "./types";
 
 const section = (blocks: Section["blocks"]): Section => ({ template_id: "s", title: "S", blocks, missing: [] });
@@ -39,10 +39,10 @@ describe("sectionIsEmpty", () => {
   });
 
   it("ignores the starter diagrams but sees real ones", () => {
-    const chart = defaultFlowchart();
-    expect(sectionIsEmpty(section([{ type: "diagram", sequence: false, mermaid: flowchartToMermaid(chart), flow: chart }]))).toBe(true);
-    const sequence = defaultFlow();
-    expect(sectionIsEmpty(section([{ type: "diagram", sequence: true, mermaid: flowToMermaid(sequence), flow: sequence }]))).toBe(true);
-    expect(sectionIsEmpty(section([{ type: "diagram", sequence: false, mermaid: "flowchart LR\n  A[Mine] --> B[Yours]", flow: null }]))).toBe(false);
+    expect(sectionIsEmpty(section([{ type: "diagram", sequence: false, mermaid: STARTER_FLOWCHART }]))).toBe(true);
+    expect(sectionIsEmpty(section([{ type: "diagram", sequence: true, mermaid: STARTER_SEQUENCE }]))).toBe(true);
+    expect(sectionIsEmpty(section([{ type: "diagram", sequence: false, mermaid: `${STARTER_FLOWCHART}\n` }]))).toBe(true);
+    expect(sectionIsEmpty(section([{ type: "diagram", sequence: false, mermaid: "flowchart LR\n  A[Mine] --> B[Yours]" }]))).toBe(false);
+    expect(sectionIsEmpty(section([{ type: "diagram", sequence: false, mermaid: "erDiagram\n  A ||--o{ B : has" }]))).toBe(false);
   });
 });

@@ -46,36 +46,26 @@ DEFAULT_USERS = [
         "role": "Admin",
     },
     {
-        "user_id": "user-checker",
-        "username": "Checker",
-        "login_id_env": "SEED_CHECKER_LOGIN_ID",
-        "login_id": "checker",
-        "password_env": "SEED_CHECKER_PASSWORD",
-        "password": "CheckerPass123!",
-        "role": "Checker",
+        "user_id": "user-write",
+        "username": "Writer",
+        "login_id_env": "SEED_WRITE_LOGIN_ID",
+        "login_id": "writer",
+        "password_env": "SEED_WRITE_PASSWORD",
+        "password": "WritePass123!",
+        "role": "Write",
     },
     {
-        "user_id": "user-maker",
-        "username": "Maker",
-        "login_id_env": "SEED_MAKER_LOGIN_ID",
-        "login_id": "maker",
-        "password_env": "SEED_MAKER_PASSWORD",
-        "password": "MakerPass123!",
-        "role": "Maker",
-    },
-    {
-        "user_id": "user-viewer",
-        "username": "Viewer",
-        "login_id_env": "SEED_VIEWER_LOGIN_ID",
-        "login_id": "viewer",
-        "password_env": "SEED_VIEWER_PASSWORD",
-        "password": "ViewerPass123!",
-        "role": "Viewer",
+        "user_id": "user-read",
+        "username": "Reader",
+        "login_id_env": "SEED_READ_LOGIN_ID",
+        "login_id": "reader",
+        "password_env": "SEED_READ_PASSWORD",
+        "password": "ReadPass123!",
+        "role": "Read",
     },
 ]
 
-WRITERS = {"Admin", "Checker", "Maker"}
-CONTENT_AUTHORS = {"Checker", "Maker"}
+CONTENT_AUTHORS = {"Write"}
 GLOBAL_PROMPT = (
     "You are a senior enterprise solution architect covering IT system solutioning and architecture: "
     "integration and interfaces, data and databases, security, resiliency, deployment, performance and "

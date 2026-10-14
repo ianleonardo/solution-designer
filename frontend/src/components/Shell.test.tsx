@@ -5,7 +5,7 @@ import { Shell } from "./Shell";
 import { ThemeProvider } from "../theme";
 
 vi.mock("../auth", () => ({
-  useAuth: () => ({ user: { login_id: "maker", role_name: "Maker" }, logout: () => undefined }),
+  useAuth: () => ({ user: { login_id: "writer", role_name: "Write" }, logout: () => undefined }),
 }));
 
 beforeEach(() => vi.stubGlobal("localStorage", { getItem: () => null, setItem: () => undefined }));
@@ -34,4 +34,13 @@ test("the top bar has no chat icon; chat opens from the floating button", () => 
   expect(screen.getByRole("button", { name: "Toggle theme" })).toBeTruthy();
   fireEvent.click(screen.getByRole("button", { name: "Open chat" }));
   expect(screen.getByText("Chat with analyst")).toBeTruthy();
+});
+
+test("the SolutionCrafter name is as tall as the logo icon", () => {
+  renderShell();
+  const name = screen.getByTestId("wordmark");
+  const icon = name.previousElementSibling as HTMLElement;
+  expect(icon.className).toContain("h-8");
+  expect(name.className).toContain("leading-8");
+  expect(name.className).toContain("sm:text-[32px]");
 });

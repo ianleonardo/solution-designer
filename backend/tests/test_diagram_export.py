@@ -44,21 +44,14 @@ def test_diagrams_the_app_cannot_draw_keep_their_source():
     assert "subgraph s" in page and "Note over" in page
 
 
-def test_a_drawn_flowchart_is_used_over_the_text():
-    drawn = {
-        "direction": "TB",
-        "nodes": [
-            {"id": "a", "position": {"x": 0, "y": 0}, "data": {"label": "Drawn one", "shape": "rect"}},
-            {"id": "b", "position": {"x": 0, "y": 120}, "data": {"label": "Drawn two", "shape": "round"}},
-        ],
-        "edges": [{"id": "e1", "source": "a", "target": "b", "label": ""}],
-    }
-    block = {"type": "diagram", "sequence": False, "mermaid": "stale", "flow": drawn}
+def test_the_scene_is_drawn_from_the_mermaid_text_whatever_else_the_block_holds():
+    block = {"type": "diagram", "sequence": True, "mermaid": "flowchart TB\n  a[Drawn one] --> b(Drawn two)", "flow": {"stale": True}}
     scene = diagrams.scene_for_block(block)
     assert scene is not None
     texts = [item["text"] for item in scene.items if item["kind"] == "text"]
     assert texts == ["Drawn one", "Drawn two"]
     assert scene.height > scene.width * 0.5 and scene.width > 0
+    assert diagrams.scene_for_block({"type": "diagram", "mermaid": "erDiagram\n  A ||--o{ B : has"}) is None
 
 
 def test_scene_stays_inside_its_canvas():
@@ -77,21 +70,21 @@ def test_markdown_export_keeps_the_mermaid_fence():
 
 
 def test_pdf_export_draws_the_diagrams(client):
-    maker = login(client, "Maker")
-    project_id = client.post("/api/projects", json={"project_name": "Diagrams"}, headers=auth(maker)).json()["project_id"]
-    listing = client.get(f"/api/projects/{project_id}/documents", headers=auth(maker)).json()[0]
+    writer = login(client, "Write")
+    project_id = client.post("/api/projects", json={"project_name": "Diagrams"}, headers=auth(writer)).json()["project_id"]
+    listing = client.get(f"/api/projects/{project_id}/documents", headers=auth(writer)).json()[0]
     base = f"/api/projects/{project_id}/documents/{listing['document_id']}"
-    document = client.get(base, headers=auth(maker)).json()
+    document = client.get(base, headers=auth(writer)).json()
     sections = document["content_json"]["sections"]
     key = next(k for k, s in sections.items() if any(b["type"] == "diagram" and not b["sequence"] for b in s["blocks"]))
     block = next(b for b in sections[key]["blocks"] if b["type"] == "diagram")
     block.update({"mermaid": FLOWCHART, "flow": None})
-    assert client.put(base, json={"content_json": {"sections": sections}}, headers=auth(maker)).status_code == 200
-    html_page = client.get(f"{base}/export?format=html", headers=auth(maker))
+    assert client.put(base, json={"content_json": {"sections": sections}}, headers=auth(writer)).status_code == 200
+    html_page = client.get(f"{base}/export?format=html", headers=auth(writer))
     assert html_page.status_code == 200 and "<svg" in html_page.text and "flowchart LR" not in html_page.text
-    pdf = client.get(f"{base}/export?format=pdf", headers=auth(maker))
+    pdf = client.get(f"{base}/export?format=pdf", headers=auth(writer))
     assert pdf.status_code == 200 and pdf.content.startswith(b"%PDF")
-    plain = client.get(f"{base}/export?format=md", headers=auth(maker)).text
+    plain = client.get(f"{base}/export?format=md", headers=auth(writer)).text
     assert "```mermaid" in plain
 
 

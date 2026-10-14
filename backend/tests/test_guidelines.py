@@ -133,7 +133,7 @@ def test_delete_removes_chunks_and_file(client):
 
 
 def test_only_admin_can_manage_guidelines(client):
-    for role in ("Maker", "Checker", "Viewer"):
+    for role in ("Write", "Read"):
         token = login(client, role)
         assert client.get("/api/guidelines", headers=auth(token)).status_code == 403
         assert _add(client, token).status_code == 403
@@ -213,7 +213,7 @@ def test_pdf_download_keeps_the_original_bytes(client):
 def test_download_is_admin_only_and_missing_for_converted_entries(client):
     admin = login(client, "Admin")
     _add(client, admin)
-    for role in ("Maker", "Checker", "Viewer"):
+    for role in ("Write", "Read"):
         assert client.get("/api/guidelines/GL-0001/download", headers=auth(login(client, role))).status_code == 403
     db.exec_sql("UPDATE guidelines SET storage_path = '' WHERE guideline_id = 'GL-0001'")
     listed = client.get("/api/guidelines", headers=auth(admin)).json()

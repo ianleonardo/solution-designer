@@ -89,18 +89,6 @@ def validate_document(project_id: str, document_id: str | None = None, user: dic
     return documents.validate(user, project_id, document_id)
 
 
-@router.post(f"{DOC}/submit")
-@router.post(f"{LEGACY}/submit")
-def submit_document(project_id: str, document_id: str | None = None, user: dict = Depends(current_user)):
-    return documents.submit(user, project_id, document_id)
-
-
-@router.post(f"{DOC}/approve")
-@router.post(f"{LEGACY}/approve")
-def approve_document(project_id: str, document_id: str | None = None, user: dict = Depends(current_user)):
-    return documents.approve(user, project_id, document_id)
-
-
 @router.get(f"{DOC}/export")
 @router.get(f"{LEGACY}/export")
 def export_document(project_id: str, document_id: str | None = None, format: str = "md", user: dict = Depends(current_user)):
@@ -147,13 +135,12 @@ def _generate_into(row: dict, templates: list[dict], user: dict, instruction: st
     content = documents.payload(row)["content_json"]
     settings = cache.get_settings()
     baselines = _baselines(row["project_id"])
-    status = documents.status_after_generation(row, user)
     for template in templates:
         existing = content["sections"].get(template["template_id"])
         section = generate_section(template, baselines, settings, row["project_id"], existing, instruction)
         content["sections"][template["template_id"]] = section
         evaluate_missing(content)
-        documents.save_generated(row, content, status)
+        documents.save_generated(row, content)
     gcs.upload_db()
     return documents.payload(documents.document_row(row["project_id"], row["document_id"]))
 
@@ -176,7 +163,6 @@ def generate_document(
         content = documents.payload(row)["content_json"]
         settings = cache.get_settings()
         baselines = _baselines(project_id)
-        status = documents.status_after_generation(row, user)
         try:
             for template in templates:
                 if only_empty and not section_is_empty(content["sections"].get(template["template_id"]), template):
@@ -193,7 +179,7 @@ def generate_document(
                 section = generate_section(template, baselines, settings, project_id, existing)
                 content["sections"][template["template_id"]] = section
                 evaluate_missing(content)
-                documents.save_generated(row, content, status)
+                documents.save_generated(row, content)
                 yield _sse(
                     {
                         "event": "section_done",

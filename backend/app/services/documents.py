@@ -5,7 +5,7 @@ import uuid
 from datetime import datetime, timezone
 
 from app import db
-from app.config import CONTENT_AUTHORS, WRITERS
+from app.config import CONTENT_AUTHORS
 from app.content import blank_content, sanitize_content
 from app.errors import AppError
 from app.missing import evaluate_missing
@@ -19,6 +19,9 @@ _SELECT = """
 
 def _now() -> datetime:
     return datetime.now(timezone.utc)
+
+
+ROLES = {"Admin", "Write", "Read"}
 
 
 def _ensure(user: dict, roles: set[str]) -> None:
@@ -82,12 +85,8 @@ def payload(row: dict, with_templates: bool = False) -> dict:
         "layout_id": row["layout_id"],
         "name": row["name"],
         "content_json": sanitize_content(content, templates),
-        "status": row["status"],
         "last_modified": row["last_modified"],
         "generated_at": row["generated_at"],
-        "submitted_by": row["submitted_by"],
-        "approved_by": row["approved_by"],
-        "approved_at": row["approved_at"],
     }
     if with_templates:
         result["templates"] = [public_section(item) for item in templates]
@@ -103,18 +102,9 @@ def list_documents(project_id: str, with_templates: bool = False) -> list[dict]:
     return [payload(row, with_templates) for row in rows]
 
 
-def refresh_project_status(project_id: str) -> str:
-    """The project shows the least advanced state of its documents."""
-    rows = db.fetchall("SELECT status FROM project_documents WHERE project_id = ?", [project_id])
-    statuses = {row["status"] for row in rows}
-    if "pending_approval" in statuses:
-        status = "pending_approval"
-    elif statuses and statuses == {"approved"}:
-        status = "approved"
-    else:
-        status = "draft"
-    db.exec_sql("UPDATE projects SET status = ?, last_modified = ? WHERE project_id = ?", [status, _now(), project_id])
-    return status
+def touch_project(project_id: str) -> None:
+    """Record that something in the project changed."""
+    db.exec_sql("UPDATE projects SET last_modified = ? WHERE project_id = ?", [_now(), project_id])
 
 
 def create_blank(project_id: str, layout_id: str, now: datetime | None = None) -> str:
@@ -145,7 +135,7 @@ def create_document(user: dict, project_id: str, layout_id: str) -> dict:
     ):
         raise AppError(400, "This project already has that document")
     document_id = create_blank(project_id, layout_id)
-    refresh_project_status(project_id)
+    touch_project(project_id)
     gcs.upload_db()
     return payload(document_row(project_id, document_id), with_templates=True)
 
@@ -157,7 +147,7 @@ def delete_document(user: dict, project_id: str, document_id: str) -> None:
     if count and count["c"] <= 1:
         raise AppError(400, "A project needs at least one document")
     db.exec_sql("DELETE FROM project_documents WHERE document_id = ?", [document_id])
-    refresh_project_status(project_id)
+    touch_project(project_id)
     gcs.upload_db()
 
 
@@ -165,24 +155,11 @@ def save(user: dict, project_id: str, document_id: str | None, content: dict) ->
     _ensure(user, CONTENT_AUTHORS)
     current = document_row(project_id, document_id)
     sanitized = sanitize_content(content, document_templates(current))
-    status = current["status"]
-    submitted_by = current["submitted_by"]
-    approved_by = current["approved_by"]
-    approved_at = current["approved_at"]
-    if user["role_name"] != "Admin" and status in {"approved", "pending_approval"}:
-        status = "draft"
-        submitted_by = None
-        approved_by = None
-        approved_at = None
     db.exec_sql(
-        """
-        UPDATE project_documents
-        SET content_json = ?, status = ?, last_modified = ?, submitted_by = ?, approved_by = ?, approved_at = ?
-        WHERE document_id = ?
-        """,
-        [json.dumps(sanitized), status, _now(), submitted_by, approved_by, approved_at, current["document_id"]],
+        "UPDATE project_documents SET content_json = ?, last_modified = ? WHERE document_id = ?",
+        [json.dumps(sanitized), _now(), current["document_id"]],
     )
-    refresh_project_status(project_id)
+    touch_project(project_id)
     gcs.upload_db()
     return payload(document_row(project_id, current["document_id"]))
 
@@ -210,35 +187,15 @@ def _renumber(templates: list[dict]) -> list[dict]:
     return result
 
 
-def _store_structure(
-    user: dict, current: dict, templates: list[dict], content_changed: bool = True
-) -> dict:
-    """Save a new structure with the content re-fitted to it. Content authors' edits send the document back to draft."""
+def _store_structure(current: dict, templates: list[dict]) -> dict:
+    """Save a new structure with the content re-fitted to it."""
     ordered = _renumber(templates)
     content = sanitize_content(json.loads(current["content_json"]), ordered)
-    status = current["status"]
-    submitted_by, approved_by, approved_at = current["submitted_by"], current["approved_by"], current["approved_at"]
-    if content_changed and user["role_name"] != "Admin" and status in {"approved", "pending_approval"}:
-        status, submitted_by, approved_by, approved_at = "draft", None, None, None
     db.exec_sql(
-        """
-        UPDATE project_documents
-        SET structure_json = ?, content_json = ?, status = ?, last_modified = ?,
-            submitted_by = ?, approved_by = ?, approved_at = ?
-        WHERE document_id = ?
-        """,
-        [
-            json.dumps(ordered),
-            json.dumps(content),
-            status,
-            _now(),
-            submitted_by,
-            approved_by,
-            approved_at,
-            current["document_id"],
-        ],
+        "UPDATE project_documents SET structure_json = ?, content_json = ?, last_modified = ? WHERE document_id = ?",
+        [json.dumps(ordered), json.dumps(content), _now(), current["document_id"]],
     )
-    refresh_project_status(current["project_id"])
+    touch_project(current["project_id"])
     gcs.upload_db()
     return payload(document_row(current["project_id"], current["document_id"]), with_templates=True)
 
@@ -288,7 +245,7 @@ def add_section(user: dict, project_id: str, document_id: str, body: dict) -> di
         "schema_json": {"blocks": blocks},
         "hint": hint,
     }
-    return _store_structure(user, current, [*templates, section])
+    return _store_structure(current, [*templates, section])
 
 
 def update_section(user: dict, project_id: str, document_id: str, section_id: str, body: dict) -> dict:
@@ -311,7 +268,7 @@ def update_section(user: dict, project_id: str, document_id: str, section_id: st
         values["schema_json"] = {"blocks": blocks}
         values["content_kind"] = db.kind_from_blocks(blocks)
     updated = [{**item, **values} if item["template_id"] == section["template_id"] else item for item in templates]
-    return _store_structure(user, current, updated, content_changed=bool(wanted & STRUCTURE_FIELDS))
+    return _store_structure(current, updated)
 
 
 def delete_section(user: dict, project_id: str, document_id: str, section_id: str) -> dict:
@@ -322,7 +279,7 @@ def delete_section(user: dict, project_id: str, document_id: str, section_id: st
     remaining = [item for item in templates if item["template_id"] != section_id and item["parent_id"] != section_id]
     if not remaining:
         raise AppError(400, "A document needs at least one section")
-    return _store_structure(user, current, remaining)
+    return _store_structure(current, remaining)
 
 
 def reorder_sections(user: dict, project_id: str, document_id: str, sections: list) -> dict:
@@ -334,11 +291,11 @@ def reorder_sections(user: dict, project_id: str, document_id: str, sections: li
     plan = layouts.plan_order(sections, {item["template_id"] for item in templates})
     by_id = {item["template_id"]: item for item in templates}
     moved = [{**by_id[identifier], "parent_id": parent_id, "sequence_order": sequence} for identifier, parent_id, sequence in plan]
-    return _store_structure(user, current, moved)
+    return _store_structure(current, moved)
 
 
 def validate(user: dict, project_id: str, document_id: str | None) -> dict:
-    if user["role_name"] not in WRITERS | {"Viewer"}:
+    if user["role_name"] not in ROLES:
         raise AppError(403, "Forbidden")
     row = document_row(project_id, document_id)
     content = evaluate_missing(sanitize_content(json.loads(row["content_json"]), document_templates(row)))
@@ -352,55 +309,10 @@ def validate(user: dict, project_id: str, document_id: str | None) -> dict:
     return result
 
 
-def submit(user: dict, project_id: str, document_id: str | None) -> dict:
-    _ensure(user, {"Maker", "Checker"})
-    current = document_row(project_id, document_id)
-    if current["status"] != "draft":
-        raise AppError(400, "Only a draft can be submitted")
-    db.exec_sql(
-        """
-        UPDATE project_documents
-        SET status = 'pending_approval', submitted_by = ?, last_modified = ?
-        WHERE document_id = ?
-        """,
-        [user["user_id"], _now(), current["document_id"]],
-    )
-    refresh_project_status(project_id)
-    gcs.upload_db()
-    return payload(document_row(project_id, current["document_id"]))
-
-
-def approve(user: dict, project_id: str, document_id: str | None) -> dict:
-    _ensure(user, {"Checker"})
-    current = document_row(project_id, document_id)
-    if current["status"] != "pending_approval":
-        raise AppError(400, "Checker approval requires a submitted document")
+def save_generated(row: dict, content: dict) -> None:
     now = _now()
     db.exec_sql(
-        """
-        UPDATE project_documents
-        SET status = 'approved', approved_by = ?, approved_at = ?, last_modified = ?
-        WHERE document_id = ?
-        """,
-        [user["user_id"], now, now, current["document_id"]],
+        "UPDATE project_documents SET content_json = ?, last_modified = ?, generated_at = ? WHERE document_id = ?",
+        [json.dumps(content), now, now, row["document_id"]],
     )
-    refresh_project_status(project_id)
-    gcs.upload_db()
-    return payload(document_row(project_id, current["document_id"]))
-
-
-def status_after_generation(row: dict, user: dict) -> str:
-    return row["status"] if user["role_name"] == "Admin" else "draft"
-
-
-def save_generated(row: dict, content: dict, status: str) -> None:
-    now = _now()
-    db.exec_sql(
-        """
-        UPDATE project_documents
-        SET content_json = ?, last_modified = ?, generated_at = ?, status = ?
-        WHERE document_id = ?
-        """,
-        [json.dumps(content), now, now, status, row["document_id"]],
-    )
-    refresh_project_status(row["project_id"])
+    touch_project(row["project_id"])

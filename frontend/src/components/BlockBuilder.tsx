@@ -104,7 +104,7 @@ export function BlockBuilder({ blocks, onChange }: { blocks: BlockSpec[]; onChan
           {block.type === "diagram" && (
             <label className="flex items-center gap-2 text-sm">
               <input type="checkbox" aria-label={`Block ${index + 1} sequence diagram`} checked={block.sequence} onChange={(event) => update(index, { ...block, sequence: event.target.checked })} />
-              Sequence diagram (otherwise a flowchart)
+              Starts as a sequence diagram (otherwise a flowchart)
             </label>
           )}
         </div>

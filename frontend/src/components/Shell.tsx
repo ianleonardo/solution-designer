@@ -24,7 +24,9 @@ export function Shell() {
             <span className="h-8 w-8 rounded bg-cobalt text-on-cobalt flex items-center justify-center">
               <span className="material-symbols-outlined">hub</span>
             </span>
-            <span className="font-headline font-semibold leading-none">SolutionCrafter</span>
+            <span className="font-headline text-xl font-semibold leading-8 whitespace-nowrap sm:text-[32px]" data-testid="wordmark">
+              SolutionCrafter
+            </span>
           </Link>
         </div>
         <div className="flex items-center gap-2">

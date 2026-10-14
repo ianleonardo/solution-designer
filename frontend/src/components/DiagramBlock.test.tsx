@@ -1,59 +1,50 @@
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { afterEach, expect, test, vi } from "vitest";
-import { DiagramBlock } from "./DiagramBlock";
-import { mermaidToFlow, mermaidToFlowchart } from "../flow";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { afterEach, beforeEach, expect, test, vi } from "vitest";
+import mermaid from "mermaid";
+import { DiagramBlock, errorLine, PREVIEW_DELAY_MS } from "./DiagramBlock";
+import { MERMAID_TEMPLATES, STARTER_FLOWCHART, STARTER_SEQUENCE } from "../mermaidTemplates";
 
-vi.mock("mermaid", () => ({ default: { initialize: vi.fn(), render: vi.fn(async () => ({ svg: '<svg viewBox="0 0 800 400" width="100%" style="max-width: 800px;"></svg>' })) } }));
-vi.mock("./SequenceEditor", () => ({
-  SequenceEditor: ({ flow }: { flow: { nodes: unknown[] } }) => <p>sequence drawing with {flow.nodes.length} participants</p>,
-}));
-vi.mock("./FlowchartEditor", () => ({
-  FlowchartEditor: ({ flow, onChange }: { flow: { nodes: unknown[] }; onChange: (flow: unknown) => void }) => (
-    <button onClick={() => onChange({ ...flow, direction: "TB" })}>drawing with {flow.nodes.length} boxes</button>
-  ),
+vi.mock("mermaid", () => ({
+  default: {
+    initialize: vi.fn(),
+    parse: vi.fn(async () => ({ diagramType: "flowchart" })),
+    render: vi.fn(async () => ({ svg: '<svg viewBox="0 0 800 400" width="100%" style="max-width: 800px;"></svg>' })),
+  },
 }));
 
+const parse = mermaid.parse as unknown as ReturnType<typeof vi.fn>;
+const render_ = mermaid.render as unknown as ReturnType<typeof vi.fn>;
+
+beforeEach(() => {
+  parse.mockClear();
+  render_.mockClear();
+});
 afterEach(cleanup);
 
 const text = "flowchart LR\n  A[One] --> B[Two]";
-const base = { type: "diagram" as const, sequence: false, mermaid: text, flow: mermaidToFlowchart(text) };
+const base = { type: "diagram" as const, sequence: false, mermaid: text };
 
-test("shows the drawing editor and rewrites the Mermaid text when it changes", () => {
+test("the Mermaid text is edited in a text area and reported as it changes", () => {
   const onChange = vi.fn();
   render(<DiagramBlock block={base} readOnly={false} onChange={onChange} />);
-  fireEvent.click(screen.getByText("drawing with 2 boxes"));
-  expect(onChange.mock.calls[0][0].mermaid).toContain("flowchart TB");
-  expect(screen.queryByLabelText("Mermaid source")).toBeNull();
+  const textarea = screen.getByLabelText("Mermaid source") as HTMLTextAreaElement;
+  expect(textarea.value).toBe(text);
+  fireEvent.change(textarea, { target: { value: `${text}\n  B --> C[Three]` } });
+  expect(onChange).toHaveBeenCalledWith({ type: "diagram", sequence: false, mermaid: `${text}\n  B --> C[Three]` });
 });
 
-test("editing the Mermaid text re-reads the drawing and keeps dragged positions", () => {
-  const onChange = vi.fn();
-  const dragged = { ...base.flow!, nodes: base.flow!.nodes.map((node) => ({ ...node, position: { x: 7, y: 9 } })) };
-  render(<DiagramBlock block={{ ...base, flow: dragged }} readOnly={false} onChange={onChange} />);
-  fireEvent.click(screen.getByRole("button", { name: "Edit Mermaid" }));
-  fireEvent.change(screen.getByLabelText("Mermaid source"), { target: { value: `${text}\n  B --> C[Three]` } });
-  const next = onChange.mock.calls[0][0];
-  expect(next.flow.nodes.map((node: { id: string }) => node.id)).toEqual(["A", "B", "C"]);
-  expect(next.flow.nodes[0].position).toEqual({ x: 7, y: 9 });
-  expect(next.flow.nodes[2].position).not.toEqual({ x: 7, y: 9 });
-});
-
-test("unsupported Mermaid falls back to text only with a notice", () => {
-  const onChange = vi.fn();
-  const odd = "flowchart LR\n subgraph s\n A --> B\n end";
-  render(<DiagramBlock block={{ ...base, mermaid: odd, flow: null }} readOnly={false} onChange={onChange} />);
-  expect(screen.getByRole("note").textContent).toContain("edited as text");
-  expect((screen.getByLabelText("Mermaid source") as HTMLTextAreaElement).value).toBe(odd);
-  fireEvent.change(screen.getByLabelText("Mermaid source"), { target: { value: text } });
-  expect(onChange.mock.calls[0][0].flow.nodes).toHaveLength(2);
-  fireEvent.click(screen.getByRole("button", { name: "Start a new drawing" }));
-  expect(onChange.mock.calls[1][0].flow.nodes).toHaveLength(3);
-  expect(onChange.mock.calls[1][0].mermaid).toContain("Source");
-});
-
-test("readers cannot restart a text-only diagram", () => {
-  render(<DiagramBlock block={{ ...base, flow: null }} readOnly onChange={vi.fn()} />);
+test("there is no drawing canvas any more", () => {
+  render(<DiagramBlock block={base} readOnly={false} onChange={vi.fn()} />);
+  expect(screen.queryByRole("button", { name: "Edit Mermaid" })).toBeNull();
   expect(screen.queryByRole("button", { name: "Start a new drawing" })).toBeNull();
+});
+
+test("a line-number gutter follows the text", () => {
+  const { container, rerender } = render(<DiagramBlock block={base} readOnly={false} onChange={vi.fn()} />);
+  const gutter = () => container.querySelector('[aria-hidden="true"]')!.textContent;
+  expect(gutter()).toBe("12");
+  rerender(<DiagramBlock block={{ ...base, mermaid: "a\nb\nc\nd" }} readOnly={false} onChange={vi.fn()} />);
+  expect(gutter()).toBe("1234");
 });
 
 test("the rendered diagram is shown at half of its natural width", async () => {
@@ -64,30 +55,92 @@ test("the rendered diagram is shown at half of its natural width", async () => {
   expect(svg.style.maxWidth).toBe("100%");
 });
 
-const sequenceText = "sequenceDiagram\n  participant Source System\n  participant Core\n  Source System->>Core: Pay";
-
-test("the Mermaid script of a sequence diagram can be edited and redraws the participants", () => {
-  const onChange = vi.fn();
-  const block = { type: "diagram" as const, sequence: true, mermaid: sequenceText, flow: mermaidToFlow(sequenceText) };
-  render(<DiagramBlock block={block} readOnly={false} onChange={onChange} />);
-  expect(screen.getByText("sequence drawing with 2 participants")).toBeTruthy();
-  fireEvent.click(screen.getByRole("button", { name: "Edit Mermaid" }));
-  const textarea = screen.getByLabelText("Mermaid source") as HTMLTextAreaElement;
-  expect(textarea.value).toBe(sequenceText);
-  fireEvent.change(textarea, { target: { value: `${sequenceText}\n  Core-->>Source System: Done` } });
-  const next = onChange.mock.calls[0][0];
-  expect(next.mermaid).toContain("Core-->>Source System: Done");
-  expect(next.flow.edges).toHaveLength(2);
+test("the preview waits for a pause in typing before redrawing", async () => {
+  vi.useFakeTimers();
+  try {
+    const { rerender } = render(<DiagramBlock block={base} readOnly={false} onChange={vi.fn()} />);
+    await act(async () => {
+      await Promise.resolve();
+    });
+    const drawn = render_.mock.calls.length;
+    rerender(<DiagramBlock block={{ ...base, mermaid: `${text}\n  B --> C` }} readOnly={false} onChange={vi.fn()} />);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(PREVIEW_DELAY_MS - 50);
+    });
+    expect(render_.mock.calls.length).toBe(drawn);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(100);
+    });
+    expect(render_.mock.calls.length).toBe(drawn + 1);
+    expect(render_.mock.calls.at(-1)?.[1]).toContain("B --> C");
+  } finally {
+    vi.useRealTimers();
+  }
 });
 
-test("an unreadable sequence script falls back to text only and can start a new drawing", () => {
+test("a syntax error is shown next to the editor and its line is marked", async () => {
+  parse.mockRejectedValueOnce(new Error("Parse error on line 2:\n...A --> \n-----^\nExpecting 'SEMI'"));
+  const { container } = render(<DiagramBlock block={base} readOnly={false} onChange={vi.fn()} />);
+  const alert = await screen.findByRole("alert");
+  expect(alert.textContent).toContain("Parse error on line 2");
+  expect(render_).not.toHaveBeenCalled();
+  const marked = container.querySelector('[aria-hidden="true"] .text-alert');
+  expect(marked?.textContent).toBe("2");
+});
+
+test("the error goes away once the text is fixed", async () => {
+  parse.mockRejectedValueOnce(new Error("Parse error on line 1"));
+  const { rerender } = render(<DiagramBlock block={{ ...base, mermaid: "nonsense" }} readOnly={false} onChange={vi.fn()} />);
+  await screen.findByRole("alert");
+  rerender(<DiagramBlock block={base} readOnly={false} onChange={vi.fn()} />);
+  await waitFor(() => expect(screen.queryByRole("alert")).toBeNull());
+});
+
+test("errorLine reads the line from a Mermaid message", () => {
+  expect(errorLine("Parse error on line 12: x")).toBe(12);
+  expect(errorLine("Syntax error in text")).toBeNull();
+});
+
+test("a template replaces a starter diagram straight away", () => {
   const onChange = vi.fn();
-  const odd = "sequenceDiagram\n  A->>B: hi\n  Note over A,B: careful";
-  render(<DiagramBlock block={{ type: "diagram", sequence: true, mermaid: odd, flow: null }} readOnly={false} onChange={onChange} />);
-  expect(screen.getByRole("note").textContent).toContain("edited as text");
-  fireEvent.change(screen.getByLabelText("Mermaid source"), { target: { value: "sequenceDiagram\n  A->>B: hi" } });
-  expect(onChange.mock.calls[0][0].flow.nodes).toHaveLength(2);
-  fireEvent.click(screen.getByRole("button", { name: "Start a new drawing" }));
-  expect(onChange.mock.calls[1][0].mermaid).toContain("participant");
-  expect(onChange.mock.calls[1][0].flow.edges).toHaveLength(2);
+  render(<DiagramBlock block={{ ...base, mermaid: STARTER_FLOWCHART }} readOnly={false} onChange={onChange} />);
+  fireEvent.change(screen.getByLabelText("Diagram template"), { target: { value: "er" } });
+  const er = MERMAID_TEMPLATES.find((item) => item.id === "er")!;
+  expect(onChange).toHaveBeenCalledWith({ type: "diagram", sequence: false, mermaid: er.text });
+  expect(screen.queryByRole("alertdialog")).toBeNull();
+});
+
+test("a template asks before it replaces something that was written", async () => {
+  const onChange = vi.fn();
+  render(<DiagramBlock block={base} readOnly={false} onChange={onChange} />);
+  fireEvent.change(screen.getByLabelText("Diagram template"), { target: { value: "sequence" } });
+  expect(onChange).not.toHaveBeenCalled();
+  const dialog = screen.getByRole("alertdialog");
+  expect(dialog.textContent).toContain("Sequence diagram");
+  fireEvent.click(within(dialog).getByRole("button", { name: "Cancel" }));
+  expect(onChange).not.toHaveBeenCalled();
+  fireEvent.change(screen.getByLabelText("Diagram template"), { target: { value: "sequence" } });
+  fireEvent.click(within(screen.getByRole("alertdialog")).getByRole("button", { name: "Replace" }));
+  await waitFor(() => expect(onChange).toHaveBeenCalledWith({ type: "diagram", sequence: false, mermaid: STARTER_SEQUENCE }));
+});
+
+test("every template is valid Mermaid-looking text and the list covers the common diagrams", () => {
+  expect(MERMAID_TEMPLATES.map((item) => item.id)).toEqual(["flowchart", "sequence", "class", "state", "er", "gantt", "pie"]);
+  for (const template of MERMAID_TEMPLATES) expect(template.text.trim().length).toBeGreaterThan(10);
+});
+
+test("syntax help can be opened and closed", () => {
+  render(<DiagramBlock block={base} readOnly={false} onChange={vi.fn()} />);
+  expect(screen.queryByLabelText("Mermaid syntax help")).toBeNull();
+  fireEvent.click(screen.getByRole("button", { name: "Syntax help" }));
+  expect(screen.getByLabelText("Mermaid syntax help").textContent).toContain("sequenceDiagram");
+  fireEvent.click(screen.getByRole("button", { name: "Hide syntax help" }));
+  expect(screen.queryByLabelText("Mermaid syntax help")).toBeNull();
+});
+
+test("readers see the diagram and the text but cannot change either", () => {
+  render(<DiagramBlock block={base} readOnly onChange={vi.fn()} />);
+  expect((screen.getByLabelText("Mermaid source") as HTMLTextAreaElement).readOnly).toBe(true);
+  expect(screen.queryByLabelText("Diagram template")).toBeNull();
+  expect(screen.queryByRole("button", { name: "Syntax help" })).toBeNull();
 });

@@ -56,12 +56,12 @@ def test_blank_key_keeps_existing_and_clear_removes_it(client):
 
 def test_provider_validation_and_permissions(client):
     admin = login(client, "Admin")
-    maker = login(client, "Maker")
+    writer = login(client, "Write")
     assert client.put("/api/settings/providers/nope", json={}, headers=auth(admin)).status_code == 404
     bad_url = client.put("/api/settings/providers/spirare", json={"chat_base_url": "ftp://x"}, headers=auth(admin))
     assert bad_url.status_code == 400
-    assert client.put("/api/settings/providers/spirare", json={"api_key": "x"}, headers=auth(maker)).status_code == 403
-    assert client.get("/api/settings", headers=auth(maker)).status_code == 403
+    assert client.put("/api/settings/providers/spirare", json={"api_key": "x"}, headers=auth(writer)).status_code == 403
+    assert client.get("/api/settings", headers=auth(writer)).status_code == 403
     prompt = client.get("/api/settings", headers=auth(admin)).json()["global_system_prompt"]
     assert client.put("/api/settings", json={"active_provider": "bogus", "global_system_prompt": prompt}, headers=auth(admin)).status_code == 400
     assert client.put("/api/settings", json={"active_provider": "gemini", "global_system_prompt": " "}, headers=auth(admin)).status_code == 400

@@ -2,15 +2,45 @@ import re
 
 from app.flow import (
     DEFAULT_FLOWCHART,
+    STARTER_SEQUENCE,
     default_flowchart,
     default_sequence_flow,
     flow_to_mermaid,
     flowchart_to_mermaid,
-    mermaid_to_flow,
-    mermaid_to_flowchart,
-    normalize_flowchart,
 )
 from app.missing import evaluate_missing
+
+_FENCE = re.compile(r"^```[A-Za-z]*[ \t]*\n(.*?)\n?```$", re.S)
+
+
+def clean_mermaid(value) -> str:
+    """Mermaid text as stored: no surrounding blank lines or ``` fence, which models like to add."""
+    text = _as_text(value).replace("\r\n", "\n").strip()
+    fenced = _FENCE.match(text)
+    return (fenced.group(1) if fenced else text).strip("\n")
+
+
+_SERIAL_HEADER = re.compile(r"^(?:sn|s/n|s\.n\.?|no\.?|#|serial(?:\s+(?:no\.?|number))?)$", re.I)
+
+
+def serial_column(columns: list) -> int:
+    """Index of the Serial No column (a first column headed SN, S/N, No, # or Serial No), or -1 when the table has none."""
+    if columns and _SERIAL_HEADER.match(_as_text(columns[0]).strip()):
+        return 0
+    return -1
+
+
+def number_rows(columns: list, rows: list[list[str]]) -> list[list[str]]:
+    """The rows with the Serial No column set to 1, 2, 3... in row order. Tables without one are returned as they are."""
+    index = serial_column(columns)
+    if index < 0:
+        return rows
+    return [[str(number) if position == index else cell for position, cell in enumerate(row)] for number, row in enumerate(rows, start=1)]
+
+
+def starter_diagram(sequence: bool) -> str:
+    return STARTER_SEQUENCE if sequence else DEFAULT_FLOWCHART
+
 
 IMAGE_URL = re.compile(r"^/api/projects/[0-9a-fA-F-]{8,64}/images/[A-Za-z0-9._-]{1,200}$")
 
@@ -55,28 +85,10 @@ def blocks_from_schema(schema_blocks: list[dict]) -> list[dict]:
         elif kind == "table":
             columns = list(block.get("columns") or [])
             rows = [list(row) for row in (block.get("rows") or [[""] * len(columns)])]
-            blocks.append({"type": "table", "columns": columns, "rows": rows})
+            blocks.append({"type": "table", "columns": columns, "rows": number_rows(columns, rows)})
         elif kind == "diagram":
-            if block.get("sequence"):
-                flow = default_sequence_flow()
-                blocks.append(
-                    {
-                        "type": "diagram",
-                        "sequence": True,
-                        "mermaid": flow_to_mermaid(flow),
-                        "flow": flow,
-                    }
-                )
-            else:
-                chart = default_flowchart()
-                blocks.append(
-                    {
-                        "type": "diagram",
-                        "sequence": False,
-                        "mermaid": flowchart_to_mermaid(chart),
-                        "flow": chart,
-                    }
-                )
+            sequence = bool(block.get("sequence"))
+            blocks.append({"type": "diagram", "sequence": sequence, "mermaid": starter_diagram(sequence)})
     return blocks
 
 
@@ -124,30 +136,12 @@ def _sanitize_blocks(incoming: list, schema_blocks: list[dict]) -> list[dict]:
                 rows.append(cells[: len(columns)])
             if not rows:
                 rows = [[""] * len(columns)]
-            result.append({"type": "table", "columns": columns, "rows": rows})
+            result.append({"type": "table", "columns": columns, "rows": number_rows(columns, rows)})
         elif kind == "diagram":
+            # Any Mermaid is accepted in a diagram block; the layout only decides what a new block starts with.
             sequence = bool(schema.get("sequence"))
-            mermaid = _as_text((source or {}).get("mermaid"))
-            flow = (source or {}).get("flow")
-            is_sequence_text = mermaid.lstrip().startswith("sequenceDiagram")
-            if sequence != is_sequence_text and mermaid:
-                # The block type was switched in the section settings: start the other kind afresh.
-                mermaid, flow = "", None
-            if sequence and not mermaid:
-                flow = default_flow()
-                mermaid = flow_to_mermaid(flow)
-            elif sequence and not flow:
-                flow = mermaid_to_flow(mermaid)
-            if not sequence:
-                # A drawn flowchart is the source of truth; otherwise read the Mermaid text when it is simple enough.
-                chart = normalize_flowchart(flow)
-                if chart:
-                    mermaid = flowchart_to_mermaid(chart)
-                else:
-                    mermaid = mermaid or DEFAULT_FLOWCHART
-                    chart = mermaid_to_flowchart(mermaid)
-                flow = chart
-            result.append({"type": "diagram", "sequence": sequence, "mermaid": mermaid, "flow": flow})
+            mermaid = clean_mermaid((source or {}).get("mermaid")) or starter_diagram(sequence)
+            result.append({"type": "diagram", "sequence": sequence, "mermaid": mermaid})
     return result
 
 
@@ -170,10 +164,15 @@ def sanitize_content(content: dict, templates: list[dict]) -> dict:
     return evaluate_missing({"sections": sections})
 
 
+def _without(row: list, index: int) -> list[str]:
+    return [_as_text(cell) for position, cell in enumerate(row) if position != index]
+
+
 def section_is_empty(section: dict | None, template: dict | None = None) -> bool:
     """True when a section holds nothing a person or the model wrote yet (only blanks, starter rows or the starter diagram)."""
     starters = {
         DEFAULT_FLOWCHART.strip(),
+        STARTER_SEQUENCE.strip(),
         flowchart_to_mermaid(default_flowchart()).strip(),
         flow_to_mermaid(default_flow()).strip(),
     }
@@ -187,8 +186,10 @@ def section_is_empty(section: dict | None, template: dict | None = None) -> bool
         if kind == "table":
             starter = schema_tables[table_index] if table_index < len(schema_tables) else {}
             table_index += 1
-            starter_rows = [[_as_text(cell) for cell in row] for row in starter.get("rows") or []]
-            rows = [[_as_text(cell) for cell in row] for row in block.get("rows") or []]
+            # The Serial No column is numbered by the app, so it says nothing about whether anyone wrote in the table.
+            skip = serial_column(block.get("columns") or [])
+            starter_rows = [_without(row, skip) for row in starter.get("rows") or []]
+            rows = [_without(row, skip) for row in block.get("rows") or []]
             if rows != starter_rows and any(cell.strip() for row in rows for cell in row):
                 return False
         if kind == "diagram":

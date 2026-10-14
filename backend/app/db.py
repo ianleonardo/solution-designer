@@ -255,6 +255,24 @@ def _migrate() -> None:
             updated_at TIMESTAMP NOT NULL
         )
         """,
+        """
+        CREATE TABLE IF NOT EXISTS audit_log (
+            audit_id VARCHAR PRIMARY KEY,
+            occurred_at TIMESTAMP NOT NULL,
+            user_id VARCHAR,
+            username VARCHAR,
+            login_id VARCHAR,
+            role_name VARCHAR,
+            action VARCHAR NOT NULL,
+            method VARCHAR,
+            path VARCHAR,
+            entity_type VARCHAR,
+            entity_id VARCHAR,
+            summary VARCHAR NOT NULL,
+            detail VARCHAR,
+            ip_address VARCHAR
+        )
+        """,
     ]
     assert _conn is not None
     for statement in statements:
@@ -474,6 +492,12 @@ def _migrate_seed_login_ids() -> None:
             exec_sql("UPDATE users SET email = ? WHERE user_id = ?", [user["login_id"], user["user_id"]])
 
 
+def _migrate_roles() -> None:
+    """The Maker, Checker and Viewer roles became Write and Read."""
+    exec_sql("UPDATE users SET role_name = 'Write' WHERE role_name IN ('Maker', 'Checker')")
+    exec_sql("UPDATE users SET role_name = 'Read' WHERE role_name = 'Viewer'")
+
+
 def _seed() -> None:
     if fetchone("SELECT user_id FROM users LIMIT 1") is None:
         for user in DEFAULT_USERS:
@@ -487,6 +511,7 @@ def _seed() -> None:
                 """,
                 [user["user_id"], user["username"], login_id, hashed, user["role"], _now()],
             )
+    _migrate_roles()
     _migrate_seed_login_ids()
     _ensure_layout(SDD_LAYOUT_ID, SDD_LAYOUT_NAME, "Solution design for a project, built from the SDD template.")
     if fetchone("SELECT template_id FROM layout_templates WHERE layout_id = ? LIMIT 1", [SDD_LAYOUT_ID]) is None:

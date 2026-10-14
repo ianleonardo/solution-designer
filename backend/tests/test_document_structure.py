@@ -17,9 +17,9 @@ def _admin(client):
 
 
 def test_layout_edits_do_not_reach_an_existing_document(client):
-    maker = login(client, "Maker")
-    project_id = _project(client, maker)
-    before = client.get(f"/api/projects/{project_id}/documents/{_document(client, maker, project_id)['document_id']}", headers=auth(maker)).json()
+    writer = login(client, "Write")
+    project_id = _project(client, writer)
+    before = client.get(f"/api/projects/{project_id}/documents/{_document(client, writer, project_id)['document_id']}", headers=auth(writer)).json()
     ids_before = [item["template_id"] for item in before["templates"]]
     assert "key-non-functional-requirements" in ids_before
 
@@ -32,7 +32,7 @@ def test_layout_edits_do_not_reach_an_existing_document(client):
     created = client.post("/api/layouts/sdd/templates", json={"section_name": "Brand new"}, headers=admin)
     assert created.status_code == 200
 
-    after = client.get(f"/api/projects/{project_id}/documents/{before['document_id']}", headers=auth(maker)).json()
+    after = client.get(f"/api/projects/{project_id}/documents/{before['document_id']}", headers=auth(writer)).json()
     assert [item["template_id"] for item in after["templates"]] == ids_before
     assert after["content_json"] == before["content_json"]
     kept = next(item for item in after["templates"] if item["template_id"] == renamed["template_id"])
@@ -40,27 +40,27 @@ def test_layout_edits_do_not_reach_an_existing_document(client):
     assert "key-non-functional-requirements" in after["content_json"]["sections"]
 
     # A document created later gets the layout as it is then.
-    other = client.post("/api/projects", json={"project_name": "Later"}, headers=auth(maker)).json()["project_id"]
-    later = _document(client, maker, other)
-    detail = client.get(f"/api/projects/{other}/documents/{later['document_id']}", headers=auth(maker)).json()
+    other = client.post("/api/projects", json={"project_name": "Later"}, headers=auth(writer)).json()["project_id"]
+    later = _document(client, writer, other)
+    detail = client.get(f"/api/projects/{other}/documents/{later['document_id']}", headers=auth(writer)).json()
     later_ids = [item["template_id"] for item in detail["templates"]]
     assert "key-non-functional-requirements" not in later_ids
     assert any(item["section_name"] == "Brand new" for item in detail["templates"])
 
 
 def test_document_templates_include_block_layout_and_hint(client):
-    maker = login(client, "Maker")
-    project_id = _project(client, maker)
-    document = _document(client, maker, project_id)
-    detail = client.get(f"/api/projects/{project_id}/documents/{document['document_id']}", headers=auth(maker)).json()
+    writer = login(client, "Write")
+    project_id = _project(client, writer)
+    document = _document(client, writer, project_id)
+    detail = client.get(f"/api/projects/{project_id}/documents/{document['document_id']}", headers=auth(writer)).json()
     assert all(isinstance(item["blocks"], list) and item["blocks"] for item in detail["templates"])
     assert all("hint" in item for item in detail["templates"])
 
 
 def test_documents_without_a_snapshot_are_given_one(client):
-    maker = login(client, "Maker")
-    project_id = _project(client, maker)
-    document = _document(client, maker, project_id)
+    writer = login(client, "Write")
+    project_id = _project(client, writer)
+    document = _document(client, writer, project_id)
     db.exec_sql("UPDATE project_documents SET structure_json = NULL WHERE document_id = ?", [document["document_id"]])
     db._backfill_structures()
     row = db.fetchone("SELECT structure_json FROM project_documents WHERE document_id = ?", [document["document_id"]])
@@ -69,17 +69,17 @@ def test_documents_without_a_snapshot_are_given_one(client):
 
     # A row that slips through (for example inserted by hand) is repaired when it is read.
     db.exec_sql("UPDATE project_documents SET structure_json = NULL WHERE document_id = ?", [document["document_id"]])
-    detail = client.get(f"/api/projects/{project_id}/documents/{document['document_id']}", headers=auth(maker)).json()
+    detail = client.get(f"/api/projects/{project_id}/documents/{document['document_id']}", headers=auth(writer)).json()
     assert len(detail["templates"]) == len(snapshot)
     assert db.fetchone("SELECT structure_json FROM project_documents WHERE document_id = ?", [document["document_id"]])["structure_json"]
 
 
 def _setup(client):
-    maker = login(client, "Maker")
-    project_id = _project(client, maker)
-    document = _document(client, maker, project_id)
+    writer = login(client, "Write")
+    project_id = _project(client, writer)
+    document = _document(client, writer, project_id)
     base = f"/api/projects/{project_id}/documents/{document['document_id']}"
-    return maker, base, document
+    return writer, base, document
 
 
 def _templates(client, token, base):
@@ -87,14 +87,14 @@ def _templates(client, token, base):
 
 
 def test_add_rename_and_delete_sections(client):
-    maker, base, _ = _setup(client)
-    count = len(_templates(client, maker, base))
-    parent = next(item for item in _templates(client, maker, base) if item["parent_id"] is None)
+    writer, base, _ = _setup(client)
+    count = len(_templates(client, writer, base))
+    parent = next(item for item in _templates(client, writer, base) if item["parent_id"] is None)
 
     added = client.post(
         f"{base}/sections",
         json={"section_name": "Security notes", "parent_id": parent["template_id"], "blocks": [{"type": "header", "text": "Heads up", "level": 2}, {"type": "prose"}]},
-        headers=auth(maker),
+        headers=auth(writer),
     )
     assert added.status_code == 200, added.text
     body = added.json()
@@ -108,59 +108,59 @@ def test_add_rename_and_delete_sections(client):
     siblings = [item for item in body["templates"] if item["parent_id"] == parent["template_id"]]
     assert siblings[-1]["template_id"] == new["template_id"]
 
-    renamed = client.patch(f"{base}/sections/{new['template_id']}", json={"section_name": "Security notes v2"}, headers=auth(maker))
+    renamed = client.patch(f"{base}/sections/{new['template_id']}", json={"section_name": "Security notes v2"}, headers=auth(writer))
     assert renamed.status_code == 200
     assert renamed.json()["content_json"]["sections"][new["template_id"]]["title"] == "Security notes v2"
-    assert client.patch(f"{base}/sections/{new['template_id']}", json={"section_name": " "}, headers=auth(maker)).status_code == 400
-    assert client.patch(f"{base}/sections/nope", json={"section_name": "x"}, headers=auth(maker)).status_code == 404
+    assert client.patch(f"{base}/sections/{new['template_id']}", json={"section_name": " "}, headers=auth(writer)).status_code == 400
+    assert client.patch(f"{base}/sections/nope", json={"section_name": "x"}, headers=auth(writer)).status_code == 404
 
-    deleted = client.delete(f"{base}/sections/{new['template_id']}", headers=auth(maker))
+    deleted = client.delete(f"{base}/sections/{new['template_id']}", headers=auth(writer))
     assert deleted.status_code == 200
     assert new["template_id"] not in deleted.json()["content_json"]["sections"]
     assert len(deleted.json()["templates"]) == count
 
 
 def test_sub_sections_cannot_be_nested_and_the_last_section_stays(client):
-    maker, base, _ = _setup(client)
-    child = next(item for item in _templates(client, maker, base) if item["parent_id"])
-    nested = client.post(f"{base}/sections", json={"section_name": "Deep", "parent_id": child["template_id"]}, headers=auth(maker))
+    writer, base, _ = _setup(client)
+    child = next(item for item in _templates(client, writer, base) if item["parent_id"])
+    nested = client.post(f"{base}/sections", json={"section_name": "Deep", "parent_id": child["template_id"]}, headers=auth(writer))
     assert nested.status_code == 400
-    missing_parent = client.post(f"{base}/sections", json={"section_name": "Deep", "parent_id": "nope"}, headers=auth(maker))
+    missing_parent = client.post(f"{base}/sections", json={"section_name": "Deep", "parent_id": "nope"}, headers=auth(writer))
     assert missing_parent.status_code == 404
-    for item in [item for item in _templates(client, maker, base) if item["parent_id"] is None][:-1]:
-        assert client.delete(f"{base}/sections/{item['template_id']}", headers=auth(maker)).status_code == 200
-    last = _templates(client, maker, base)
+    for item in [item for item in _templates(client, writer, base) if item["parent_id"] is None][:-1]:
+        assert client.delete(f"{base}/sections/{item['template_id']}", headers=auth(writer)).status_code == 200
+    last = _templates(client, writer, base)
     top = [item for item in last if item["parent_id"] is None]
     assert len(top) == 1
     for item in [item for item in last if item["parent_id"]]:
-        client.delete(f"{base}/sections/{item['template_id']}", headers=auth(maker))
-    only = _templates(client, maker, base)
+        client.delete(f"{base}/sections/{item['template_id']}", headers=auth(writer))
+    only = _templates(client, writer, base)
     assert len(only) == 1
-    blocked = client.delete(f"{base}/sections/{only[0]['template_id']}", headers=auth(maker))
+    blocked = client.delete(f"{base}/sections/{only[0]['template_id']}", headers=auth(writer))
     assert blocked.status_code == 400 and "at least one section" in blocked.json()["detail"]
 
 
 def test_deleting_a_section_removes_its_sub_sections_and_content(client):
-    maker, base, _ = _setup(client)
-    templates = _templates(client, maker, base)
+    writer, base, _ = _setup(client)
+    templates = _templates(client, writer, base)
     parent = next(item for item in templates if item["parent_id"] is None and any(c["parent_id"] == item["template_id"] for c in templates))
     children = [item["template_id"] for item in templates if item["parent_id"] == parent["template_id"]]
-    result = client.delete(f"{base}/sections/{parent['template_id']}", headers=auth(maker)).json()
+    result = client.delete(f"{base}/sections/{parent['template_id']}", headers=auth(writer)).json()
     gone = {parent["template_id"], *children}
     assert gone.isdisjoint({item["template_id"] for item in result["templates"]})
     assert gone.isdisjoint(result["content_json"]["sections"])
 
 
 def test_reorder_sections_and_move_between_levels(client):
-    maker, base, _ = _setup(client)
-    templates = _templates(client, maker, base)
+    writer, base, _ = _setup(client)
+    templates = _templates(client, writer, base)
     tops = [item for item in templates if item["parent_id"] is None]
     tree = [
         {"template_id": item["template_id"], "children": [c["template_id"] for c in templates if c["parent_id"] == item["template_id"]]}
         for item in tops
     ]
     tree[0], tree[1] = tree[1], tree[0]
-    result = client.put(f"{base}/sections-order", json={"sections": tree}, headers=auth(maker))
+    result = client.put(f"{base}/sections-order", json={"sections": tree}, headers=auth(writer))
     assert result.status_code == 200, result.text
     new_tops = [item["template_id"] for item in result.json()["templates"] if item["parent_id"] is None]
     assert new_tops[:2] == [tree[0]["template_id"], tree[1]["template_id"]]
@@ -169,28 +169,28 @@ def test_reorder_sections_and_move_between_levels(client):
     if moved:
         tree[0]["children"].remove(moved)
         tree[1]["children"].append(moved)
-        again = client.put(f"{base}/sections-order", json={"sections": tree}, headers=auth(maker)).json()
+        again = client.put(f"{base}/sections-order", json={"sections": tree}, headers=auth(writer)).json()
         assert next(item for item in again["templates"] if item["template_id"] == moved)["parent_id"] == tree[1]["template_id"]
-    incomplete = client.put(f"{base}/sections-order", json={"sections": tree[:-1]}, headers=auth(maker))
+    incomplete = client.put(f"{base}/sections-order", json={"sections": tree[:-1]}, headers=auth(writer))
     assert incomplete.status_code == 400
 
 
 def test_changing_blocks_keeps_matching_content_and_refits_tables(client):
-    maker, base, _ = _setup(client)
+    writer, base, _ = _setup(client)
     created = client.post(
         f"{base}/sections",
         json={"section_name": "Mixed", "blocks": [{"type": "prose"}, {"type": "table", "columns": ["A", "B"]}]},
-        headers=auth(maker),
+        headers=auth(writer),
     ).json()
     sid = next(item["template_id"] for item in created["templates"] if item["section_name"] == "Mixed")
     content = created["content_json"]
     content["sections"][sid]["blocks"][0]["markdown"] = "Keep me"
     content["sections"][sid]["blocks"][1]["rows"] = [["1", "2"]]
-    client.put(base, json={"content_json": content}, headers=auth(maker))
+    client.put(base, json={"content_json": content}, headers=auth(writer))
     changed = client.patch(
         f"{base}/sections/{sid}",
         json={"blocks": [{"type": "prose"}, {"type": "table", "columns": ["A", "B", "C"]}, {"type": "diagram", "sequence": False}]},
-        headers=auth(maker),
+        headers=auth(writer),
     )
     assert changed.status_code == 200, changed.text
     blocks = changed.json()["content_json"]["sections"][sid]["blocks"]
@@ -199,35 +199,19 @@ def test_changing_blocks_keeps_matching_content_and_refits_tables(client):
     assert blocks[1]["columns"] == ["A", "B", "C"] and blocks[1]["rows"] == [["1", "2", ""]]
 
 
-def test_structure_edits_send_an_approved_document_back_to_draft(client):
-    maker, base, _ = _setup(client)
-    checker = login(client, "Checker")
-    assert client.post(f"{base}/submit", headers=auth(maker)).status_code == 200
-    assert client.post(f"{base}/approve", headers=auth(checker)).json()["status"] == "approved"
-    first = _templates(client, maker, base)[0]
-    edited = client.patch(f"{base}/sections/{first['template_id']}", json={"section_name": "Edited title"}, headers=auth(maker))
-    assert edited.json()["status"] == "draft" and edited.json()["approved_by"] is None
-    # It has to be submitted and approved again.
-    assert client.post(f"{base}/approve", headers=auth(checker)).status_code == 400
-    assert client.post(f"{base}/submit", headers=auth(maker)).status_code == 200
-    assert client.post(f"{base}/approve", headers=auth(checker)).json()["status"] == "approved"
-    project_id = base.split("/")[3]
-    assert client.get(f"/api/projects/{project_id}", headers=auth(maker)).json()["status"] == "approved"
-    client.delete(f"{base}/sections/{first['template_id']}", headers=auth(checker))
-    assert client.get(base, headers=auth(maker)).json()["status"] == "draft"
 
 
 def test_who_may_change_the_structure(client):
-    maker, base, _ = _setup(client)
-    first = _templates(client, maker, base)[0]
-    for role in ("Viewer", "Admin"):
+    writer, base, _ = _setup(client)
+    first = _templates(client, writer, base)[0]
+    for role in ("Read", "Admin"):
         token = login(client, role)
         assert client.post(f"{base}/sections", json={"section_name": "x"}, headers=auth(token)).status_code == 403
         assert client.patch(f"{base}/sections/{first['template_id']}", json={"section_name": "x"}, headers=auth(token)).status_code == 403
         assert client.delete(f"{base}/sections/{first['template_id']}", headers=auth(token)).status_code == 403
         assert client.put(f"{base}/sections-order", json={"sections": []}, headers=auth(token)).status_code in {400, 403}
-    viewer = login(client, "Viewer")
-    assert client.patch(f"{base}/sections/{first['template_id']}", json={"system_prompt": "x"}, headers=auth(viewer)).status_code == 403
+    reader = login(client, "Read")
+    assert client.patch(f"{base}/sections/{first['template_id']}", json={"system_prompt": "x"}, headers=auth(reader)).status_code == 403
     admin = auth(login(client, "Admin"))
     prompt = client.patch(
         f"{base}/sections/{first['template_id']}", json={"system_prompt": "Write it short", "temperature": 0.4, "max_words": 120}, headers=admin
@@ -239,13 +223,3 @@ def test_who_may_change_the_structure(client):
     layout = client.get("/api/layouts/sdd", headers=admin).json()
     original = next(item for item in layout["templates"] if item["template_id"] == first["template_id"])
     assert original["system_prompt"] == first["system_prompt"]
-
-
-def test_prompt_changes_do_not_reset_an_approved_document(client):
-    maker, base, _ = _setup(client)
-    checker = login(client, "Checker")
-    client.post(f"{base}/submit", headers=auth(maker))
-    client.post(f"{base}/approve", headers=auth(checker))
-    first = _templates(client, maker, base)[0]
-    result = client.patch(f"{base}/sections/{first['template_id']}", json={"system_prompt": "Be brief."}, headers=auth(maker))
-    assert result.status_code == 200 and result.json()["status"] == "approved"

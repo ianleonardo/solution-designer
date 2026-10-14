@@ -3,19 +3,15 @@ import { afterEach, expect, test, vi } from "vitest";
 import { DocumentTabs } from "./DocumentTabs";
 import type { LayoutSummary, ProjectDocument } from "../types";
 
-const doc = (id: string, layout: string, name: string, status: ProjectDocument["status"] = "draft"): ProjectDocument => ({
+const doc = (id: string, layout: string, name: string): ProjectDocument => ({
   sdd_id: id,
   document_id: id,
   project_id: "p1",
   layout_id: layout,
   name,
   content_json: { sections: {} },
-  status,
   last_modified: "",
   generated_at: null,
-  submitted_by: null,
-  approved_by: null,
-  approved_at: null,
   templates: [],
 });
 
@@ -34,7 +30,7 @@ afterEach(cleanup);
 
 function setup(overrides: Partial<Parameters<typeof DocumentTabs>[0]> = {}) {
   const props = {
-    documents: [doc("d1", "sdd", "Solution Design Document", "approved"), doc("d2", "ifc", "Interface Specifications Document")],
+    documents: [doc("d1", "sdd", "Solution Design Document"), doc("d2", "ifc", "Interface Specifications Document")],
     activeId: "d1",
     layouts: [layout("sdd", "Solution Design Document"), layout("ifc", "Interface Specifications Document"), layout("run", "Runbook"), layout("empty", "Empty", 0)],
     canManage: true,
@@ -52,7 +48,7 @@ test("shows a tab per document and selects on click", () => {
   const tabs = screen.getAllByRole("tab");
   expect(tabs).toHaveLength(2);
   expect(tabs[0].getAttribute("aria-selected")).toBe("true");
-  expect(within(tabs[0]).getByText("Approved")).toBeTruthy();
+  expect(within(tabs[0]).queryByText("Approved")).toBeNull();
   expect(within(tabs[1]).queryByText("Draft")).toBeNull();
   fireEvent.click(tabs[1]);
   expect(props.onSelect).toHaveBeenCalledWith("d2");

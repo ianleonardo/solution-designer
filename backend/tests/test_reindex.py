@@ -18,7 +18,7 @@ def _excel(rows) -> bytes:
     return buffer.getvalue()
 
 
-def _fill(client, admin, maker):
+def _fill(client, admin, writer):
     """One of everything that is embedded."""
     for code in ("SPL", "DGE"):
         client.post("/api/systems", json={"system_code": code, "system_name": f"{code} name"}, headers=auth(admin))
@@ -30,9 +30,9 @@ def _fill(client, admin, maker):
     )
     guideline = {"file": ("g.md", b"Always validate input.\n\n" + b"Use least privilege. " * 80, "text/markdown")}
     client.post("/api/guidelines", data={"title": "Secure", "description": "d"}, files=guideline, headers=auth(admin))
-    project_id = client.post("/api/projects", json={"project_name": "P"}, headers=auth(maker)).json()["project_id"]
+    project_id = client.post("/api/projects", json={"project_name": "P"}, headers=auth(writer)).json()["project_id"]
     ref = {"file": ("r.md", b"Reference text about settlement.", "text/markdown")}
-    assert client.post(f"/api/projects/{project_id}/references", files=ref, headers=auth(maker)).status_code == 200
+    assert client.post(f"/api/projects/{project_id}/references", files=ref, headers=auth(writer)).status_code == 200
 
 
 def _vectors():
@@ -58,8 +58,8 @@ def _embedding_on(monkeypatch, tag, model="m1"):
 
 def test_a_changed_embedding_setup_re_embeds_everything(client, monkeypatch):
     monkeypatch.setattr(reindex, "_spawn", lambda job: job())
-    admin, maker = login(client, "Admin"), login(client, "Maker")
-    _fill(client, admin, maker)
+    admin, writer = login(client, "Admin"), login(client, "Write")
+    _fill(client, admin, writer)
     assert all(not item["embedded"] for item in _vectors().values())
 
     calls = _embedding_on(monkeypatch, 1, "m1")
@@ -81,8 +81,8 @@ def test_a_changed_embedding_setup_re_embeds_everything(client, monkeypatch):
 
 def test_without_an_embedding_model_the_vectors_are_cleared(client, monkeypatch):
     monkeypatch.setattr(reindex, "_spawn", lambda job: job())
-    admin, maker = login(client, "Admin"), login(client, "Maker")
-    _fill(client, admin, maker)
+    admin, writer = login(client, "Admin"), login(client, "Write")
+    _fill(client, admin, writer)
     _embedding_on(monkeypatch, 1, "m1")
     reindex.start_if_needed()
     monkeypatch.setattr("app.services.llm.embedding_configured", lambda: False)
@@ -95,8 +95,8 @@ def test_without_an_embedding_model_the_vectors_are_cleared(client, monkeypatch)
 
 def test_failed_embeddings_are_counted_and_do_not_stop_the_run(client, monkeypatch):
     monkeypatch.setattr(reindex, "_spawn", lambda job: job())
-    admin, maker = login(client, "Admin"), login(client, "Maker")
-    _fill(client, admin, maker)
+    admin, writer = login(client, "Admin"), login(client, "Write")
+    _fill(client, admin, writer)
     _embedding_on(monkeypatch, 1, "m1")
     seen = []
 
@@ -164,5 +164,5 @@ def test_interface_upload_embeds_new_rows_in_the_background(client, monkeypatch)
 
 def test_only_admin_can_read_the_reindex_status(client):
     assert client.get("/api/reindex/status", headers=auth(login(client, "Admin"))).status_code == 200
-    for role in ("Maker", "Checker", "Viewer"):
+    for role in ("Write", "Read"):
         assert client.get("/api/reindex/status", headers=auth(login(client, role))).status_code == 403

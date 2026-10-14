@@ -8,8 +8,7 @@ import { ProjectDialog } from "./ProjectDialog";
 
 function badgeClass(role: string) {
   if (role === "Admin") return "text-gold border-gold";
-  if (role === "Checker") return "text-accent";
-  if (role === "Maker") return "text-celadon";
+  if (role === "Write") return "text-celadon";
   return "text-muted";
 }
 
@@ -30,7 +29,7 @@ export function ProjectTable({
 }) {
   const [editing, setEditing] = useState<Project | null>(null);
   const [deleting, setDeleting] = useState<Project | null>(null);
-  const canManageProjects = role === "Maker" || role === "Checker";
+  const canManageProjects = role === "Write";
 
   async function saveEdit(name: string, description: string) {
     if (!editing) return;
@@ -58,7 +57,6 @@ export function ProjectTable({
       className: "max-w-xs truncate text-muted",
       render: (row) => row.description,
     },
-    { key: "status", header: "Status", sortValue: (row) => row.status, className: "capitalize", render: (row) => row.status.replaceAll("_", " ") },
     {
       key: "owner",
       header: "Owner",

@@ -48,7 +48,6 @@ def project_row(row: dict) -> dict:
         "owner_id": row["owner_id"],
         "owner_name": row.get("owner_name"),
         "owner_role": row.get("owner_role"),
-        "status": row["status"],
         "created_at": row["created_at"],
         "last_modified": row["last_modified"],
     }
@@ -68,11 +67,11 @@ def list_projects() -> list[dict]:
 def dashboard() -> dict:
     total = db.fetchone("SELECT count(*) AS c FROM projects")
     generated = db.fetchone("SELECT count(*) AS c FROM project_documents WHERE generated_at IS NOT NULL")
-    pending = db.fetchone("SELECT count(*) AS c FROM project_documents WHERE status = 'pending_approval'")
+    documents_total = db.fetchone("SELECT count(*) AS c FROM project_documents")
     return {
         "total_projects": total["c"] if total else 0,
+        "total_documents": documents_total["c"] if documents_total else 0,
         "documents_generated": generated["c"] if generated else 0,
-        "pending_approvals": pending["c"] if pending else 0,
     }
 
 
@@ -347,7 +346,7 @@ def list_users(user: dict) -> list[dict]:
     return [public_user(row) for row in db.fetchall("SELECT * FROM users ORDER BY created_at")]
 
 
-ROLES = {"Admin", "Checker", "Maker", "Viewer"}
+ROLES = {"Admin", "Write", "Read"}
 LOGIN_ID_PATTERN = re.compile(r"^[A-Za-z0-9]{3,64}$")
 
 

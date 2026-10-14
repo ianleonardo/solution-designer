@@ -28,40 +28,40 @@ def test_chunk_text_splits_with_overlap_and_handles_empty():
 
 
 def test_upload_indexes_chunks_and_delete_removes_them(client):
-    maker = login(client, "Maker")
-    project_id = _project(client, maker)
-    uploaded = _upload(client, maker, project_id, "brd.md", "# Settlement\n" + "The platform settles trades nightly. " * 80)
+    writer = login(client, "Write")
+    project_id = _project(client, writer)
+    uploaded = _upload(client, writer, project_id, "brd.md", "# Settlement\n" + "The platform settles trades nightly. " * 80)
     assert uploaded.status_code == 200, uploaded.text
     body = uploaded.json()
     assert body["chunk_count"] > 1
     assert body["indexed"] is False  # no embedding model configured, keyword search only
-    listed = client.get(f"/api/projects/{project_id}/references", headers=auth(maker)).json()
+    listed = client.get(f"/api/projects/{project_id}/references", headers=auth(writer)).json()
     assert listed[0]["doc_id"] == body["doc_id"]
-    assert client.get(f"/api/projects/{project_id}/baselines", headers=auth(maker)).status_code == 200
-    deleted = client.delete(f"/api/projects/{project_id}/references/{body['doc_id']}", headers=auth(maker))
+    assert client.get(f"/api/projects/{project_id}/baselines", headers=auth(writer)).status_code == 200
+    deleted = client.delete(f"/api/projects/{project_id}/references/{body['doc_id']}", headers=auth(writer))
     assert deleted.status_code == 200
     assert db.fetchone("SELECT COUNT(*) AS n FROM project_rag_chunks")["n"] == 0
 
 
 def test_retrieval_is_scoped_to_the_project(client):
-    maker = login(client, "Maker")
-    first = _project(client, maker, "First")
-    second = _project(client, maker, "Second")
-    _upload(client, maker, first, "a.md", "Settlement uses the SWIFT gateway for cross border payments.")
-    _upload(client, maker, second, "b.md", "Settlement uses the SWIFT gateway at Contoso bank only.")
+    writer = login(client, "Write")
+    first = _project(client, writer, "First")
+    second = _project(client, writer, "Second")
+    _upload(client, writer, first, "a.md", "Settlement uses the SWIFT gateway for cross border payments.")
+    _upload(client, writer, second, "b.md", "Settlement uses the SWIFT gateway at Contoso bank only.")
     hits = project_rag.retrieve(first, "SWIFT gateway settlement")
     assert hits and {hit["file_name"] for hit in hits} == {"a.md"}
     assert project_rag.retrieve(first, "unrelated zebra") == []
 
 
 def test_role_rules_for_references(client):
-    maker = login(client, "Maker")
-    project_id = _project(client, maker)
-    for role in ("Viewer", "Admin"):
+    writer = login(client, "Write")
+    project_id = _project(client, writer)
+    for role in ("Read", "Admin"):
         assert _upload(client, login(client, role), project_id, "x.md", "text").status_code == 403
-    uploaded = _upload(client, maker, project_id, "x.md", "text").json()
-    assert client.delete(f"/api/projects/{project_id}/references/{uploaded['doc_id']}", headers=auth(login(client, "Viewer"))).status_code == 403
-    assert client.get(f"/api/projects/{project_id}/references", headers=auth(login(client, "Viewer"))).status_code == 200
+    uploaded = _upload(client, writer, project_id, "x.md", "text").json()
+    assert client.delete(f"/api/projects/{project_id}/references/{uploaded['doc_id']}", headers=auth(login(client, "Read"))).status_code == 403
+    assert client.get(f"/api/projects/{project_id}/references", headers=auth(login(client, "Read"))).status_code == 200
 
 
 def test_generation_prompt_uses_project_references_and_inventory(client, monkeypatch):
@@ -77,14 +77,14 @@ def test_generation_prompt_uses_project_references_and_inventory(client, monkeyp
         return json.dumps({"blocks": [{"type": "prose", "markdown": "ok"}]})
 
     monkeypatch.setattr("app.services.llm.complete", fake_complete)
-    maker = login(client, "Maker")
-    project_id = _project(client, maker)
-    _upload(client, maker, project_id, "brd.md", "Housekeeping archives ledger data after seven years using the Quokka scheduler.")
-    response = client.post(f"/api/projects/{project_id}/sections/housekeeping/regenerate", headers=auth(maker))
+    writer = login(client, "Write")
+    project_id = _project(client, writer)
+    _upload(client, writer, project_id, "brd.md", "Housekeeping archives ledger data after seven years using the Quokka scheduler.")
+    response = client.post(f"/api/projects/{project_id}/sections/housekeeping/regenerate", headers=auth(writer))
     if response.status_code == 404:
-        templates = client.get(f"/api/projects/{project_id}/workspace", headers=auth(maker)).json()["templates"]
+        templates = client.get(f"/api/projects/{project_id}/workspace", headers=auth(writer)).json()["templates"]
         slug = next(item["template_id"] for item in templates if "housekeeping" in item["template_id"] or "housekeeping" in item["section_name"].lower())
-        response = client.post(f"/api/projects/{project_id}/sections/{slug}/regenerate", headers=auth(maker))
+        response = client.post(f"/api/projects/{project_id}/sections/{slug}/regenerate", headers=auth(writer))
     assert response.status_code == 200, response.text
     assert "PROJECT_REFERENCES" in prompts[-1]
     # The global prompt is format-neutral, so generation adds its own grounding and JSON rules.
@@ -94,9 +94,9 @@ def test_generation_prompt_uses_project_references_and_inventory(client, monkeyp
 
 
 def test_startup_indexes_documents_that_predate_project_rag(client):
-    maker = login(client, "Maker")
-    project_id = _project(client, maker)
-    uploaded = _upload(client, maker, project_id, "old.md", "Legacy reference about reconciliation jobs.").json()
+    writer = login(client, "Write")
+    project_id = _project(client, writer)
+    uploaded = _upload(client, writer, project_id, "old.md", "Legacy reference about reconciliation jobs.").json()
     db.exec_sql("DELETE FROM project_rag_chunks")
     assert project_rag.index_missing() == 1
     assert project_rag.retrieve(project_id, "reconciliation jobs")[0]["doc_id"] == uploaded["doc_id"]
@@ -104,8 +104,8 @@ def test_startup_indexes_documents_that_predate_project_rag(client):
 
 
 def test_deleting_a_project_removes_its_chunks(client):
-    maker = login(client, "Maker")
-    project_id = _project(client, maker)
-    _upload(client, maker, project_id, "x.md", "Some reference text about payments.")
-    assert client.delete(f"/api/projects/{project_id}", headers=auth(maker)).status_code == 200
+    writer = login(client, "Write")
+    project_id = _project(client, writer)
+    _upload(client, writer, project_id, "x.md", "Some reference text about payments.")
+    assert client.delete(f"/api/projects/{project_id}", headers=auth(writer)).status_code == 200
     assert db.fetchone("SELECT COUNT(*) AS n FROM project_rag_chunks")["n"] == 0

@@ -1,6 +1,7 @@
 from app.content import sanitize_content
 from app.flow import (
     DEFAULT_FLOWCHART,
+    STARTER_SEQUENCE,
     default_flowchart,
     flow_to_mermaid,
     flowchart_to_mermaid,
@@ -138,49 +139,44 @@ def _section(block):
     return templates
 
 
-def test_sanitize_keeps_a_drawn_flowchart_and_rebuilds_the_text_from_it():
-    drawn = {
-        "direction": "LR",
-        "nodes": [
-            {"id": "a", "position": {"x": 0, "y": 0}, "data": {"label": "One", "shape": "rect"}},
-            {"id": "b", "position": {"x": 240, "y": 0}, "data": {"label": "Two", "shape": "round"}},
-        ],
-        "edges": [{"id": "e1", "source": "a", "target": "b", "label": "go"}],
-    }
-    content = {"sections": {"t": {"blocks": [{"type": "diagram", "mermaid": "stale text", "flow": drawn}]}}}
+def test_the_mermaid_text_is_the_source_and_no_drawing_is_stored():
+    drawn = {"direction": "LR", "nodes": [{"id": "a", "position": {"x": 0, "y": 0}, "data": {"label": "Old", "shape": "rect"}}], "edges": []}
+    content = {"sections": {"t": {"blocks": [{"type": "diagram", "mermaid": "flowchart LR\n  X --> Y", "flow": drawn}]}}}
     block = sanitize_content(content, _section({"type": "diagram", "sequence": False}))["sections"]["t"]["blocks"][0]
-    assert block["flow"] == drawn
-    assert block["mermaid"] == flowchart_to_mermaid(drawn) and "stale" not in block["mermaid"]
+    assert block == {"type": "diagram", "sequence": False, "mermaid": "flowchart LR\n  X --> Y"}
 
 
-def test_sanitize_reads_old_flowcharts_from_their_text_and_keeps_unsupported_text():
-    old = {"sections": {"t": {"blocks": [{"type": "diagram", "mermaid": "flowchart LR\n  A[One] --> B[Two]", "flow": None}]}}}
-    block = sanitize_content(old, _section({"type": "diagram", "sequence": False}))["sections"]["t"]["blocks"][0]
-    assert block["mermaid"] == "flowchart LR\n  A[One] --> B[Two]"
-    assert [n["data"]["label"] for n in block["flow"]["nodes"]] == ["One", "Two"]
-    odd = {"sections": {"t": {"blocks": [{"type": "diagram", "mermaid": "flowchart LR\n  subgraph s\n A-->B\n end"}]}}}
-    kept = sanitize_content(odd, _section({"type": "diagram", "sequence": False}))["sections"]["t"]["blocks"][0]
-    assert "subgraph" in kept["mermaid"] and kept["flow"] is None
+def test_sanitize_keeps_any_mermaid_text_and_starts_blank_blocks_with_a_starter():
+    er = "erDiagram\n  CUSTOMER ||--o{ ORDER : places"
+    for sequence in (False, True):
+        block = sanitize_content({"sections": {"t": {"blocks": [{"type": "diagram", "mermaid": er}]}}}, _section({"type": "diagram", "sequence": sequence}))["sections"]["t"]["blocks"][0]
+        assert block["mermaid"] == er
     blank = sanitize_content({}, _section({"type": "diagram", "sequence": False}))["sections"]["t"]["blocks"][0]
-    assert blank["mermaid"] == DEFAULT_FLOWCHART and len(blank["flow"]["nodes"]) == 3
+    assert blank["mermaid"] == DEFAULT_FLOWCHART and "flow" not in blank
+    blank = sanitize_content({}, _section({"type": "diagram", "sequence": True}))["sections"]["t"]["blocks"][0]
+    assert blank["mermaid"] == STARTER_SEQUENCE
+    fenced = {"sections": {"t": {"blocks": [{"type": "diagram", "mermaid": "```mermaid\nflowchart LR\n A-->B\n```\n"}]}}}
+    assert sanitize_content(fenced, _section({"type": "diagram", "sequence": False}))["sections"]["t"]["blocks"][0]["mermaid"] == "flowchart LR\n A-->B"
 
 
-def test_switching_a_block_between_flowchart_and_sequence_starts_the_new_kind_afresh():
-    chart = {"sections": {"t": {"blocks": [{"type": "diagram", "mermaid": "flowchart LR\n A --> B"}]}}}
-    seq = sanitize_content(chart, _section({"type": "diagram", "sequence": True}))["sections"]["t"]["blocks"][0]
-    assert seq["mermaid"].startswith("sequenceDiagram") and seq["flow"]["nodes"]
-    back = sanitize_content({"sections": {"t": {"blocks": [seq]}}}, _section({"type": "diagram", "sequence": False}))["sections"]["t"]["blocks"][0]
-    assert back["mermaid"].startswith("flowchart") and back["flow"]["nodes"][0]["data"]["shape"] == "rect"
+def test_a_flowchart_block_can_hold_a_sequence_diagram_and_the_other_way_round():
+    seq_text = "sequenceDiagram\n  A->>B: hi"
+    in_flowchart = sanitize_content({"sections": {"t": {"blocks": [{"type": "diagram", "mermaid": seq_text}]}}}, _section({"type": "diagram", "sequence": False}))
+    assert in_flowchart["sections"]["t"]["blocks"][0]["mermaid"] == seq_text
+    chart = "flowchart LR\n A --> B"
+    in_sequence = sanitize_content({"sections": {"t": {"blocks": [{"type": "diagram", "mermaid": chart}]}}}, _section({"type": "diagram", "sequence": True}))
+    assert in_sequence["sections"]["t"]["blocks"][0]["mermaid"] == chart
 
 
-def test_generated_flowcharts_get_a_drawing():
+def test_generated_diagrams_keep_their_text_and_drop_code_fences():
     from app.services.generate import _apply
 
     blocks = _apply([{"type": "diagram", "sequence": False}], {"blocks": [{"type": "diagram", "mermaid": "flowchart LR\n A[Gateway] --> B[Core]"}]}, 100)
-    assert blocks[0]["mermaid"] == "flowchart LR\n A[Gateway] --> B[Core]"
-    assert [n["data"]["label"] for n in blocks[0]["flow"]["nodes"]] == ["Gateway", "Core"]
-    blocks = _apply([{"type": "diagram", "sequence": False}], {"blocks": [{"type": "diagram", "mermaid": "flowchart LR\n subgraph x\n A-->B\n end"}]}, 100)
-    assert blocks[0]["flow"] is None
+    assert blocks[0] == {"type": "diagram", "sequence": False, "mermaid": "flowchart LR\n A[Gateway] --> B[Core]"}
+    fenced = _apply([{"type": "diagram", "sequence": False}], {"blocks": [{"type": "diagram", "mermaid": "```mermaid\nclassDiagram\n  A <|-- B\n```"}]}, 100)
+    assert fenced[0]["mermaid"] == "classDiagram\n  A <|-- B"
+    empty = _apply([{"type": "diagram", "sequence": True}], {"blocks": []}, 100)
+    assert empty[0]["mermaid"] == STARTER_SEQUENCE
 
 
 def test_sequence_text_is_read_strictly():
@@ -198,11 +194,11 @@ def test_sequence_text_is_read_strictly():
         assert mermaid_to_flow(source) is None, source
 
 
-def test_sanitize_reads_a_sequence_diagram_from_its_text():
+def test_sanitize_keeps_a_sequence_diagram_text():
     text = "sequenceDiagram\n  A->>B: hi"
-    content = {"sections": {"t": {"blocks": [{"type": "diagram", "mermaid": text, "flow": None}]}}}
+    content = {"sections": {"t": {"blocks": [{"type": "diagram", "mermaid": text}]}}}
     block = sanitize_content(content, _section({"type": "diagram", "sequence": True}))["sections"]["t"]["blocks"][0]
-    assert block["mermaid"] == text and [n["id"] for n in block["flow"]["nodes"]] == ["A", "B"]
+    assert block["mermaid"] == text
 
 
 def test_sequence_participants_may_have_spaces_in_their_names():

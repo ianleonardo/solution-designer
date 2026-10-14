@@ -89,9 +89,25 @@ def render_html(project_name: str, templates: list[dict], content: dict) -> str:
 
 _PLACEHOLDER = re.compile(r"<p>@@DIAGRAM(\d+)@@</p>")
 
+# The PDF sets its text at 75% of the size the HTML page uses (body 16px, table cells 14px, code 13px).
+PDF_FONT_SCALE = 0.75
 
-def _render_html(project_name: str, templates: list[dict], content: dict, placeholders: bool = False) -> tuple[str, list]:
-    """The page as HTML. Diagrams are drawn as inline SVG; with `placeholders` they are marked for the FPDF fallback."""
+
+def _px(size: float) -> str:
+    return f"{size * PDF_FONT_SCALE:g}px"
+
+
+def _pdf_css() -> str:
+    return f"body{{font-size:{_px(16)};}}th,td{{font-size:{_px(14)};}}pre{{font-size:{_px(13)};}}"
+
+
+def _render_html(
+    project_name: str, templates: list[dict], content: dict, placeholders: bool = False, pdf: bool = False
+) -> tuple[str, list]:
+    """The page as HTML. Diagrams are drawn as inline SVG; with `placeholders` they are marked for the FPDF fallback.
+
+    With `pdf` the text is set smaller, for the PDF only; the HTML page and preview keep their sizes.
+    """
     scenes: list = []
     parts = [
         "<!DOCTYPE html><html><head><meta charset=\"utf-8\"><title>",
@@ -105,6 +121,7 @@ def _render_html(project_name: str, templates: list[dict], content: dict, placeh
         "pre{background:#0e1626;color:#dbe1ff;padding:1rem;overflow:auto;}",
         "figure.diagram{margin:1rem 0;text-align:center;}",
         "figure.diagram svg{max-width:100%;height:auto;}",
+        _pdf_css() if pdf else "",
         "</style></head><body>",
         f"<h1>{html.escape(project_name)}</h1>",
     ]
@@ -156,11 +173,11 @@ def _render_html(project_name: str, templates: list[dict], content: dict, placeh
 
 def render_pdf_document(project_name: str, templates: list[dict], content: dict) -> bytes:
     """The PDF of a document: WeasyPrint draws the SVG diagrams; the FPDF fallback draws them from the same shapes."""
-    page, _ = _render_html(project_name, templates, content)
+    page, _ = _render_html(project_name, templates, content, pdf=True)
     rendered = _render_pdf_weasyprint(page)
     if rendered is not None:
         return rendered
-    page, scenes = _render_html(project_name, templates, content, placeholders=True)
+    page, scenes = _render_html(project_name, templates, content, placeholders=True, pdf=True)
     return _render_pdf_fallback(page, scenes)
 
 
@@ -266,6 +283,22 @@ def _flatten_cells(soup) -> None:
             cell.append(text)
 
 
+BODY_PT = 10 * PDF_FONT_SCALE
+HEADING_PT = 14 * PDF_FONT_SCALE
+SUBHEADING_PT = 11 * PDF_FONT_SCALE
+
+
+def _scaled_tag_styles() -> dict:
+    """FPDF's built-in heading sizes (h1 24pt, h2 18pt, ...), scaled down with the rest of the text."""
+    from fpdf.html import DEFAULT_TAG_STYLES
+
+    return {
+        tag: style.replace(font_size_pt=style.size_pt * PDF_FONT_SCALE)
+        for tag, style in DEFAULT_TAG_STYLES.items()
+        if tag in {"h1", "h2", "h3", "h4", "h5", "h6", "title"} and style.size_pt
+    }
+
+
 def _render_pdf_fallback(page: str, scenes: list | None = None) -> bytes:
     from bs4 import BeautifulSoup
     from fpdf import FPDF
@@ -277,13 +310,13 @@ def _render_pdf_fallback(page: str, scenes: list | None = None) -> bytes:
     pdf = FPDF()
     pdf.set_auto_page_break(auto=True, margin=15)
     pdf.add_page()
-    pdf.set_font("Helvetica", size=10)
+    pdf.set_font("Helvetica", size=BODY_PT)
     try:
         pieces = _PLACEHOLDER.split(fragment)
         for index, piece in enumerate(pieces):
             if index % 2 == 0:
                 if piece.strip():
-                    pdf.write_html(piece)
+                    pdf.write_html(piece, tag_styles=_scaled_tag_styles())
             elif scenes and int(piece) < len(scenes):
                 pdf.ln(2)
                 diagrams.draw_pdf(pdf, scenes[int(piece)], pdf.w - pdf.l_margin - pdf.r_margin)
@@ -300,7 +333,7 @@ def _render_pdf_plain(soup) -> bytes:
     pdf = FPDF()
     pdf.set_auto_page_break(auto=True, margin=15)
     pdf.add_page()
-    pdf.set_font("Helvetica", size=10)
+    pdf.set_font("Helvetica", size=BODY_PT)
     body = soup.body or soup
     for element in body.find_all(["h1", "h2", "h3", "h4", "h5", "h6", "p", "li", "tr", "pre"]):
         if element.name == "tr":
@@ -311,11 +344,11 @@ def _render_pdf_plain(soup) -> bytes:
         if not text:
             continue
         if element.name.startswith("h"):
-            pdf.set_font("Helvetica", style="B", size=14 if element.name in ("h1", "h2") else 11)
+            pdf.set_font("Helvetica", style="B", size=HEADING_PT if element.name in ("h1", "h2") else SUBHEADING_PT)
         else:
-            pdf.set_font("Helvetica", size=10)
+            pdf.set_font("Helvetica", size=BODY_PT)
         try:
-            pdf.multi_cell(0, 5, text, new_x="LMARGIN", new_y="NEXT")
+            pdf.multi_cell(0, 5 * PDF_FONT_SCALE, text, new_x="LMARGIN", new_y="NEXT")
         except FPDFException as exc:
             raise AppError(500, "Could not build the PDF.") from exc
     return bytes(pdf.output())

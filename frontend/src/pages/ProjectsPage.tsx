@@ -41,7 +41,7 @@ export function ProjectsPage() {
         onChanged={load}
         emptyLabel="No projects found."
         toolbar={
-          user.role_name === "Maker" || user.role_name === "Checker" ? (
+          user.role_name === "Write" ? (
             <button type="button" className="btn btn-primary" onClick={() => setCreating(true)}>
               Create project
             </button>

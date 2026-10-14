@@ -94,6 +94,16 @@ export function formatDate(value: string | null | undefined) {
   return `${String(date.getDate()).padStart(2, "0")}-${MONTHS[date.getMonth()]} ${date.getFullYear()}`;
 }
 
+/** Date and time for the audit log, in the reader's time zone: 14-Oct 2026 23:46:05. */
+export function formatDateTime(value: string | null | undefined) {
+  if (!value) return "—";
+  const hasZone = /(?:Z|[+-]\d{2}:?\d{2})$/i.test(value);
+  const date = new Date(/^\d{4}-\d{2}-\d{2}T/.test(value) && !hasZone ? `${value}Z` : value);
+  if (Number.isNaN(date.getTime())) return value;
+  const pad = (number: number) => String(number).padStart(2, "0");
+  return `${pad(date.getDate())}-${MONTHS[date.getMonth()]} ${date.getFullYear()} ${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
+}
+
 export function formatBytes(size: number) {
   if (size < 1024) return `${size} B`;
   if (size < 1024 * 1024) return `${(size / 1024).toFixed(1)} KB`;

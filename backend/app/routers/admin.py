@@ -1,9 +1,18 @@
-from fastapi import APIRouter, Depends, File, Form, UploadFile
+from fastapi import APIRouter, Depends, File, Form, Query, UploadFile
 from fastapi.responses import FileResponse
 
 from app import cache, db
 from app.deps import current_user, require_admin
-from app.services import guidelines, interfaces, layouts, llm_settings, projects, reindex, systems
+from app.services import (
+    audit,
+    guidelines,
+    interfaces,
+    layouts,
+    llm_settings,
+    projects,
+    reindex,
+    systems,
+)
 
 router = APIRouter(tags=["admin"])
 
@@ -83,6 +92,26 @@ def put_settings(body: dict, user: dict = Depends(require_admin)):
         str(body.get("active_provider") or ""),
         str(body.get("global_system_prompt") or ""),
     )
+
+
+@router.get("/audit")
+def audit_log(
+    user_filter: str = Query("", alias="user"),
+    action: str = "",
+    entity_type: str = "",
+    since: str = "",
+    until: str = "",
+    limit: int = 2000,
+    user: dict = Depends(require_admin),
+):
+    del user
+    return audit.list_entries(user_filter, action, entity_type, since, until, limit)
+
+
+@router.get("/audit/actions")
+def audit_actions(user: dict = Depends(require_admin)):
+    del user
+    return audit.known_actions()
 
 
 @router.get("/reindex/status")

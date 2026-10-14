@@ -5,6 +5,12 @@ DEFAULT_FLOWCHART = (
 )
 
 
+# What a new diagram block starts with. Both are plain Mermaid text that the editor shows as it is.
+STARTER_SEQUENCE = (
+    "sequenceDiagram\n    actor User as User\n    participant System as System\n    User->>System: Request\n    System-->>User: Response"
+)
+
+
 def default_sequence_flow() -> dict:
     return {
         "nodes": [

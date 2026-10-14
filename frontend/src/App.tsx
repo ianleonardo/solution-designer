@@ -5,6 +5,7 @@ import { DashboardPage } from "./pages/DashboardPage";
 import { KnowledgePage } from "./pages/KnowledgePage";
 import { LoginPage } from "./pages/LoginPage";
 import { ProjectsPage } from "./pages/ProjectsPage";
+import { AuditLogPage } from "./pages/settings/AuditLogPage";
 import { LayoutEditorPage } from "./pages/settings/LayoutEditorPage";
 import { LayoutsPage } from "./pages/settings/LayoutsPage";
 import { LlmPage } from "./pages/settings/LlmPage";
@@ -42,6 +43,7 @@ export function App() {
             <Route path="/settings/layouts" element={<LayoutsPage />} />
             <Route path="/settings/layouts/:layoutId" element={<LayoutEditorPage />} />
             <Route path="/settings/users" element={<UsersPage />} />
+            <Route path="/settings/audit" element={<AuditLogPage />} />
           </Route>
         </Route>
       </Route>

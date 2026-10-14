@@ -34,5 +34,5 @@ def test_settings_cache_refreshes_after_admin_write(client, monkeypatch):
     cached = client.get("/api/settings", headers=headers)
     assert cached.json()["active_provider"] == "gemini"
     assert calls["n"] == 2
-    maker = login(client, "Maker")
-    assert client.put("/api/templates/order", json={"template_ids": []}, headers=auth(maker)).status_code == 403
+    writer = login(client, "Write")
+    assert client.put("/api/templates/order", json={"template_ids": []}, headers=auth(writer)).status_code == 403

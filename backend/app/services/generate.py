@@ -3,8 +3,7 @@ import re
 
 from app import db
 from app.config import DIAGRAM_RULES, GENERATION_RULES
-from app.content import header_block, image_block
-from app.flow import DEFAULT_FLOWCHART, flow_to_mermaid, mermaid_to_flow, mermaid_to_flowchart
+from app.content import clean_mermaid, header_block, image_block, number_rows, starter_diagram
 from app.services import llm
 
 
@@ -77,23 +76,11 @@ def _apply(schema_blocks: list[dict], payload: dict, max_words: int, existing: l
                 rows.append(cells[: len(columns)])
             if not rows:
                 rows = [[""] * len(columns)]
-            result.append({"type": "table", "columns": columns, "rows": rows})
+            result.append({"type": "table", "columns": columns, "rows": number_rows(columns, rows)})
         elif kind == "diagram":
             sequence = bool(schema.get("sequence"))
-            mermaid = _first_text(found, "mermaid", "code", "diagram", "source")
-            flow = found.get("flow")
-            if sequence:
-                if mermaid and not flow:
-                    flow = mermaid_to_flow(mermaid)
-                if flow and not mermaid:
-                    mermaid = flow_to_mermaid(flow)
-                if not mermaid:
-                    flow = mermaid_to_flow("sequenceDiagram\n    actor User\n    participant System")
-                    mermaid = flow_to_mermaid(flow) if flow else "sequenceDiagram"
-            else:
-                mermaid = mermaid or DEFAULT_FLOWCHART
-                flow = mermaid_to_flowchart(mermaid)
-            result.append({"type": "diagram", "sequence": sequence, "mermaid": mermaid, "flow": flow})
+            mermaid = clean_mermaid(_first_text(found, "mermaid", "code", "diagram", "source")) or starter_diagram(sequence)
+            result.append({"type": "diagram", "sequence": sequence, "mermaid": mermaid})
     return result
 
 

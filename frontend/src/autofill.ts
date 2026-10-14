@@ -1,7 +1,6 @@
-import { DEFAULT_FLOWCHART, defaultFlow, defaultFlowchart, flowToMermaid, flowchartToMermaid } from "./flow";
+import { STARTER_DIAGRAMS } from "./mermaidTemplates";
+import { serialColumn } from "./tableRows";
 import type { Section, Template } from "./types";
-
-const STARTER_DIAGRAMS = new Set([DEFAULT_FLOWCHART.trim(), flowchartToMermaid(defaultFlowchart()).trim(), flowToMermaid(defaultFlow()).trim()]);
 
 /**
  * True when nobody has written anything in the section yet: only blanks, the layout's starter table rows or the
@@ -15,9 +14,12 @@ export function sectionIsEmpty(section: Section | undefined, template?: Template
     if (block.type === "table") {
       const starter = starters[tableIndex];
       tableIndex += 1;
-      const starterRows = (starter && starter.type === "table" ? starter.rows ?? [] : []).map((row) => row.map(String));
-      const same = JSON.stringify(block.rows.map((row) => row.map(String))) === JSON.stringify(starterRows);
-      if (!same && block.rows.some((row) => row.some((cell) => String(cell).trim()))) return false;
+      // The Serial No column is numbered by the app, so it says nothing about whether anyone wrote in the table.
+      const skip = serialColumn(block.columns);
+      const plain = (row: string[]) => row.filter((_, index) => index !== skip).map(String);
+      const starterRows = (starter && starter.type === "table" ? starter.rows ?? [] : []).map(plain);
+      const same = JSON.stringify(block.rows.map(plain)) === JSON.stringify(starterRows);
+      if (!same && block.rows.some((row) => plain(row).some((cell) => cell.trim()))) return false;
     }
     if (block.type === "diagram") {
       const text = block.mermaid.trim();
