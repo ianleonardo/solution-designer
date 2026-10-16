@@ -76,8 +76,14 @@ select {
 }
 
 .font-headline {
-  font-family: Inter, sans-serif;
+  font-family: "Plus Jakarta Sans", Inter, sans-serif;
   letter-spacing: -0.015em;
+}
+
+.font-wordmark {
+  font-family: "Outfit", "Plus Jakarta Sans", Inter, sans-serif;
+  letter-spacing: -0.03em;
+  font-feature-settings: "ss01" 1, "cv01" 1;
 }
 
 .font-label {
@@ -119,7 +125,51 @@ select {
 
 .field:focus {
   border-color: var(--focus);
-  box-shadow: 0 0 0 2px rgba(224, 242, 254, 0.15);
+  box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.2);
+}
+
+select.field,
+.select-field {
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  appearance: none;
+  cursor: pointer;
+  padding-right: 2.125rem;
+  background-color: var(--inset);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%2364748b' stroke-width='2.25' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 0.625rem center;
+  background-size: 0.95rem 0.95rem;
+  font-weight: 500;
+  transition: border-color 0.15s, box-shadow 0.15s, background-color 0.15s;
+}
+
+.dark select.field,
+.dark .select-field {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23aac7ff' stroke-width='2.25' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+}
+
+.jade select.field,
+.jade .select-field {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%230f6b4f' stroke-width='2.25' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+}
+
+select.field:hover:not(:disabled),
+.select-field:hover:not(:disabled) {
+  border-color: var(--focus);
+}
+
+select.field:disabled,
+.select-field:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+select.field option,
+.select-field option {
+  background: var(--panel);
+  color: var(--ink);
+  font-weight: 400;
 }
 
 input.no-spinner::-webkit-outer-spin-button,

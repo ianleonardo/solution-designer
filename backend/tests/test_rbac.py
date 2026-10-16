@@ -58,21 +58,21 @@ def test_there_is_no_approval_workflow_or_status(client):
     assert "pending_approvals" not in client.get("/api/dashboard", headers=auth(writer)).json()
 
 
-def test_only_admin_write_and_read_roles_exist(client):
+def test_only_admin_analyst_and_viewer_roles_exist(client):
     admin = login(client, "Admin")
-    for role in ("Maker", "Checker", "Viewer"):
+    for role in ("Maker", "Checker", "Write", "Read"):
         response = client.post(
             "/api/users", json={"login_id": "someone", "username": "S", "password": "Password123!", "role_name": role}, headers=auth(admin)
         )
         assert response.status_code == 400
 
 
-def test_legacy_roles_are_migrated_to_write_and_read(client):
+def test_legacy_roles_are_migrated_to_analyst_and_viewer(client):
     from app import db
 
     db.exec_sql("UPDATE users SET role_name = 'Maker' WHERE user_id = 'user-write'")
-    db.exec_sql("UPDATE users SET role_name = 'Checker' WHERE user_id = 'user-admin'")
-    db.exec_sql("UPDATE users SET role_name = 'Viewer' WHERE user_id = 'user-read'")
+    db.exec_sql("UPDATE users SET role_name = 'Write' WHERE user_id = 'user-admin'")
+    db.exec_sql("UPDATE users SET role_name = 'Read' WHERE user_id = 'user-read'")
     db._migrate_roles()
     roles = {row["user_id"]: row["role_name"] for row in db.fetchall("SELECT user_id, role_name FROM users")}
-    assert roles == {"user-write": "Write", "user-admin": "Write", "user-read": "Read"}
+    assert roles == {"user-write": "Analyst", "user-admin": "Analyst", "user-read": "Viewer"}

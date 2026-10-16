@@ -98,7 +98,7 @@ export function AuditLogPage() {
       <div className="flex flex-wrap items-end gap-3">
         <label className="text-sm">
           <span className="block font-label text-[10px] uppercase text-muted">Action</span>
-          <select className="field" value={action} onChange={(event) => setAction(event.target.value)}>
+          <select className="field mt-1 min-w-[11rem]" value={action} onChange={(event) => setAction(event.target.value)}>
             <option value="">All actions</option>
             {actions.map((item) => (
               <option key={item} value={item}>

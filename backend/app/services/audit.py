@@ -27,13 +27,15 @@ LABEL_KEYS = (
     "login_id",
     "system_code",
     "system_name",
+    "table_name",
+    "column_name",
     "file_name",
     "filename",
     "active_provider",
     "format",
 )
 # Words at the end of a route that name an action rather than a thing.
-ACTION_WORDS = {"order", "upload", "validate", "generate", "regenerate", "export", "sections-order", "login"}
+ACTION_WORDS = {"order", "upload", "validate", "generate", "regenerate", "export", "sections-order", "login", "delete-batch"}
 SINGULAR = {
     "projects": "project",
     "documents": "document",
@@ -49,6 +51,8 @@ SINGULAR = {
     "rag": "rag",
     "systems": "system",
     "interfaces": "interface",
+    "tables": "table",
+    "columns": "column",
     "settings": "settings",
     "providers": "provider",
     "auth": "user",
@@ -64,6 +68,8 @@ ID_KEYS = {
     "guideline": "guideline_id",
     "rag": "rag_id",
     "system": "system_code",
+    "table": "table_id",
+    "column": "column_id",
 }
 MAX_TEXT = 200
 MAX_DETAIL = 4000

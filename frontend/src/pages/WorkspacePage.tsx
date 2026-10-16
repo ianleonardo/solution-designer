@@ -51,8 +51,8 @@ export function WorkspacePage() {
   const [deletingSection, setDeletingSection] = useState<Template | null>(null);
   const [structureBusy, setStructureBusy] = useState(false);
   const timer = useRef<number | null>(null);
-  const documentLocked = user?.role_name !== "Write";
-  const canEditStructure = user?.role_name === "Write";
+  const documentLocked = user?.role_name !== "Analyst";
+  const canEditStructure = user?.role_name === "Analyst";
   const canFill = canEditStructure;
 
   useEffect(() => {
@@ -322,7 +322,7 @@ export function WorkspacePage() {
   }
 
   async function commitTitle(nextTitleRaw: string) {
-    if (!data || user?.role_name !== "Write") return;
+    if (!data || user?.role_name !== "Analyst") return;
     const nextTitle = nextTitleRaw.trim();
     if (!nextTitle || nextTitle === data.project.project_name) {
       setTitle(data.project.project_name);
@@ -361,7 +361,7 @@ export function WorkspacePage() {
               className="font-headline text-xl font-semibold bg-transparent border-b border-transparent focus:border-hairline outline-none min-w-[16rem]"
               aria-label="Project title"
               value={title}
-              readOnly={user.role_name !== "Write"}
+              readOnly={user.role_name !== "Analyst"}
               onChange={(event) => setTitle(event.target.value)}
               onBlur={(event) => void commitTitle(event.currentTarget.value)}
               onKeyDown={(event) => {
@@ -565,7 +565,7 @@ export function WorkspacePage() {
         <ReferencesPanel
           projectId={projectId}
           references={data.references}
-          canEdit={user.role_name === "Write"}
+          canEdit={user.role_name === "Analyst"}
           onChange={(references) => setData((current) => (current ? { ...current, references } : current))}
           onClose={() => setReferencesOpen(false)}
         />

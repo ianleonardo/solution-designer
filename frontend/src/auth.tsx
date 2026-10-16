@@ -50,6 +50,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
 
+export function useOptionalAuth() {
+  return useContext(AuthContext);
+}
+
 export function useAuth() {
   const value = useContext(AuthContext);
   if (!value) throw new Error("AuthProvider is missing");

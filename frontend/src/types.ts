@@ -1,4 +1,4 @@
-export type Role = "Admin" | "Write" | "Read";
+export type Role = "Admin" | "Analyst" | "Viewer";
 
 export type Block =
   | { type: "header"; text: string; level: number }
@@ -209,4 +209,49 @@ export type AuditEntry = {
   summary: string;
   detail: Record<string, unknown> | null;
   ip_address: string | null;
+};
+
+export type TableCountry = "Singapore" | "Malaysia" | "Thailand" | "Indonesia" | "Vietnam";
+export type TableDatabase = "PIB" | "MBK" | "SMS" | "NTN" | "LCM";
+
+export type KbColumnRecord = {
+  column_id: string;
+  table_id: string;
+  column_name: string;
+  data_type: string;
+  is_null: string;
+  primary_key: string;
+  foreign_key: string;
+  description: string;
+  created_at: string;
+  last_modified: string;
+};
+
+export type KbTableRecord = {
+  table_id: string;
+  country: TableCountry;
+  database_name: TableDatabase;
+  schema_name: string;
+  table_name: string;
+  description: string;
+  column_count: number;
+  created_at: string;
+  last_modified: string;
+  columns?: KbColumnRecord[];
+};
+
+export type MissingColumnItem = {
+  column_id: string;
+  table_id: string;
+  table_name: string;
+  column_name: string;
+  data_type: string;
+  description: string;
+};
+
+export type TablesUploadResponse = {
+  tables: KbTableRecord[];
+  uploaded_tables: number;
+  uploaded_columns: number;
+  missing_columns: MissingColumnItem[];
 };

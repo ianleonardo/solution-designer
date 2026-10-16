@@ -8,7 +8,7 @@ import { ProjectDialog } from "./ProjectDialog";
 
 function badgeClass(role: string) {
   if (role === "Admin") return "text-gold border-gold";
-  if (role === "Write") return "text-celadon";
+  if (role === "Analyst") return "text-celadon";
   return "text-muted";
 }
 
@@ -29,7 +29,7 @@ export function ProjectTable({
 }) {
   const [editing, setEditing] = useState<Project | null>(null);
   const [deleting, setDeleting] = useState<Project | null>(null);
-  const canManageProjects = role === "Write";
+  const canManageProjects = role === "Analyst";
 
   async function saveEdit(name: string, description: string) {
     if (!editing) return;

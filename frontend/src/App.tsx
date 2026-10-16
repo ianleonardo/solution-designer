@@ -35,9 +35,9 @@ export function App() {
           <Route path="/projects" element={<ProjectsPage />} />
           <Route path="/projects/:projectId" element={<WorkspacePage />} />
           <Route path="/projects/:projectId/documents/:documentId" element={<WorkspacePage />} />
+          <Route path="/knowledge" element={<Navigate to="/knowledge/capabilities" replace />} />
+          <Route path="/knowledge/:kind" element={<KnowledgePage />} />
           <Route element={<RequireAdmin />}>
-            <Route path="/knowledge" element={<Navigate to="/knowledge/capabilities" replace />} />
-            <Route path="/knowledge/:kind" element={<KnowledgePage />} />
             <Route path="/settings" element={<Navigate to="/settings/llm" replace />} />
             <Route path="/settings/llm" element={<LlmPage />} />
             <Route path="/settings/layouts" element={<LayoutsPage />} />

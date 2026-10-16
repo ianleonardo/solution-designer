@@ -132,12 +132,15 @@ def test_delete_removes_chunks_and_file(client):
     assert client.delete("/api/guidelines/GL-0001", headers=auth(admin)).status_code == 404
 
 
-def test_only_admin_can_manage_guidelines(client):
-    for role in ("Write", "Read"):
-        token = login(client, role)
-        assert client.get("/api/guidelines", headers=auth(token)).status_code == 403
-        assert _add(client, token).status_code == 403
-        assert client.delete("/api/guidelines/GL-0001", headers=auth(token)).status_code == 403
+def test_analyst_can_manage_and_viewer_can_only_view_guidelines(client):
+    analyst = login(client, "Analyst")
+    assert client.get("/api/guidelines", headers=auth(analyst)).status_code == 200
+    assert _add(client, analyst).status_code == 200
+    viewer = login(client, "Viewer")
+    assert client.get("/api/guidelines", headers=auth(viewer)).status_code == 200
+    assert _add(client, viewer).status_code == 403
+    assert client.delete("/api/guidelines/GL-0001", headers=auth(viewer)).status_code == 403
+    assert client.delete("/api/guidelines/GL-0001", headers=auth(analyst)).status_code == 200
 
 
 def test_generic_knowledge_upload_no_longer_creates_guidelines(client):
@@ -210,11 +213,11 @@ def test_pdf_download_keeps_the_original_bytes(client):
     assert response.content == data and response.headers["content-type"] == "application/pdf"
 
 
-def test_download_is_admin_only_and_missing_for_converted_entries(client):
+def test_download_is_available_to_authenticated_users_and_missing_for_converted_entries(client):
     admin = login(client, "Admin")
     _add(client, admin)
-    for role in ("Write", "Read"):
-        assert client.get("/api/guidelines/GL-0001/download", headers=auth(login(client, role))).status_code == 403
+    for role in ("Analyst", "Viewer"):
+        assert client.get("/api/guidelines/GL-0001/download", headers=auth(login(client, role))).status_code == 200
     db.exec_sql("UPDATE guidelines SET storage_path = '' WHERE guideline_id = 'GL-0001'")
     listed = client.get("/api/guidelines", headers=auth(admin)).json()
     assert listed[0]["has_file"] is False

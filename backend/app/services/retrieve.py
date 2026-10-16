@@ -61,6 +61,7 @@ def retrieve(query: str, limit: int = 6) -> list[dict]:
     scored.extend(_guideline_hits(query_tokens, query_vector))
     scored.extend(_system_hits(query_tokens, query_vector))
     scored.extend(_interface_hits(query_tokens, query_vector))
+    scored.extend(_table_hits(query_tokens, query_vector))
     scored.sort(key=lambda item: item["score"], reverse=True)
     top = scored[:limit]
     return top + _related_systems(top)
@@ -101,6 +102,31 @@ def _interface_hits(query_tokens: set[str], query_vector: list[float] | None) ->
     return hits
 
 
+def _table_hits(query_tokens: set[str], query_vector: list[float] | None) -> list[dict]:
+    """Database tables and their columns from kb_tables."""
+    from app.services import tables
+
+    hits = []
+    for row in db.fetchall("SELECT * FROM kb_tables"):
+        text = tables.text_for(row)
+        score = score_text(query_tokens, text, query_vector, row.get("embedding"))
+        if row["table_name"].lower() in query_tokens or row["database_name"].lower() in query_tokens:
+            score += 2
+        if score <= 0:
+            continue
+        hits.append(
+            _entry(
+                f"{row['database_name']}.{row['schema_name']}.{row['table_name']}",
+                "Tables",
+                row["table_name"],
+                text[:800],
+                {"country": row["country"], "database": row["database_name"], "schema": row["schema_name"]},
+                score,
+            )
+        )
+    return hits
+
+
 def _related_systems(hits: list[dict], most: int = 3) -> list[dict]:
     """The direct upstream and downstream systems of the best matching systems, so 'what is downstream of X' is answered fully."""
     from app.services import systems
@@ -119,7 +145,7 @@ def _related_systems(hits: list[dict], most: int = 3) -> list[dict]:
     return related
 
 
-_ORDER = ("Systems", "Interfaces", "Capabilities", "Table Definitions", "Screens", "Batches", "Reports", "Guidelines", "Bitbucket Repos")
+_ORDER = ("Systems", "Interfaces", "Tables", "Capabilities", "Table Definitions", "Screens", "Batches", "Reports", "Guidelines", "Bitbucket Repos")
 
 
 def summary() -> str:
@@ -133,6 +159,9 @@ def summary() -> str:
     channels = db.fetchall("SELECT channel, COUNT(*) AS c FROM interfaces GROUP BY channel ORDER BY channel")
     if channels:
         lines.append("Interfaces: " + ", ".join(f"{row['channel']} {row['c']}" for row in channels))
+    kb_tables = db.fetchall("SELECT database_name, COUNT(*) AS c FROM kb_tables GROUP BY database_name ORDER BY database_name")
+    if kb_tables:
+        lines.append("Tables: " + ", ".join(f"{row['database_name']} {row['c']}" for row in kb_tables))
     for row in db.fetchall("SELECT inventory_type, COUNT(*) AS c FROM rag_inventory GROUP BY inventory_type ORDER BY inventory_type"):
         lines.append(f"{row['inventory_type']}: {row['c']} entries")
     guidelines = db.fetchone("SELECT COUNT(*) AS c FROM guidelines")
@@ -154,7 +183,7 @@ def format_context(hits: list[dict], limit_chars: int = 12000) -> str:
         out.append(header)
         used += len(header) + 1
         for hit in groups[name]:
-            if hit["inventory_type"] in ("Systems", "Interfaces"):
+            if hit["inventory_type"] in ("Systems", "Interfaces", "Tables"):
                 body = hit["raw_content"]
             else:
                 extra = {key: value for key, value in (hit.get("parsed") or {}).items() if value}

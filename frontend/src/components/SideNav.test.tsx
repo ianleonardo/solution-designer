@@ -4,16 +4,16 @@ import { MemoryRouter } from "react-router-dom";
 import { SideNav } from "./SideNav";
 
 describe("SideNav", () => {
-  it("hides admin destinations from a reader", () => {
+  it("shows Project Documents and Knowledge Base to a Viewer, and hides Settings", () => {
     render(
       <MemoryRouter>
-        <SideNav role="Read" />
+        <SideNav role="Viewer" />
       </MemoryRouter>,
     );
     expect(screen.getByText("Dashboard")).toBeTruthy();
-    expect(screen.getByText("Projects")).toBeTruthy();
+    expect(screen.getByText("Project Documents")).toBeTruthy();
+    expect(screen.getByRole("button", { name: /Knowledge Base/ })).toBeTruthy();
     expect(screen.queryByText("Settings")).toBeNull();
-    expect(screen.queryByText("Knowledge Base")).toBeNull();
     expect(screen.queryByText("Audit Log")).toBeNull();
   });
 
@@ -27,7 +27,7 @@ describe("SideNav", () => {
     unmount();
     render(
       <MemoryRouter>
-        <SideNav role="Write" />
+        <SideNav role="Analyst" />
       </MemoryRouter>,
     );
     expect(screen.queryByRole("link", { name: "Audit Log" })).toBeNull();
@@ -51,7 +51,7 @@ describe("SideNav", () => {
     );
     expect(screen.queryByRole("link", { name: "Screens" })).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: /Knowledge Base/ }));
-    for (const label of ["Systems", "Capabilities", "Interfaces", "Table Definitions", "Screens", "Batches", "Reports", "Guidelines"]) {
+    for (const label of ["Systems", "Capabilities", "Interfaces", "Tables", "Screens", "Batches", "Reports", "Guidelines"]) {
       expect(screen.getByRole("link", { name: label })).toBeTruthy();
     }
   });

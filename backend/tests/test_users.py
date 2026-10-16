@@ -1,7 +1,7 @@
 from tests.conftest import auth, login
 
 
-def _create(client, token, login_id="ian", name="Ian", password="Password123!", role="Write"):
+def _create(client, token, login_id="ian", name="Ian", password="Password123!", role="Analyst"):
     return client.post(
         "/api/users",
         json={"login_id": login_id, "username": name, "password": password, "role_name": role},
@@ -45,7 +45,7 @@ def test_login_id_keeps_the_case_it_was_typed_in_and_signs_in_any_case(client):
 def test_seed_users_use_plain_login_ids(client):
     admin = login(client, "Admin")
     ids = {user["login_id"] for user in client.get("/api/users", headers=auth(admin)).json()}
-    assert ids == {"admin", "writer", "reader"}
+    assert ids == {"admin", "analyst", "viewer"}
 
 
 def test_edit_changes_name_and_role_only(client):
@@ -53,28 +53,28 @@ def test_edit_changes_name_and_role_only(client):
     user_id = _create(client, admin).json()["user_id"]
     updated = client.patch(
         f"/api/users/{user_id}",
-        json={"username": "Ian Chen", "role_name": "Write", "login_id": "someone-else"},
+        json={"username": "Ian Chen", "role_name": "Analyst", "login_id": "someone-else"},
         headers=auth(admin),
     )
     assert updated.status_code == 200, updated.text
     assert updated.json()["username"] == "Ian Chen"
-    assert updated.json()["role_name"] == "Write"
+    assert updated.json()["role_name"] == "Analyst"
     assert updated.json()["login_id"] == "ian"
-    assert client.patch(f"/api/users/{user_id}", json={"username": "", "role_name": "Write"}, headers=auth(admin)).status_code == 400
+    assert client.patch(f"/api/users/{user_id}", json={"username": "", "role_name": "Analyst"}, headers=auth(admin)).status_code == 400
     assert client.patch(f"/api/users/{user_id}", json={"username": "x", "role_name": "Boss"}, headers=auth(admin)).status_code == 400
-    assert client.patch("/api/users/missing", json={"username": "x", "role_name": "Write"}, headers=auth(admin)).status_code == 404
+    assert client.patch("/api/users/missing", json={"username": "x", "role_name": "Analyst"}, headers=auth(admin)).status_code == 404
 
 
 def test_last_admin_cannot_be_demoted_or_deleted(client):
     admin = login(client, "Admin")
     users = client.get("/api/users", headers=auth(admin)).json()
     admin_id = next(user["user_id"] for user in users if user["role_name"] == "Admin")
-    demoted = client.patch(f"/api/users/{admin_id}", json={"username": "Admin", "role_name": "Read"}, headers=auth(admin))
+    demoted = client.patch(f"/api/users/{admin_id}", json={"username": "Admin", "role_name": "Viewer"}, headers=auth(admin))
     assert demoted.status_code == 400
     assert client.delete(f"/api/users/{admin_id}", headers=auth(admin)).status_code == 400
 
 
 def test_non_admin_cannot_manage_users(client):
-    writer = login(client, "Write")
-    assert _create(client, writer).status_code == 403
-    assert client.patch("/api/users/user-reader", json={"username": "x", "role_name": "Admin"}, headers=auth(writer)).status_code == 403
+    analyst = login(client, "Analyst")
+    assert _create(client, analyst).status_code == 403
+    assert client.patch("/api/users/user-read", json={"username": "x", "role_name": "Admin"}, headers=auth(analyst)).status_code == 403

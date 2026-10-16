@@ -53,7 +53,7 @@ describe("LoginPage", () => {
     expect(localStorage.getItem("theme")).toBe("dark");
   });
 
-  it("sets the SolutionCrafter name as tall as the logo icon", () => {
+  it("sets the SolutionCrafter name as tall as the logo icon and shows the description subtitle", () => {
     render(
       <ThemeProvider>
         <AuthProvider>
@@ -67,5 +67,7 @@ describe("LoginPage", () => {
     expect((name.previousElementSibling as HTMLElement).className).toContain("h-10");
     expect(name.className).toContain("leading-10");
     expect(name.className).toContain("text-[40px]");
+    expect(name.className).toContain("font-wordmark");
+    expect(screen.getByText("An AI-powered tool to craft Project Solution Design document and other related documents.")).toBeTruthy();
   });
 });

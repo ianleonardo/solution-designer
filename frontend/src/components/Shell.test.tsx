@@ -5,7 +5,7 @@ import { Shell } from "./Shell";
 import { ThemeProvider } from "../theme";
 
 vi.mock("../auth", () => ({
-  useAuth: () => ({ user: { login_id: "writer", role_name: "Write" }, logout: () => undefined }),
+  useAuth: () => ({ user: { login_id: "analyst", role_name: "Analyst" }, logout: () => undefined }),
 }));
 
 beforeEach(() => vi.stubGlobal("localStorage", { getItem: () => null, setItem: () => undefined }));

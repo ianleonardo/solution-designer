@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { api, ApiError } from "../api";
+import { useOptionalAuth } from "../auth";
 import type { SystemRecord } from "../types";
 import { ConfirmDialog } from "./ConfirmDialog";
 import { type Column, DataTable } from "./DataTable";
@@ -8,6 +9,8 @@ import { SystemDialog } from "./SystemDialog";
 export const SYSTEMS_PAGE_SIZE = 50;
 
 export function SystemsPanel() {
+  const auth = useOptionalAuth();
+  const canEdit = auth?.user?.role_name !== "Viewer";
   const [items, setItems] = useState<SystemRecord[]>([]);
   const [dialog, setDialog] = useState<{ system?: SystemRecord } | null>(null);
   const [deleting, setDeleting] = useState<SystemRecord | null>(null);
@@ -38,21 +41,25 @@ export function SystemsPanel() {
     { key: "description", header: "Description", sortValue: (row) => row.description, className: "text-muted max-w-md", render: (row) => <span className="line-clamp-2">{row.description || "—"}</span> },
     { key: "upstreams", header: "Upstreams", sortValue: (row) => row.upstreams, className: "text-muted", render: (row) => row.upstreams || "—" },
     { key: "downstreams", header: "Downstreams", sortValue: (row) => row.downstreams, className: "text-muted", render: (row) => row.downstreams || "—" },
-    {
-      key: "actions",
-      header: "",
-      className: "whitespace-nowrap",
-      render: (row) => (
-        <div className="flex items-center gap-1">
-          <button type="button" className="icon-btn" aria-label={`Edit ${row.system_code}`} title="Edit" onClick={() => setDialog({ system: row })}>
-            <span className="material-symbols-outlined text-base">edit</span>
-          </button>
-          <button type="button" className="icon-btn icon-btn-danger" aria-label={`Delete ${row.system_code}`} title="Delete" onClick={() => setDeleting(row)}>
-            <span className="material-symbols-outlined text-base">delete</span>
-          </button>
-        </div>
-      ),
-    },
+    ...(canEdit
+      ? [
+          {
+            key: "actions",
+            header: "",
+            className: "whitespace-nowrap",
+            render: (row: SystemRecord) => (
+              <div className="flex items-center gap-1">
+                <button type="button" className="icon-btn" aria-label={`Edit ${row.system_code}`} title="Edit" onClick={() => setDialog({ system: row })}>
+                  <span className="material-symbols-outlined text-base">edit</span>
+                </button>
+                <button type="button" className="icon-btn icon-btn-danger" aria-label={`Delete ${row.system_code}`} title="Delete" onClick={() => setDeleting(row)}>
+                  <span className="material-symbols-outlined text-base">delete</span>
+                </button>
+              </div>
+            ),
+          },
+        ]
+      : []),
   ];
 
   return (
@@ -72,10 +79,12 @@ export function SystemsPanel() {
         searchLabel="Search Systems"
         searchPlaceholder="Search systems"
         toolbar={
-          <button type="button" className="btn btn-primary" onClick={() => setDialog({})}>
-            <span className="material-symbols-outlined text-base">add</span>
-            Add
-          </button>
+          canEdit ? (
+            <button type="button" className="btn btn-primary" onClick={() => setDialog({})}>
+              <span className="material-symbols-outlined text-base">add</span>
+              Add
+            </button>
+          ) : undefined
         }
       />
       {dialog && <SystemDialog system={dialog.system} onSaved={saved} onClose={() => setDialog(null)} />}

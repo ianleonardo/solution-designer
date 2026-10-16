@@ -37,6 +37,9 @@ def test_unknown_inventory_type_is_rejected(client):
     assert _upload(client, admin, "Nonsense").status_code == 400
 
 
-def test_only_admin_can_upload_to_the_knowledge_base(client):
-    writer = login(client, "Write")
-    assert _upload(client, writer, "Screens").status_code == 403
+def test_analyst_can_upload_and_viewer_cannot_upload_to_the_knowledge_base(client):
+    analyst = login(client, "Analyst")
+    assert _upload(client, analyst, "Screens").status_code == 200
+    viewer = login(client, "Viewer")
+    assert client.get("/api/rag", headers=auth(viewer)).status_code == 200
+    assert _upload(client, viewer, "Screens").status_code == 403

@@ -7,7 +7,7 @@ from pathlib import Path
 import bcrypt
 
 from app import db
-from app.config import CONTENT_AUTHORS, data_dir
+from app.config import CONTENT_AUTHORS, KB_EDITORS, data_dir
 from app.errors import AppError
 from app.seed_layouts import SDD_LAYOUT_ID
 from app.services import documents, files, gcs, images, layouts, project_rag
@@ -266,7 +266,7 @@ def _next_rag_id(inventory_type: str) -> str:
 
 
 def add_rag(user: dict, filename: str, data: bytes, inventory_type: str | None = None) -> list[dict]:
-    _ensure(user, {"Admin"})
+    _ensure(user, KB_EDITORS)
     if inventory_type is not None and inventory_type not in files.INVENTORY_TYPES:
         raise AppError(400, "Unknown inventory type")
     if inventory_type == "Guidelines":
@@ -333,7 +333,7 @@ def list_rag() -> list[dict]:
 
 
 def delete_rag(user: dict, rag_id: str) -> None:
-    _ensure(user, {"Admin"})
+    _ensure(user, KB_EDITORS)
     row = db.fetchone("SELECT rag_id FROM rag_inventory WHERE rag_id = ?", [rag_id])
     if row is None:
         raise AppError(404, "Inventory record not found")
@@ -346,7 +346,7 @@ def list_users(user: dict) -> list[dict]:
     return [public_user(row) for row in db.fetchall("SELECT * FROM users ORDER BY created_at")]
 
 
-ROLES = {"Admin", "Write", "Read"}
+ROLES = {"Admin", "Analyst", "Viewer"}
 LOGIN_ID_PATTERN = re.compile(r"^[A-Za-z0-9]{3,64}$")
 
 

@@ -33,7 +33,7 @@ export function ProjectsPage() {
 
   return (
     <div className="p-6 max-w-[1400px] space-y-4">
-      <h1 className="font-headline text-2xl font-semibold">Projects</h1>
+      <h1 className="font-headline text-2xl font-semibold">Project Documents</h1>
       {error && <p className="text-alert">{error}</p>}
       <ProjectTable
         projects={projects}
@@ -41,7 +41,7 @@ export function ProjectsPage() {
         onChanged={load}
         emptyLabel="No projects found."
         toolbar={
-          user.role_name === "Write" ? (
+          user.role_name === "Analyst" ? (
             <button type="button" className="btn btn-primary" onClick={() => setCreating(true)}>
               Create project
             </button>

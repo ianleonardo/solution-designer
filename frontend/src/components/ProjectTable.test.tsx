@@ -9,13 +9,13 @@ const project: Project = {
   project_name: "Fixed Deposit",
   description: "FD product",
   owner_id: "u1",
-  owner_name: "Write",
-  owner_role: "Write",
+  owner_name: "Analyst",
+  owner_role: "Analyst",
   created_at: "2026-10-13T00:00:00",
   last_modified: "2026-10-13T00:00:00",
 };
 
-function renderTable(role: "Write" | "Read", onChanged = () => undefined) {
+function renderTable(role: "Analyst" | "Viewer", onChanged = () => undefined) {
   return render(
     <MemoryRouter>
       <ProjectTable projects={[project]} role={role} onChanged={onChanged} />
@@ -27,7 +27,7 @@ afterEach(() => vi.unstubAllGlobals());
 
 describe("ProjectTable", () => {
   it("shows icon actions for editing, opening and deleting", () => {
-    renderTable("Write");
+    renderTable("Analyst");
     expect(screen.getByRole("button", { name: "Edit Fixed Deposit" })).toBeTruthy();
     expect(screen.getByRole("link", { name: "Open document Fixed Deposit" })).toBeTruthy();
     expect(screen.getByRole("button", { name: "Delete Fixed Deposit" })).toBeTruthy();
@@ -37,7 +37,7 @@ describe("ProjectTable", () => {
     const many = Array.from({ length: 31 }, (_, index) => ({ ...project, project_id: `p${index}`, project_name: `Project ${String(index).padStart(2, "0")}` }));
     render(
       <MemoryRouter>
-        <ProjectTable projects={many} role="Write" onChanged={() => undefined} />
+        <ProjectTable projects={many} role="Analyst" onChanged={() => undefined} />
       </MemoryRouter>,
     );
     expect(screen.getByText("1-30 of 31")).toBeTruthy();
@@ -52,7 +52,7 @@ describe("ProjectTable", () => {
     vi.stubGlobal("fetch", fetchMock);
     vi.stubGlobal("localStorage", { getItem: () => null });
     const onChanged = vi.fn();
-    renderTable("Write", onChanged);
+    renderTable("Analyst", onChanged);
     fireEvent.click(screen.getByRole("button", { name: "Delete Fixed Deposit" }));
     expect(fetchMock).not.toHaveBeenCalled();
     fireEvent.click(screen.getByRole("button", { name: "Delete" }));
@@ -61,7 +61,7 @@ describe("ProjectTable", () => {
   });
 
   it("hides edit and delete for viewers", () => {
-    renderTable("Read");
+    renderTable("Viewer");
     expect(screen.queryByRole("button", { name: "Edit Fixed Deposit" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Delete Fixed Deposit" })).toBeNull();
     expect(screen.getByRole("link", { name: "Open document Fixed Deposit" })).toBeTruthy();
@@ -72,7 +72,7 @@ describe("ProjectTable", () => {
     vi.stubGlobal("fetch", fetchMock);
     vi.stubGlobal("localStorage", { getItem: () => null, setItem: () => undefined, removeItem: () => undefined });
     const onChanged = vi.fn();
-    renderTable("Write", onChanged);
+    renderTable("Analyst", onChanged);
 
     fireEvent.click(screen.getByRole("button", { name: "Edit Fixed Deposit" }));
     const dialog = screen.getByRole("dialog", { name: "Edit project" });

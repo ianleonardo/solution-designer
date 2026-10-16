@@ -92,7 +92,7 @@ export function ReferencesPanel({ projectId, references, canEdit, onChange, onCl
               />
             </label>
           ) : (
-            <span className="text-xs text-muted">Only Write users can change references.</span>
+            <span className="text-xs text-muted">Only Analyst users can change references.</span>
           )}
           <button type="button" className="btn" onClick={onClose}>Close</button>
         </div>

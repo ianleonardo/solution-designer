@@ -256,6 +256,35 @@ def _migrate() -> None:
         )
         """,
         """
+        CREATE TABLE IF NOT EXISTS kb_tables (
+            table_id VARCHAR PRIMARY KEY,
+            country VARCHAR NOT NULL,
+            database_name VARCHAR NOT NULL,
+            schema_name VARCHAR NOT NULL,
+            table_name VARCHAR NOT NULL,
+            description VARCHAR NOT NULL DEFAULT '',
+            created_at TIMESTAMP NOT NULL,
+            last_modified TIMESTAMP NOT NULL,
+            embedding FLOAT[],
+            UNIQUE (country, database_name, schema_name, table_name)
+        )
+        """,
+        """
+        CREATE TABLE IF NOT EXISTS kb_table_columns (
+            column_id VARCHAR PRIMARY KEY,
+            table_id VARCHAR NOT NULL,
+            column_name VARCHAR NOT NULL,
+            data_type VARCHAR NOT NULL,
+            is_null VARCHAR NOT NULL DEFAULT 'N',
+            primary_key VARCHAR NOT NULL DEFAULT '',
+            foreign_key VARCHAR NOT NULL DEFAULT '',
+            description VARCHAR NOT NULL DEFAULT '',
+            created_at TIMESTAMP NOT NULL,
+            last_modified TIMESTAMP NOT NULL,
+            UNIQUE (table_id, column_name)
+        )
+        """,
+        """
         CREATE TABLE IF NOT EXISTS audit_log (
             audit_id VARCHAR PRIMARY KEY,
             occurred_at TIMESTAMP NOT NULL,
@@ -493,9 +522,9 @@ def _migrate_seed_login_ids() -> None:
 
 
 def _migrate_roles() -> None:
-    """The Maker, Checker and Viewer roles became Write and Read."""
-    exec_sql("UPDATE users SET role_name = 'Write' WHERE role_name IN ('Maker', 'Checker')")
-    exec_sql("UPDATE users SET role_name = 'Read' WHERE role_name = 'Viewer'")
+    """Legacy Maker/Checker/Write roles become Analyst; Read becomes Viewer."""
+    exec_sql("UPDATE users SET role_name = 'Analyst' WHERE role_name IN ('Maker', 'Checker', 'Write')")
+    exec_sql("UPDATE users SET role_name = 'Viewer' WHERE role_name = 'Read'")
 
 
 def _seed() -> None:

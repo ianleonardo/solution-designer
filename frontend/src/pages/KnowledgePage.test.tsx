@@ -69,7 +69,7 @@ describe("KnowledgePage", () => {
     expect(screen.queryByLabelText("Upload Guidelines")).toBeNull();
     expect(fetchMock.mock.calls.map((call) => call[0])).toEqual(["/api/guidelines"]);
   });
-  it("shows the systems screen and the tabbed interfaces screen, not the generic upload", async () => {
+  it("shows the systems screen, tabbed interfaces screen, and tables screen, not the generic upload", async () => {
     vi.stubGlobal("localStorage", { getItem: () => null });
     const fetchMock = vi.fn().mockImplementation(() => Promise.resolve(json([])));
     vi.stubGlobal("fetch", fetchMock);
@@ -77,9 +77,12 @@ describe("KnowledgePage", () => {
     await waitFor(() => expect(screen.getByRole("heading", { name: "Systems" })).toBeTruthy());
     expect(screen.queryByLabelText("Upload Systems")).toBeNull();
     systems.unmount();
-    renderAt("/knowledge/interfaces");
+    const interfaces = renderAt("/knowledge/interfaces");
     await waitFor(() => expect(screen.getByRole("tab", { name: "SPL" })).toBeTruthy());
     expect(screen.queryByLabelText("Upload Interfaces")).toBeNull();
-    expect(fetchMock.mock.calls.map((call) => call[0])).toEqual(["/api/systems", "/api/interfaces/SPL"]);
+    interfaces.unmount();
+    renderAt("/knowledge/tables");
+    await waitFor(() => expect(screen.getByRole("heading", { name: "Tables" })).toBeTruthy());
+    expect(fetchMock.mock.calls.map((call) => call[0])).toEqual(["/api/systems", "/api/interfaces/SPL", "/api/tables"]);
   });
 });

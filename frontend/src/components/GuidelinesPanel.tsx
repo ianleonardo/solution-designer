@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { api, ApiError, downloadFile, formatDate } from "../api";
+import { useOptionalAuth } from "../auth";
 import type { Guideline, GuidelineStatus } from "../types";
 import { ConfirmDialog } from "./ConfirmDialog";
 import { type Column, DataTable } from "./DataTable";
@@ -14,6 +15,8 @@ const STATUS: Record<GuidelineStatus, { label: string; tip: string; className: s
 };
 
 export function GuidelinesPanel() {
+  const auth = useOptionalAuth();
+  const canEdit = auth?.user?.role_name !== "Viewer";
   const [items, setItems] = useState<Guideline[]>([]);
   const [adding, setAdding] = useState(false);
   const [deleting, setDeleting] = useState<Guideline | null>(null);
@@ -72,9 +75,11 @@ export function GuidelinesPanel() {
               <span className="material-symbols-outlined text-base">download</span>
             </button>
           )}
-          <button type="button" className="icon-btn icon-btn-danger" aria-label={`Delete ${row.title}`} title="Delete" onClick={() => setDeleting(row)}>
-            <span className="material-symbols-outlined text-base">delete</span>
-          </button>
+          {canEdit && (
+            <button type="button" className="icon-btn icon-btn-danger" aria-label={`Delete ${row.title}`} title="Delete" onClick={() => setDeleting(row)}>
+              <span className="material-symbols-outlined text-base">delete</span>
+            </button>
+          )}
         </div>
       ),
     },
@@ -98,10 +103,12 @@ export function GuidelinesPanel() {
         searchLabel="Search Guidelines"
         searchPlaceholder="Search guidelines"
         toolbar={
-          <button type="button" className="btn btn-primary" onClick={() => setAdding(true)}>
-            <span className="material-symbols-outlined text-base">add</span>
-            Add
-          </button>
+          canEdit ? (
+            <button type="button" className="btn btn-primary" onClick={() => setAdding(true)}>
+              <span className="material-symbols-outlined text-base">add</span>
+              Add
+            </button>
+          ) : undefined
         }
       />
       {adding && (

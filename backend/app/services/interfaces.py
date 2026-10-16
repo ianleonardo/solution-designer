@@ -5,6 +5,7 @@ import uuid
 from datetime import datetime, timezone
 
 from app import db
+from app.config import KB_EDITORS
 from app.errors import AppError
 from app.services import gcs, systems
 
@@ -119,7 +120,7 @@ def parse_and_validate(data: bytes) -> list[dict]:
 
 
 def replace_from_excel(user: dict, channel: str, filename: str, data: bytes) -> list[dict]:
-    if user["role_name"] != "Admin":
+    if user["role_name"] not in KB_EDITORS:
         raise AppError(403, "Forbidden")
     channel = _channel(channel)
     if not (filename or "").lower().endswith(".xlsx"):

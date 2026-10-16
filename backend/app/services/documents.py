@@ -21,7 +21,7 @@ def _now() -> datetime:
     return datetime.now(timezone.utc)
 
 
-ROLES = {"Admin", "Write", "Read"}
+ROLES = {"Admin", "Analyst", "Viewer"}
 
 
 def _ensure(user: dict, roles: set[str]) -> None:

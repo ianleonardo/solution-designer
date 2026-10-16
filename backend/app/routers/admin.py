@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, File, Form, Query, UploadFile
 from fastapi.responses import FileResponse
 
 from app import cache, db
-from app.deps import current_user, require_admin
+from app.deps import current_user, require_admin, require_kb_editor
 from app.services import (
     audit,
     guidelines,
@@ -12,6 +12,7 @@ from app.services import (
     projects,
     reindex,
     systems,
+    tables,
 )
 
 router = APIRouter(tags=["admin"])
@@ -158,7 +159,7 @@ def delete_user(user_id: str, user: dict = Depends(require_admin)):
 
 
 @router.get("/rag")
-def list_rag(user: dict = Depends(require_admin)):
+def list_rag(user: dict = Depends(current_user)):
     del user
     return projects.list_rag()
 
@@ -167,20 +168,20 @@ def list_rag(user: dict = Depends(require_admin)):
 async def upload_rag(
     file: UploadFile = File(...),
     inventory_type: str | None = None,
-    user: dict = Depends(require_admin),
+    user: dict = Depends(require_kb_editor),
 ):
     data = await file.read()
     return projects.add_rag(user, file.filename or "knowledge.md", data, inventory_type)
 
 
 @router.delete("/rag/{rag_id}")
-def delete_rag(rag_id: str, user: dict = Depends(require_admin)):
+def delete_rag(rag_id: str, user: dict = Depends(require_kb_editor)):
     projects.delete_rag(user, rag_id)
     return {"ok": True}
 
 
 @router.get("/guidelines")
-def list_guidelines(user: dict = Depends(require_admin)):
+def list_guidelines(user: dict = Depends(current_user)):
     del user
     return guidelines.list_guidelines()
 
@@ -190,53 +191,114 @@ async def add_guideline(
     title: str = Form(""),
     description: str = Form(""),
     file: UploadFile = File(...),
-    user: dict = Depends(require_admin),
+    user: dict = Depends(require_kb_editor),
 ):
     data = await file.read()
     return guidelines.create(user, title, description, file.filename or "", data)
 
 
 @router.get("/guidelines/{guideline_id}/download")
-def download_guideline(guideline_id: str, user: dict = Depends(require_admin)):
+def download_guideline(guideline_id: str, user: dict = Depends(current_user)):
     path, name, media_type = guidelines.original_file(user, guideline_id)
     return FileResponse(path, media_type=media_type, filename=name)
 
 
 @router.delete("/guidelines/{guideline_id}")
-def delete_guideline(guideline_id: str, user: dict = Depends(require_admin)):
+def delete_guideline(guideline_id: str, user: dict = Depends(require_kb_editor)):
     guidelines.delete(user, guideline_id)
     return {"ok": True}
 
 
 @router.get("/systems")
-def list_systems(user: dict = Depends(require_admin)):
+def list_systems(user: dict = Depends(current_user)):
     del user
     return systems.list_systems()
 
 
 @router.post("/systems")
-def create_system(body: dict, user: dict = Depends(require_admin)):
+def create_system(body: dict, user: dict = Depends(require_kb_editor)):
     return systems.create_system(user, body)
 
 
 @router.patch("/systems/{system_code}")
-def update_system(system_code: str, body: dict, user: dict = Depends(require_admin)):
+def update_system(system_code: str, body: dict, user: dict = Depends(require_kb_editor)):
     return systems.update_system(user, system_code, body)
 
 
 @router.delete("/systems/{system_code}")
-def delete_system(system_code: str, user: dict = Depends(require_admin)):
+def delete_system(system_code: str, user: dict = Depends(require_kb_editor)):
     systems.delete_system(user, system_code)
     return {"ok": True}
 
 
 @router.get("/interfaces/{channel}")
-def list_interfaces(channel: str, user: dict = Depends(require_admin)):
+def list_interfaces(channel: str, user: dict = Depends(current_user)):
     del user
     return interfaces.list_interfaces(channel)
 
 
 @router.post("/interfaces/{channel}/upload")
-async def upload_interfaces(channel: str, file: UploadFile = File(...), user: dict = Depends(require_admin)):
+async def upload_interfaces(channel: str, file: UploadFile = File(...), user: dict = Depends(require_kb_editor)):
     data = await file.read()
     return interfaces.replace_from_excel(user, channel, file.filename or "interfaces.xlsx", data)
+
+
+@router.get("/tables")
+def list_tables(user: dict = Depends(current_user)):
+    del user
+    return tables.list_tables()
+
+
+@router.post("/tables")
+def create_table(body: dict, user: dict = Depends(require_kb_editor)):
+    return tables.create_table(user, body)
+
+
+@router.post("/tables/upload")
+async def upload_tables(
+    country: str = Form(""),
+    database: str = Form(""),
+    schema: str = Form(""),
+    file: UploadFile = File(...),
+    user: dict = Depends(require_kb_editor),
+):
+    data = await file.read()
+    return tables.upload_from_excel(user, country, database, schema, file.filename or "tables.xlsx", data)
+
+
+@router.post("/tables/columns/delete-batch")
+def delete_table_columns_batch(body: dict, user: dict = Depends(require_kb_editor)):
+    return tables.delete_columns_batch(user, list(body.get("column_ids") or []))
+
+
+@router.get("/tables/{table_id}")
+def get_table(table_id: str, user: dict = Depends(current_user)):
+    del user
+    return tables.get_table(table_id)
+
+
+@router.patch("/tables/{table_id}")
+def update_table(table_id: str, body: dict, user: dict = Depends(require_kb_editor)):
+    return tables.update_table(user, table_id, body)
+
+
+@router.delete("/tables/{table_id}")
+def delete_table(table_id: str, user: dict = Depends(require_kb_editor)):
+    tables.delete_table(user, table_id)
+    return {"ok": True}
+
+
+@router.post("/tables/{table_id}/columns")
+def add_table_column(table_id: str, body: dict, user: dict = Depends(require_kb_editor)):
+    return tables.add_column(user, table_id, body)
+
+
+@router.patch("/tables/{table_id}/columns/{column_id}")
+def update_table_column(table_id: str, column_id: str, body: dict, user: dict = Depends(require_kb_editor)):
+    return tables.update_column(user, table_id, column_id, body)
+
+
+@router.delete("/tables/{table_id}/columns/{column_id}")
+def delete_table_column(table_id: str, column_id: str, user: dict = Depends(require_kb_editor)):
+    tables.delete_column(user, table_id, column_id)
+    return {"ok": True}

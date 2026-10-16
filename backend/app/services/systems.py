@@ -3,6 +3,7 @@
 from datetime import datetime, timezone
 
 from app import db
+from app.config import KB_EDITORS
 from app.errors import AppError
 from app.services import gcs, llm
 
@@ -15,8 +16,8 @@ def _now() -> datetime:
     return datetime.now(timezone.utc)
 
 
-def _require_admin(user: dict) -> None:
-    if user["role_name"] != "Admin":
+def _require_editor(user: dict) -> None:
+    if user["role_name"] not in KB_EDITORS:
         raise AppError(403, "Forbidden")
 
 
@@ -94,7 +95,7 @@ def _text(value: str | None, label: str, limit: int, required: bool = False) -> 
 
 
 def create_system(user: dict, body: dict) -> dict:
-    _require_admin(user)
+    _require_editor(user)
     code = _text(str(body.get("system_code") or ""), "System code", MAX_CODE, required=True).upper()
     if "," in code or " " in code:
         raise AppError(400, "System code cannot contain spaces or commas.")
@@ -119,7 +120,7 @@ def create_system(user: dict, body: dict) -> dict:
 
 
 def update_system(user: dict, code: str, body: dict) -> dict:
-    _require_admin(user)
+    _require_editor(user)
     current = _row(code)
     code = current["system_code"]
     name = _text(str(body.get("system_name", current["system_name"]) or ""), "System name", MAX_NAME, required=True)
@@ -140,7 +141,7 @@ def update_system(user: dict, code: str, body: dict) -> dict:
 
 
 def delete_system(user: dict, code: str) -> None:
-    _require_admin(user)
+    _require_editor(user)
     code = _row(code)["system_code"]
     users = [
         row["system_code"]

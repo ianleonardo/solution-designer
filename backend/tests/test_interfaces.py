@@ -87,10 +87,12 @@ def test_system_used_by_an_interface_cannot_be_deleted(client):
     assert client.delete("/api/systems/PIB", headers=auth(admin)).status_code == 200
 
 
-def test_only_admin_can_use_interfaces(client):
+def test_analyst_can_upload_and_viewer_can_only_view_interfaces(client):
     admin = login(client, "Admin")
     _systems(client, admin)
-    for role in ("Write", "Read"):
-        token = login(client, role)
-        assert client.get("/api/interfaces/SPL", headers=auth(token)).status_code == 403
-        assert _upload(client, token, "SPL", _excel([["SG", "x", "", "API", "SPL", "DGE"]])).status_code == 403
+    analyst = login(client, "Analyst")
+    assert client.get("/api/interfaces/SPL", headers=auth(analyst)).status_code == 200
+    assert _upload(client, analyst, "SPL", _excel([["SG", "x", "", "API", "SPL", "DGE"]])).status_code == 200
+    viewer = login(client, "Viewer")
+    assert client.get("/api/interfaces/SPL", headers=auth(viewer)).status_code == 200
+    assert _upload(client, viewer, "SPL", _excel([["SG", "x", "", "API", "SPL", "DGE"]])).status_code == 403

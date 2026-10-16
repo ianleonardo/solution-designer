@@ -13,15 +13,15 @@ function isGroup(entry: NavEntry): entry is NavGroup {
 export function navItems(role: string): NavEntry[] {
   const items: NavEntry[] = [
     { to: "/", label: "Dashboard", icon: "dashboard" },
-    { to: "/projects", label: "Projects", icon: "folder_open" },
-  ];
-  if (role === "Admin") {
-    items.push({
+    { to: "/projects", label: "Project Documents", icon: "folder_open" },
+    {
       label: "Knowledge Base",
       icon: "hub",
       prefix: "/knowledge",
       children: KNOWLEDGE_KINDS.map((kind) => ({ to: `/knowledge/${kind.slug}`, label: kind.label })),
-    });
+    },
+  ];
+  if (role === "Admin") {
     items.push({
       label: "Settings",
       icon: "settings",

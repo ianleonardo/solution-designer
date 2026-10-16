@@ -27,7 +27,8 @@ def client(tmp_path, monkeypatch):
 
 
 def _user(role: str) -> dict:
-    return next(user for user in DEFAULT_USERS if user["role"] == role)
+    alias = {"Write": "Analyst", "Read": "Viewer"}.get(role, role)
+    return next(user for user in DEFAULT_USERS if user["role"] == alias)
 
 
 def login(client: TestClient, role: str) -> str:

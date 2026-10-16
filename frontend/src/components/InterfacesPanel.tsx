@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { api, ApiError, type RowError } from "../api";
+import { useOptionalAuth } from "../auth";
 import type { InterfaceChannel, InterfaceRecord } from "../types";
 import { type Column, DataTable } from "./DataTable";
 
@@ -17,6 +18,8 @@ const COLUMNS: Column<InterfaceRecord>[] = [
 ];
 
 export function InterfacesPanel() {
+  const auth = useOptionalAuth();
+  const canEdit = auth?.user?.role_name !== "Viewer";
   const [params, setParams] = useSearchParams();
   const requested = (params.get("tab") ?? "").toUpperCase();
   const channel = (CHANNELS as string[]).includes(requested) ? (requested as InterfaceChannel) : CHANNELS[0];
@@ -110,22 +113,24 @@ export function InterfacesPanel() {
         searchLabel={`Search ${channel} interfaces`}
         searchPlaceholder={`Search ${channel} interfaces`}
         toolbar={
-          <label className={`btn btn-primary cursor-pointer ${uploading ? "opacity-50" : ""}`}>
-            <span className="material-symbols-outlined text-base">upload</span>
-            {uploading ? "Uploading…" : "Upload Excel"}
-            <input
-              className="hidden"
-              type="file"
-              aria-label={`Upload ${channel} Excel`}
-              accept=".xlsx"
-              disabled={uploading}
-              onChange={(event) => {
-                const file = event.target.files?.[0];
-                event.target.value = "";
-                if (file) void upload(file);
-              }}
-            />
-          </label>
+          canEdit ? (
+            <label className={`btn btn-primary cursor-pointer ${uploading ? "opacity-50" : ""}`}>
+              <span className="material-symbols-outlined text-base">upload</span>
+              {uploading ? "Uploading…" : "Upload Excel"}
+              <input
+                className="hidden"
+                type="file"
+                aria-label={`Upload ${channel} Excel`}
+                accept=".xlsx"
+                disabled={uploading}
+                onChange={(event) => {
+                  const file = event.target.files?.[0];
+                  event.target.value = "";
+                  if (file) void upload(file);
+                }}
+              />
+            </label>
+          ) : undefined
         }
       />
     </div>

@@ -7,11 +7,11 @@ SolutionCrafter generates enterprise documents, such as **Solution Design Docume
 ## Features
 
 ### Projects, documents and generation
-- A project holds several documents, one per document layout: the **Solution Design Document** and the **Interface Specifications Document** are built in. Documents appear as tabs in the project workspace. Write users can add or remove them.
+- A project holds several documents, one per document layout: the **Solution Design Document** and the **Interface Specifications Document** are built in. Documents appear as tabs in the project workspace. Analyst users can add or remove them.
 - **A document keeps its own copy of the layout.** Its sections are copied from the layout when the document is created (older documents are copied once on upgrade). Changing, deleting or reordering sections in **Settings > Document Layouts** later does not touch documents that already exist; only documents created afterwards use the new layout. There is no re-sync from the layout.
-- **Editing a document's structure.** Write users can use **Edit structure** in the outline to rename, add, delete and reorder sections and sub-sections (two levels), indent or outdent a sub-section, and open a section's settings (name, blocks, hint, prompt, temperature, word limit). Content stays with the blocks that remain; a removed block type loses its content. Admin can still change a section's prompt, temperature and word limit, but nothing else.
-- **Project references.** Write users upload reference documents to a project (**PDF, Markdown, Excel**). Each file is split into chunks, embedded when an embedding model is configured, and searched only for that project. Admin and Read users can see the list but not change it. Without an embedding model the chunks are searched by keyword only.
-- **Auto fill** (Write). *Auto fill document* streams progress section by section and, by default, fills only the empty sections so your edits are kept; choose *Regenerate every section* to replace everything. *Auto fill* on a single section accepts an optional extra instruction that applies to that run only. A confirmation warns before content is replaced. A section counts as empty when it holds only blanks, the layout's starter table rows or the starter diagram.
+- **Editing a document's structure.** Analyst users can use **Edit structure** in the outline to rename, add, delete and reorder sections and sub-sections (two levels), indent or outdent a sub-section, and open a section's settings (name, blocks, hint, prompt, temperature, word limit). Content stays with the blocks that remain; a removed block type loses its content. Admin can still change a section's prompt, temperature and word limit, but nothing else.
+- **Project references.** Analyst users upload reference documents to a project (**PDF, Markdown, Excel**). Each file is split into chunks, embedded when an embedding model is configured, and searched only for that project. Admin and Viewer users can see the list but not change it. Without an embedding model the chunks are searched by keyword only.
+- **Auto fill** (Analyst). *Auto fill document* streams progress section by section and, by default, fills only the empty sections so your edits are kept; choose *Regenerate every section* to replace everything. *Auto fill* on a single section accepts an optional extra instruction that applies to that run only. A confirmation warns before content is replaced. A section counts as empty when it holds only blanks, the layout's starter table rows or the starter diagram.
 - Each section is built from the global system prompt, the section prompt, the most relevant project reference chunks and the most relevant knowledge-base entries (hybrid keyword + embedding retrieval).
 - **Missing information alerts** flag mandatory SDD content the references don't supply, such as NFR volumetrics and DB growth estimates.
 - Exporting and generating apply to the open document. There is no approval workflow and documents have no status.
@@ -29,25 +29,28 @@ SolutionCrafter generates enterprise documents, such as **Solution Design Docume
 
 | Role | Capabilities |
 |---|---|
-| **Admin** | Settings, users, document layouts, knowledge base. Admin does not create, edit or delete projects or documents; Admin only tunes a section's prompt, temperature and word limit. |
-| **Write** | Create, edit and delete projects and documents, upload project references, generate (auto fill) and edit content and structure |
-| **Read** | Read-only access to the dashboard, projects and documents |
+| **Admin** | Settings, users, document layouts, knowledge base (view & edit). Admin does not create, edit or delete projects or documents; Admin only tunes a section's prompt, temperature and word limit. |
+| **Analyst** | Create, edit and delete projects and documents, upload project references, generate (auto fill) and edit content and structure, plus view and edit the Knowledge Base. |
+| **Viewer** | Read-only access to the dashboard, project documents, and the Knowledge Base. |
 
-Admin does not create, edit or delete projects or documents. There is no approval workflow: Write users edit documents directly and documents have no status.
+Admin does not create, edit or delete projects or documents. There is no approval workflow: Analyst users edit documents directly and documents have no status.
 
-Existing databases are migrated on start: `Maker` and `Checker` users become `Write` and `Viewer` users become `Read`.
+Existing databases are migrated on start: `Maker`, `Checker` and `Write` users become `Analyst`, and `Read` users become `Viewer`.
 
 ### Audit log (Admin only)
 Every change by every user is recorded: who (user and role), when (UTC), what (action, project or other entity and a short summary) and from which IP address. This covers projects, documents, references, knowledge base, layouts, users, settings and exports, plus **sign-ins and failed sign-ins**. Requests that fail are not logged as changes. Passwords, API keys and tokens are never stored, and large content (document text, table rows, diagram blocks) is left out of the details. Admin opens **Settings > Audit Log** to filter by action and date range, search and expand an entry for its details. The API is `GET /api/audit` (Admin only).
 
-### Knowledge base (RAG): Admin only
-- The **Knowledge Base** menu has one screen per type: **Systems, Capabilities, Interfaces, Table Definitions, Screens, Batches, Reports, Guidelines**. Capabilities, Table Definitions, Screens, Batches and Reports each have an upload, search, and a sortable table with 50 rows per page.
+### Knowledge base (RAG): Admin & Analyst (edit), Viewer (view)
+- The **Knowledge Base** menu has one screen per type: **Systems, Capabilities, Interfaces, Tables, Screens, Batches, Reports, Guidelines**. All roles can view the Knowledge Base; Admin and Analyst users can upload, add, edit and delete entries.
 - **Systems** is a catalogue you add, edit and delete by hand: System Code, System Name, Description, Upstreams and Downstreams. Upstreams and Downstreams are system codes separated by commas; they can be empty, but every code you enter must already exist. The code is fixed after it is created. A system cannot be deleted while another system lists it, or an interface uses it.
 - **Interfaces** has one tab per channel: **SPL, DGE, PIB, WSM, EAI**. Each tab takes an Excel (.xlsx) upload with the columns `Country, Interface name, Description, Protocol, Source, Destination`. Country must be SG, MY, TH, VN, ID, CN or All. Protocol must be API, MQ, Kafka, gRPC, FTP, SMTP or SMPP. Source and Destination must be existing system codes. If any row is invalid the whole file is rejected with the row and column of each problem; a valid upload replaces that tab's interfaces.
+- **Tables** is a structured catalogue of database tables and columns grouped by **Country** (`Singapore`, `Malaysia`, `Thailand`, `Indonesia`, `Vietnam`), **Database** (`PIB`, `MBK`, `SMS`, `NTN`, `LCM`), and **Schema** (defaults to Database when omitted).
+  - **Upload** opens a dialog to pick Country, Database, optional Schema, and an Excel (`.xlsx`) sheet with columns `TABLE_NAME, COLUMN_NAME, DATA_TYPE, IS_NULL, PRIMARY_KEY, FOREIGN_KEY`. `TABLE_NAME`, `COLUMN_NAME`, and `DATA_TYPE` are required; empty `IS_NULL` defaults to `N`; `(TABLE_NAME, COLUMN_NAME)` pairs must be unique. Table purpose descriptions and column descriptions are inferred automatically (using the active LLM when configured, or deterministic heuristics otherwise). Existing columns are updated in place, and if a table in the database has columns that were not in the uploaded Excel, a reconciliation dialog lets you choose whether to delete those columns or keep them as-is.
+  - Clicking a table row opens its **Column Details** dialog where Admin and Analyst users can also manually add, edit, or delete tables and individual columns.
 - **Guidelines** are documents rather than extracted entries. **Add** opens a form with a title, a description and a file (`.md`, `.pdf` or `.txt`, up to 20 MB). The text is split into chunks (about 800 characters with overlap) and each chunk is embedded for RAG together with the title and description, so generation and chat can use it. The table shows the chunk count and an embedding status: **Embedded**, **Keyword only** (no embedding model configured, or embedding failed) or **Outdated model** (embedded with a different embedding model than the active one). There are no per-guideline re-embed buttons: changing the embedding model re-indexes everything automatically (see **LLM** below). Per row:
   - **Download** saves the original uploaded file. Files are kept under `DATA_DIR/uploads/guidelines` and, when `GCS_BUCKET` is set, copied to the bucket under `uploads/guidelines/`. If the local copy is gone (for example after a Cloud Run restart) it is fetched back from the bucket. Entries converted from the old inventory have no original file, so they have no Download button.
   - **Delete** removes the guideline, its chunks and the stored file (locally and in the bucket).
-  Guidelines saved without embeddings are still searched by keyword. Guidelines uploaded before this feature are converted automatically on start-up, with the entry's name as the title and no description. They get vectors at the next re-index. Only Admin can manage guidelines.
+  Guidelines saved without embeddings are still searched by keyword. Guidelines uploaded before this feature are converted automatically on start-up, with the entry's name as the title and no description. They get vectors at the next re-index.
 - Upload **.md, .pdf, .html** files. The app extracts inventory entries and gives each a unique ID (for example `SC-001` for a screen). A screen's upload files everything under that screen's type.
 - Extraction uses the LLM when one is configured, and heuristic parsing otherwise.
 - Embeddings are stored in DuckDB for semantic retrieval.
@@ -176,10 +179,10 @@ Default seed accounts (unless you overrode them in `.env`):
 | Role | Login ID | Password |
 |---|---|---|
 | Admin | admin | AdminPass123! |
-| Write | writer | WritePass123! |
-| Read | reader | ReadPass123! |
+| Analyst | analyst | AnalystPass123! |
+| Viewer | viewer | ViewerPass123! |
 
-Login IDs are plain IDs, not emails: 3-64 letters or numbers, no spaces or special characters, and unique regardless of case (`Maya` and `maya` are the same ID). Sign-in is also case-insensitive. Databases seeded earlier with `admin@solutioncrafter.local`-style IDs are renamed to plain IDs on the next start. Users are seeded only on an empty database, so an existing database keeps its users (their old roles are migrated to Write or Read). Change these passwords in any shared environment.
+Login IDs are plain IDs, not emails: 3-64 letters or numbers, no spaces or special characters, and unique regardless of case (`Maya` and `maya` are the same ID). Sign-in is also case-insensitive. Databases seeded earlier with `admin@solutioncrafter.local`-style IDs are renamed to plain IDs on the next start. Users are seeded only on an empty database, so an existing database keeps its users (their old roles are migrated to Analyst or Viewer). Change these passwords in any shared environment.
 
 ### Alternative: Docker Compose
 

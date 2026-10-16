@@ -24,8 +24,9 @@ export function Shell() {
             <span className="h-8 w-8 rounded bg-cobalt text-on-cobalt flex items-center justify-center">
               <span className="material-symbols-outlined">hub</span>
             </span>
-            <span className="font-headline text-xl font-semibold leading-8 whitespace-nowrap sm:text-[32px]" data-testid="wordmark">
-              SolutionCrafter
+            <span className="font-wordmark text-xl font-bold leading-8 tracking-tight whitespace-nowrap sm:text-[32px]" data-testid="wordmark">
+              <span>Solution</span>
+              <span className="text-accent">Crafter</span>
             </span>
           </Link>
         </div>

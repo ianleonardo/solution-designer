@@ -36,7 +36,7 @@ let calls: { url: string; method: string; body: string }[];
 function setup(role: Role, path = "/projects/p1") {
   vi.stubGlobal("localStorage", { getItem: () => "token", setItem: () => undefined, removeItem: () => undefined });
   workspace = {
-    project: { project_id: "p1", project_name: "Payments", description: "Settlement platform", owner_id: "u", owner_name: "M", owner_role: "Write", created_at: "", last_modified: "" },
+    project: { project_id: "p1", project_name: "Payments", description: "Settlement platform", owner_id: "u", owner_name: "M", owner_role: "Analyst", created_at: "", last_modified: "" },
     documents: [
       document("d1", "sdd", "Solution Design Document", "scope", "Scope", [{ type: "table", columns: ["Item", "Detail"], rows: [["a", "b"]] }]),
       document("d2", "ifc", "Interface Specifications Document", "intro", "Introduction", [
@@ -98,7 +98,7 @@ afterEach(() => {
 });
 
 test("shows the first document, a read-only description, and no Draft badge, Baselines or Validate", async () => {
-  setup("Write");
+  setup("Analyst");
   await screen.findByRole("tablist", { name: "Documents" });
   expect(screen.getByRole("tab", { name: /Solution Design Document/ }).getAttribute("aria-selected")).toBe("true");
   expect(screen.getByText("Settlement platform").tagName).toBe("P");
@@ -110,7 +110,7 @@ test("shows the first document, a read-only description, and no Draft badge, Bas
 });
 
 test("opens the document from the route and switches tabs", async () => {
-  setup("Write", "/projects/p1/documents/d2");
+  setup("Analyst", "/projects/p1/documents/d2");
   expect(await screen.findByRole("heading", { name: "Introduction" })).toBeTruthy();
   expect(screen.getByRole("tab", { name: /Interface Specifications Document/ }).getAttribute("aria-selected")).toBe("true");
   expect((screen.getByLabelText("Header") as HTMLInputElement).value).toBe("Interfaces");
@@ -120,7 +120,7 @@ test("opens the document from the route and switches tabs", async () => {
 });
 
 test("editing a header saves to that document's endpoint", async () => {
-  setup("Write", "/projects/p1/documents/d2");
+  setup("Analyst", "/projects/p1/documents/d2");
   const header = (await screen.findByLabelText("Header")) as HTMLInputElement;
   fireEvent.change(header, { target: { value: "Interface overview" } });
   await waitFor(() => expect(calls.some((call) => call.method === "PUT")).toBe(true), { timeout: 3000 });
@@ -130,7 +130,7 @@ test("editing a header saves to that document's endpoint", async () => {
 });
 
 test("adds a document from an unused layout and opens it", async () => {
-  setup("Write");
+  setup("Analyst");
   await screen.findByRole("tablist", { name: "Documents" });
   fireEvent.click(screen.getByRole("button", { name: /Add document/ }));
   const dialog = screen.getByRole("dialog", { name: "Add document" });
@@ -142,7 +142,7 @@ test("adds a document from an unused layout and opens it", async () => {
 });
 
 test("readers can browse documents but not manage them", async () => {
-  setup("Read");
+  setup("Viewer");
   await screen.findByRole("tablist", { name: "Documents" });
   expect(screen.queryByRole("button", { name: /Add document/ })).toBeNull();
   expect(screen.queryByRole("button", { name: /Regenerate All/ })).toBeNull();
@@ -168,19 +168,19 @@ function twoSectionDoc(names: [string, string]): ProjectDocument {
 }
 
 test("only makers and checkers can edit the structure", async () => {
-  for (const role of ["Read", "Admin"] as const) {
+  for (const role of ["Viewer", "Admin"] as const) {
     setup(role, "/projects/p1/documents/d2");
     await screen.findByRole("heading", { name: "Introduction" });
     expect(screen.queryByRole("button", { name: /Edit structure/ })).toBeNull();
     cleanup();
   }
-  setup("Write", "/projects/p1/documents/d2");
+  setup("Analyst", "/projects/p1/documents/d2");
   await screen.findByRole("heading", { name: "Introduction" });
   expect(screen.getByRole("button", { name: /Edit structure/ })).toBeTruthy();
 });
 
 test("renames a section from the outline and shows the new title", async () => {
-  setup("Write", "/projects/p1/documents/d2");
+  setup("Analyst", "/projects/p1/documents/d2");
   sectionsReply = () => ({ ...workspace.documents[1], templates: [{ ...template("intro", "ifc", "Overview", 100) }], content_json: { sections: { intro: { template_id: "intro", title: "Overview", blocks: [{ type: "header", text: "Interfaces", level: 1 }, { type: "image", url: "", caption: "Context", alt: "" }], missing: [] } } } });
   await screen.findByRole("heading", { name: "Introduction" });
   fireEvent.click(screen.getByRole("button", { name: /Edit structure/ }));
@@ -194,7 +194,7 @@ test("renames a section from the outline and shows the new title", async () => {
 });
 
 test("adds a section with the dialog, opens it, and can move it up", async () => {
-  setup("Write", "/projects/p1/documents/d2");
+  setup("Analyst", "/projects/p1/documents/d2");
   sectionsReply = (method) => (method === "POST" ? twoSectionDoc(["Introduction", "Security"]) : twoSectionDoc(["Security", "Introduction"]));
   await screen.findByRole("heading", { name: "Introduction" });
   fireEvent.click(screen.getByRole("button", { name: /Edit structure/ }));
@@ -217,7 +217,7 @@ test("adds a section with the dialog, opens it, and can move it up", async () =>
 });
 
 test("deleting a section asks first, then removes it", async () => {
-  setup("Write", "/projects/p1/documents/d2");
+  setup("Analyst", "/projects/p1/documents/d2");
   sectionsReply = (method) => (method === "DELETE" ? { ...twoSectionDoc(["Introduction", "Security"]), templates: [twoSectionDoc(["Introduction", "Security"]).templates[0]] } : twoSectionDoc(["Introduction", "Security"]));
   await screen.findByRole("heading", { name: "Introduction" });
   fireEvent.click(screen.getByRole("button", { name: /Edit structure/ }));
@@ -230,7 +230,7 @@ test("deleting a section asks first, then removes it", async () => {
 });
 
 test("section settings send the changed blocks and prompt", async () => {
-  setup("Write", "/projects/p1/documents/d2");
+  setup("Analyst", "/projects/p1/documents/d2");
   sectionsReply = () => twoSectionDoc(["Introduction", "Security"]);
   await screen.findByRole("heading", { name: "Introduction" });
   fireEvent.click(screen.getByRole("button", { name: /Edit structure/ }));
@@ -245,7 +245,7 @@ test("section settings send the changed blocks and prompt", async () => {
 });
 
 test("the header size can be changed in the document and is saved", async () => {
-  setup("Write", "/projects/p1/documents/d2");
+  setup("Analyst", "/projects/p1/documents/d2");
   const size = (await screen.findByLabelText("Header size")) as HTMLSelectElement;
   expect(size.value).toBe("1");
   fireEvent.change(size, { target: { value: "3" } });
@@ -255,12 +255,12 @@ test("the header size can be changed in the document and is saved", async () => 
 });
 
 test("viewers cannot change the header size", async () => {
-  setup("Read", "/projects/p1/documents/d2");
+  setup("Viewer", "/projects/p1/documents/d2");
   expect(((await screen.findByLabelText("Header size")) as HTMLSelectElement).disabled).toBe(true);
 });
 
 test("a writer auto fills one section with an extra instruction", async () => {
-  setup("Write", "/projects/p1/documents/d2");
+  setup("Analyst", "/projects/p1/documents/d2");
   sectionsReply = () => workspace.documents[1];
   await screen.findByRole("heading", { name: "Introduction" });
   fireEvent.click(screen.getByRole("button", { name: /auto_fix_high\s*Auto fill$/ }));
@@ -276,7 +276,7 @@ test("a writer auto fills one section with an extra instruction", async () => {
 });
 
 test("auto fill warns before replacing a section that already has content, and can be cancelled", async () => {
-  setup("Write");
+  setup("Analyst");
   await screen.findByRole("heading", { name: "Scope" });
   fireEvent.click(screen.getByRole("button", { name: /auto_fix_high\s*Auto fill$/ }));
   const dialog = screen.getByRole("dialog", { name: "Auto fill section" });
@@ -288,7 +288,7 @@ test("auto fill warns before replacing a section that already has content, and c
 });
 
 test("auto fill for the document fills empty sections only unless told to replace everything", async () => {
-  setup("Write");
+  setup("Analyst");
   await screen.findByRole("heading", { name: "Scope" });
   fireEvent.click(screen.getByRole("button", { name: /Auto fill Document/ }));
   let dialog = screen.getByRole("dialog", { name: "Auto fill document" });
@@ -309,7 +309,7 @@ test("auto fill for the document fills empty sections only unless told to replac
 });
 
 test("viewers and admins do not get auto fill", async () => {
-  for (const role of ["Read", "Admin"] as const) {
+  for (const role of ["Viewer", "Admin"] as const) {
     setup(role);
     await screen.findByRole("heading", { name: "Scope" });
     expect(screen.queryByRole("button", { name: /Auto fill/ })).toBeNull();

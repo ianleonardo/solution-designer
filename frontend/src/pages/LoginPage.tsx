@@ -33,11 +33,19 @@ export function LoginPage() {
         <span className="material-symbols-outlined">{themeIcon(next)}</span>
       </button>
       <form onSubmit={(event) => void onSubmit(event)} className="w-full max-w-lg bg-panel border border-hairline rounded-lg shadow-glaze p-8">
-        <div className="flex items-center gap-3 mb-6">
-          <span className="h-10 w-10 rounded bg-cobalt text-on-cobalt flex items-center justify-center">
-            <span className="material-symbols-outlined">hub</span>
-          </span>
-          <h1 className="font-headline text-[40px] font-semibold leading-10 whitespace-nowrap" data-testid="wordmark">SolutionCrafter</h1>
+        <div className="mb-6">
+          <div className="flex items-center gap-3">
+            <span className="h-10 w-10 rounded bg-cobalt text-on-cobalt flex items-center justify-center">
+              <span className="material-symbols-outlined">hub</span>
+            </span>
+            <h1 className="font-wordmark text-[40px] font-bold leading-10 tracking-tight whitespace-nowrap" data-testid="wordmark">
+              <span>Solution</span>
+              <span className="text-accent">Crafter</span>
+            </h1>
+          </div>
+          <p className="mt-3 text-sm text-muted">
+            An AI-powered tool to craft Project Solution Design document and other related documents.
+          </p>
         </div>
         <label className="block mb-3">
           <span className="font-label text-[10px] uppercase text-muted">Login ID</span>

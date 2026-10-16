@@ -106,12 +106,13 @@ def _tables() -> list[tuple[str, str, str, str]]:
         ("project_rag_chunks", "chunk_id", "project", "project references"),
         ("systems", "system_code", "system", "systems"),
         ("interfaces", "interface_id", "interface", "interfaces"),
+        ("kb_tables", "table_id", "kb_table", "database tables"),
     ]
 
 
 def _rows(kind: str, only_missing: bool) -> list[tuple[str, str]]:
     """(row id, text to embed) for one table."""
-    from app.services import guidelines, interfaces, systems
+    from app.services import guidelines, interfaces, systems, tables
 
     where = " WHERE embedding IS NULL" if only_missing else ""
     if kind == "inventory":
@@ -132,6 +133,9 @@ def _rows(kind: str, only_missing: bool) -> list[tuple[str, str]]:
     if kind == "system":
         rows = db.fetchall(f"SELECT * FROM systems{where}")
         return [(row["system_code"], systems.text_for(row)) for row in rows]
+    if kind == "kb_table":
+        rows = db.fetchall(f"SELECT * FROM kb_tables{where}")
+        return [(row["table_id"], tables.text_for(row)[:2000]) for row in rows]
     rows = db.fetchall(f"SELECT * FROM interfaces{where}")
     return [(row["interface_id"], interfaces.text_for(row)) for row in rows]
 

@@ -5,7 +5,7 @@ from fastapi import Depends
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 from app import db
-from app.config import jwt_secret
+from app.config import KB_EDITORS, jwt_secret
 from app.errors import AppError
 
 bearer = HTTPBearer(auto_error=False)
@@ -39,5 +39,11 @@ def current_user(credentials: HTTPAuthorizationCredentials | None = Depends(bear
 
 def require_admin(user: dict = Depends(current_user)) -> dict:
     if user["role_name"] != "Admin":
+        raise AppError(403, "Forbidden")
+    return user
+
+
+def require_kb_editor(user: dict = Depends(current_user)) -> dict:
+    if user["role_name"] not in KB_EDITORS:
         raise AppError(403, "Forbidden")
     return user

@@ -7,7 +7,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from app import db
-from app.config import data_dir
+from app.config import KB_EDITORS, data_dir
 from app.errors import AppError
 from app.services import files, gcs, llm
 from app.services.project_rag import chunk_text
@@ -26,8 +26,8 @@ def _now() -> datetime:
     return datetime.now(timezone.utc)
 
 
-def _require_admin(user: dict) -> None:
-    if user["role_name"] != "Admin":
+def _require_editor(user: dict) -> None:
+    if user["role_name"] not in KB_EDITORS:
         raise AppError(403, "Forbidden")
 
 
@@ -144,7 +144,7 @@ def _warning(embedded: int, chunks: int) -> str:
 
 
 def create(user: dict, title: str, description: str, filename: str, data: bytes) -> dict:
-    _require_admin(user)
+    _require_editor(user)
     title = (title or "").strip()
     description = (description or "").strip()
     if not title:
@@ -204,7 +204,7 @@ def original_file(user: dict, guideline_id: str) -> tuple[Path, str, str]:
 
     The local copy is used when present; otherwise it is fetched back from the GCS bucket.
     """
-    _require_admin(user)
+    del user
     row = _row(guideline_id)
     if not row["storage_path"]:
         raise AppError(404, "The original file is not available for this guideline.")
@@ -221,7 +221,7 @@ def _chunk_contents(guideline_id: str) -> list[str]:
 
 
 def delete(user: dict, guideline_id: str) -> None:
-    _require_admin(user)
+    _require_editor(user)
     row = _row(guideline_id)
     db.exec_sql("DELETE FROM guideline_chunks WHERE guideline_id = ?", [guideline_id])
     db.exec_sql("DELETE FROM guidelines WHERE guideline_id = ?", [guideline_id])

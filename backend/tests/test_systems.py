@@ -60,12 +60,16 @@ def test_system_cannot_be_deleted_while_another_system_lists_it(client):
     assert client.delete("/api/systems/SPL", headers=auth(admin)).status_code == 200
 
 
-def test_only_admin_can_use_systems(client):
+def test_analyst_can_edit_and_viewer_can_only_view_systems(client):
     admin = login(client, "Admin")
     _create(client, admin, "SPL")
-    for role in ("Write", "Read"):
-        token = auth(login(client, role))
-        assert client.get("/api/systems", headers=token).status_code == 403
-        assert client.post("/api/systems", json={"system_code": "X", "system_name": "x"}, headers=token).status_code == 403
-        assert client.patch("/api/systems/SPL", json={"system_name": "x"}, headers=token).status_code == 403
-        assert client.delete("/api/systems/SPL", headers=token).status_code == 403
+    analyst = auth(login(client, "Analyst"))
+    assert client.get("/api/systems", headers=analyst).status_code == 200
+    assert client.post("/api/systems", json={"system_code": "DGE", "system_name": "Digital"}, headers=analyst).status_code == 200
+    assert client.patch("/api/systems/SPL", json={"system_name": "Updated"}, headers=analyst).status_code == 200
+
+    viewer = auth(login(client, "Viewer"))
+    assert client.get("/api/systems", headers=viewer).status_code == 200
+    assert client.post("/api/systems", json={"system_code": "X", "system_name": "x"}, headers=viewer).status_code == 403
+    assert client.patch("/api/systems/SPL", json={"system_name": "x"}, headers=viewer).status_code == 403
+    assert client.delete("/api/systems/SPL", headers=viewer).status_code == 403

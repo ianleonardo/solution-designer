@@ -15,10 +15,10 @@ def _by_action(entries, action):
 
 
 def test_creating_a_project_records_who_what_and_when(client):
-    writer = login(client, "Write")
-    created = client.post("/api/projects", json={"project_name": "Cards Hub", "description": "d"}, headers=auth(writer)).json()
+    analyst = login(client, "Analyst")
+    created = client.post("/api/projects", json={"project_name": "Cards Hub", "description": "d"}, headers=auth(analyst)).json()
     (entry,) = _by_action(_log(client), "create_project")
-    assert entry["login_id"] == "writer" and entry["role_name"] == "Write" and entry["username"] == "Writer"
+    assert entry["login_id"] == "analyst" and entry["role_name"] == "Analyst" and entry["username"] == "Analyst"
     assert entry["entity_type"] == "project" and entry["entity_id"] == created["project_id"]
     assert entry["method"] == "POST" and entry["path"] == "/api/projects"
     assert "Cards Hub" in entry["summary"] and entry["summary"].startswith("Create project")
@@ -66,7 +66,7 @@ def test_secrets_never_reach_the_log(client):
     admin = login(client, "Admin")
     password = "Sup3r-Secret-Pass!"
     created = client.post(
-        "/api/users", json={"login_id": "newbie", "username": "Newbie", "password": password, "role_name": "Read"}, headers=auth(admin)
+        "/api/users", json={"login_id": "newbie", "username": "Newbie", "password": password, "role_name": "Viewer"}, headers=auth(admin)
     )
     assert created.status_code == 200, created.text
     provider = client.put("/api/settings/providers/gemini", json={"api_key": "sk-very-secret-key", "chat_model": "gem-x"}, headers=auth(admin))
@@ -84,16 +84,16 @@ def test_secrets_never_reach_the_log(client):
 
 
 def test_sign_ins_and_failed_sign_ins_are_recorded(client):
-    login(client, "Write")
-    bad = client.post("/api/auth/login", json={"login_id": "writer", "password": "nope-nope-nope"})
+    login(client, "Analyst")
+    bad = client.post("/api/auth/login", json={"login_id": "analyst", "password": "nope-nope-nope"})
     assert bad.status_code == 401
     unknown = client.post("/api/auth/login", json={"login_id": "ghost", "password": "nope-nope-nope"})
     assert unknown.status_code == 401
     entries = _log(client)
-    (ok,) = [entry for entry in _by_action(entries, "login") if entry["login_id"] == "writer"]
-    assert ok["login_id"] == "writer" and ok["role_name"] == "Write" and ok["summary"] == "Signed in"
+    (ok,) = [entry for entry in _by_action(entries, "login") if entry["login_id"] == "analyst"]
+    assert ok["login_id"] == "analyst" and ok["role_name"] == "Analyst" and ok["summary"] == "Signed in"
     failed = _by_action(entries, "login_failed")
-    assert {entry["login_id"] for entry in failed} == {"writer", "ghost"}
+    assert {entry["login_id"] for entry in failed} == {"analyst", "ghost"}
     assert all(entry["user_id"] is None for entry in failed)
 
 
@@ -137,7 +137,7 @@ def test_the_log_is_newest_first_and_can_be_filtered(client):
     everything = _log(client)
     stamps = [entry["occurred_at"] for entry in everything]
     assert stamps == sorted(stamps, reverse=True)
-    assert [entry["login_id"] for entry in _log(client, user="writer") if entry["action"] == "create_project"] == ["writer", "writer"]
+    assert [entry["login_id"] for entry in _log(client, user="analyst") if entry["action"] == "create_project"] == ["analyst", "analyst"]
     assert {entry["login_id"] for entry in _log(client, user="ADMIN")} == {"admin"}
     assert {entry["action"] for entry in _log(client, action="create_system")} == {"create_system"}
     assert {entry["entity_type"] for entry in _log(client, entity_type="project")} == {"project"}
