@@ -2,6 +2,7 @@ import { FormEvent, useEffect, useState } from "react";
 import { api, ApiError, formatDate } from "../../api";
 import { ConfirmDialog } from "../../components/ConfirmDialog";
 import { type Column, DataTable } from "../../components/DataTable";
+import { SelectField } from "../../components/SelectField";
 import type { Role, User } from "../../types";
 
 export const USER_PAGE_SIZE = 20;
@@ -33,14 +34,21 @@ function UserDialog({ user, onSaved, onClose }: { user: User | null; onSaved: (u
       setError(LOGIN_ID_HELP);
       return;
     }
+    if (password && password.length < 8) {
+      setError("Password must be at least 8 characters");
+      return;
+    }
     setBusy(true);
     try {
+      const payload: { username: string; role_name: Role; login_id?: string; password?: string } = {
+        username: name.trim(),
+        role_name: role,
+      };
+      if (!editing) payload.login_id = loginId.trim();
+      if (!editing || password) payload.password = password;
       const saved = editing
-        ? await api<User>(`/api/users/${user.user_id}`, { method: "PATCH", body: JSON.stringify({ username: name.trim(), role_name: role }) })
-        : await api<User>("/api/users", {
-            method: "POST",
-            body: JSON.stringify({ login_id: loginId.trim(), username: name.trim(), password, role_name: role }),
-          });
+        ? await api<User>(`/api/users/${user.user_id}`, { method: "PATCH", body: JSON.stringify(payload) })
+        : await api<User>("/api/users", { method: "POST", body: JSON.stringify(payload) });
       onSaved(saved);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Could not save the user");
@@ -62,19 +70,23 @@ function UserDialog({ user, onSaved, onClose }: { user: User | null; onSaved: (u
           <span className="text-[11px] uppercase tracking-wide text-muted">Name</span>
           <input className="field mt-1" aria-label="Name" value={name} required autoFocus={editing} onChange={(event) => setName(event.target.value)} />
         </label>
-        {!editing && (
-          <label className="block">
-            <span className="text-[11px] uppercase tracking-wide text-muted">Password</span>
-            <input className="field mt-1" type="password" aria-label="Password" value={password} required minLength={8} autoComplete="new-password" onChange={(event) => setPassword(event.target.value)} />
-          </label>
-        )}
+        <label className="block">
+          <span className="text-[11px] uppercase tracking-wide text-muted">Password</span>
+          <input className="field mt-1" type="password" aria-label="Password" value={password} required={!editing} minLength={8} autoComplete="new-password" placeholder={editing ? "Leave blank to keep the current password" : undefined} onChange={(event) => setPassword(event.target.value)} />
+          {editing && <span className="mt-1 block text-[11px] text-muted">Leave blank to keep the current password.</span>}
+        </label>
         <label className="block">
           <span className="text-[11px] uppercase tracking-wide text-muted">Role</span>
-          <select className="field mt-1" aria-label="Role" value={role} onChange={(event) => setRole(event.target.value as Role)}>
-            {ROLES.map((item) => (
-              <option key={item}>{item}</option>
-            ))}
-          </select>
+          <div className="mt-1">
+            <SelectField
+              aria-label="Role"
+              value={role}
+              disabled={busy}
+              className="w-full [&_button]:w-full [&_button]:max-w-none"
+              options={ROLES.map((item) => ({ value: item, label: item }))}
+              onChange={(value) => setRole(value as Role)}
+            />
+          </div>
         </label>
         {error && <p className="text-alert">{error}</p>}
         <div className="flex justify-end gap-2 pt-1">
@@ -120,7 +132,7 @@ export function UsersPage() {
       header: "Actions",
       render: (row) => (
         <div className="flex items-center gap-1.5">
-          <button type="button" className="icon-btn" aria-label={`Edit ${row.login_id}`} title="Edit name and role" onClick={() => setDialog(row)}>
+          <button type="button" className="icon-btn" aria-label={`Edit ${row.login_id}`} title="Edit name, role, and password" onClick={() => setDialog(row)}>
             <span className="material-symbols-outlined text-base">edit</span>
           </button>
           <button type="button" className="icon-btn icon-btn-danger" aria-label={`Delete ${row.login_id}`} title="Delete user" onClick={() => setDeleting(row)}>

@@ -154,6 +154,7 @@ def update_user(user_id: str, body: dict, user: dict = Depends(require_admin)):
         user_id,
         str(body.get("username") or ""),
         str(body.get("role_name") or ""),
+        str(body.get("password") or ""),
     )
 
 

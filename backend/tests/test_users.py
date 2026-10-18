@@ -64,6 +64,25 @@ def test_edit_changes_name_and_role_only(client):
     assert client.patch(f"/api/users/{user_id}", json={"username": "x", "role_name": "Boss"}, headers=auth(admin)).status_code == 400
     assert client.patch("/api/users/missing", json={"username": "x", "role_name": "Analyst"}, headers=auth(admin)).status_code == 404
 
+    replaced = client.patch(
+        f"/api/users/{user_id}",
+        json={"username": "Ian Chen", "role_name": "Analyst", "password": "NewPassword1"},
+        headers=auth(admin),
+    )
+    assert replaced.status_code == 200, replaced.text
+    assert "password" not in replaced.json()
+    assert client.post("/api/auth/login", json={"login_id": "ian", "password": "Password123!"}).status_code == 401
+    assert client.post("/api/auth/login", json={"login_id": "ian", "password": "NewPassword1"}).status_code == 200
+    assert (
+        client.patch(
+            f"/api/users/{user_id}",
+            json={"username": "Ian Chen", "role_name": "Analyst", "password": "short"},
+            headers=auth(admin),
+        ).status_code
+        == 400
+    )
+    assert client.post("/api/auth/login", json={"login_id": "ian", "password": "NewPassword1"}).status_code == 200
+
 
 def test_last_admin_cannot_be_demoted_or_deleted(client):
     admin = login(client, "Admin")

@@ -91,8 +91,10 @@ describe("AuditLogPage", () => {
     await screen.findByText("Create project: Project 1");
     await waitFor(() => expect(screen.getByRole("option", { name: "Delete user" })).toBeTruthy());
     fireEvent.change(screen.getByLabelText("Action"), { target: { value: "delete_user" } });
-    fireEvent.change(screen.getByLabelText("From"), { target: { value: "2026-10-01" } });
-    fireEvent.change(screen.getByLabelText("To"), { target: { value: "2026-10-14" } });
+    expect((screen.getByLabelText("From") as HTMLInputElement).placeholder).toBe("DD/MM/YYYY");
+    expect((screen.getByLabelText("To") as HTMLInputElement).placeholder).toBe("DD/MM/YYYY");
+    fireEvent.change(screen.getByLabelText("From"), { target: { value: "01/10/2026" } });
+    fireEvent.change(screen.getByLabelText("To"), { target: { value: "14/10/2026" } });
     await waitFor(() =>
       expect(fetchMock.mock.calls.some((call) => String(call[0]).includes("action=delete_user") && String(call[0]).includes("since=2026-10-01") && String(call[0]).includes("until=2026-10-14"))).toBe(true),
     );

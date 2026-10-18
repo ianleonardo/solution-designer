@@ -10,6 +10,18 @@ function words(action: string) {
   return text.charAt(0).toUpperCase() + text.slice(1);
 }
 
+/** A complete DD/MM/YYYY value, or null while it is incomplete or not a real date. */
+function isoFromDay(value: string): string | null {
+  const match = /^(\d{2})\/(\d{2})\/(\d{4})$/.exec(value.trim());
+  if (!match) return null;
+  const day = Number(match[1]);
+  const month = Number(match[2]);
+  const year = Number(match[3]);
+  const date = new Date(Date.UTC(year, month - 1, day));
+  if (date.getUTCFullYear() !== year || date.getUTCMonth() !== month - 1 || date.getUTCDate() !== day) return null;
+  return `${match[3]}-${match[2]}-${match[1]}`;
+}
+
 function detailText(entry: AuditEntry) {
   const parts: Record<string, unknown> = { ...(entry.detail ?? {}) };
   if (entry.method && entry.path) parts.request_line = `${entry.method} ${entry.path}`;
@@ -21,6 +33,8 @@ export function AuditLogPage() {
   const [entries, setEntries] = useState<AuditEntry[]>([]);
   const [actions, setActions] = useState<string[]>([]);
   const [action, setAction] = useState("");
+  const [sinceText, setSinceText] = useState("");
+  const [untilText, setUntilText] = useState("");
   const [since, setSince] = useState("");
   const [until, setUntil] = useState("");
   const [error, setError] = useState("");
@@ -109,18 +123,46 @@ export function AuditLogPage() {
         </label>
         <label className="text-sm">
           <span className="block font-label text-[10px] uppercase text-muted">From</span>
-          <input className="field" type="date" value={since} max={until || undefined} onChange={(event) => setSince(event.target.value)} />
+          <input
+            className="field"
+            type="text"
+            inputMode="numeric"
+            placeholder="DD/MM/YYYY"
+            aria-label="From"
+            maxLength={10}
+            value={sinceText}
+            onChange={(event) => {
+              const next = event.target.value;
+              setSinceText(next);
+              setSince((current) => (next.trim() ? isoFromDay(next) ?? current : ""));
+            }}
+          />
         </label>
         <label className="text-sm">
           <span className="block font-label text-[10px] uppercase text-muted">To</span>
-          <input className="field" type="date" value={until} min={since || undefined} onChange={(event) => setUntil(event.target.value)} />
+          <input
+            className="field"
+            type="text"
+            inputMode="numeric"
+            placeholder="DD/MM/YYYY"
+            aria-label="To"
+            maxLength={10}
+            value={untilText}
+            onChange={(event) => {
+              const next = event.target.value;
+              setUntilText(next);
+              setUntil((current) => (next.trim() ? isoFromDay(next) ?? current : ""));
+            }}
+          />
         </label>
-        {(action || since || until) && (
+        {(action || sinceText || untilText) && (
           <button
             type="button"
             className="btn"
             onClick={() => {
               setAction("");
+              setSinceText("");
+              setUntilText("");
               setSince("");
               setUntil("");
             }}

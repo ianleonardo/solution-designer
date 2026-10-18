@@ -472,8 +472,8 @@ def _admin_count() -> int:
     return row["c"] if row else 0
 
 
-def update_user(actor: dict, user_id: str, username: str, role_name: str) -> dict:
-    """Only the display name and role can change; the Login ID is fixed."""
+def update_user(actor: dict, user_id: str, username: str, role_name: str, password: str = "") -> dict:
+    """The display name, role, and password can change. The Login ID is fixed. A blank password is left as it is."""
     _ensure(actor, {"Admin"})
     row = db.fetchone("SELECT * FROM users WHERE user_id = ?", [user_id])
     if row is None:
@@ -485,9 +485,19 @@ def update_user(actor: dict, user_id: str, username: str, role_name: str) -> dic
         raise AppError(400, "Name is required")
     if len(cleaned) > 100:
         raise AppError(400, "Name must be 100 characters or fewer")
+    new_password = password.strip()
+    if new_password and len(new_password) < 8:
+        raise AppError(400, "Password must be at least 8 characters")
     if row["role_name"] == "Admin" and role_name != "Admin" and _admin_count() <= 1:
         raise AppError(400, "The last admin cannot be demoted")
-    db.exec_sql("UPDATE users SET username = ?, role_name = ? WHERE user_id = ?", [cleaned, role_name, user_id])
+    if new_password:
+        hashed = bcrypt.hashpw(new_password.encode(), bcrypt.gensalt()).decode()
+        db.exec_sql(
+            "UPDATE users SET username = ?, role_name = ?, password_hash = ? WHERE user_id = ?",
+            [cleaned, role_name, hashed, user_id],
+        )
+    else:
+        db.exec_sql("UPDATE users SET username = ?, role_name = ? WHERE user_id = ?", [cleaned, role_name, user_id])
     gcs.upload_db()
     return public_user(db.fetchone("SELECT * FROM users WHERE user_id = ?", [user_id]))
 

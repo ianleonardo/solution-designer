@@ -38,7 +38,8 @@ describe("UsersPage", () => {
     fireEvent.change(screen.getByLabelText("Login ID"), { target: { value: "lee" } });
     fireEvent.change(screen.getByLabelText("Name"), { target: { value: "Lee" } });
     fireEvent.change(screen.getByLabelText("Password"), { target: { value: "Password123!" } });
-    fireEvent.change(screen.getByLabelText("Role"), { target: { value: "Viewer" } });
+    fireEvent.click(screen.getByLabelText("Role"));
+    fireEvent.click(screen.getByRole("option", { name: "Viewer" }));
     fireEvent.click(screen.getAllByRole("button", { name: "Add user" })[1]);
     await waitFor(() => expect(screen.getByText("Lee")).toBeTruthy());
     const post = fetchMock.mock.calls.find((call) => (call[1] as RequestInit | undefined)?.method === "POST");
@@ -62,20 +63,23 @@ describe("UsersPage", () => {
     await waitFor(() => expect(screen.getAllByText("13-Oct 2026").length).toBe(2));
   });
 
-  it("edits only name and role; the Login ID is read-only", async () => {
-    const fetchMock = setup((_url, init) => (init?.method === "PATCH" ? json({ ...base[1], username: "Maya K", role_name: "Analyst" }) : undefined));
+  it("edits name, role, and password; the Login ID is read-only and a blank password is left unchanged", async () => {
+    const fetchMock = setup((_url, init) => (init?.method === "PATCH" ? json({ ...base[1], username: "Maya K", role_name: "Viewer" }) : undefined));
     await waitFor(() => expect(screen.getByText("maya")).toBeTruthy());
     fireEvent.click(screen.getByRole("button", { name: "Edit maya" }));
     const loginId = screen.getByLabelText("Login ID") as HTMLInputElement;
     expect(loginId.readOnly).toBe(true);
-    expect(screen.queryByLabelText("Password")).toBeNull();
+    expect(screen.queryByRole("combobox", { name: "Role" })).toBeNull();
+    expect(screen.getByLabelText("Password")).toBeTruthy();
     fireEvent.change(screen.getByLabelText("Name"), { target: { value: "Maya K" } });
-    fireEvent.change(screen.getByLabelText("Role"), { target: { value: "Analyst" } });
+    fireEvent.change(screen.getByLabelText("Password"), { target: { value: "NewPassword1" } });
+    fireEvent.click(screen.getByLabelText("Role"));
+    fireEvent.click(screen.getByRole("option", { name: "Viewer" }));
     fireEvent.click(screen.getByRole("button", { name: "Save" }));
     await waitFor(() => expect(screen.getByText("Maya K")).toBeTruthy());
     const patch = fetchMock.mock.calls.find((call) => (call[1] as RequestInit | undefined)?.method === "PATCH");
     expect(patch?.[0]).toBe("/api/users/u2");
-    expect(JSON.parse(String((patch?.[1] as RequestInit).body))).toEqual({ username: "Maya K", role_name: "Analyst" });
+    expect(JSON.parse(String((patch?.[1] as RequestInit).body))).toEqual({ username: "Maya K", role_name: "Viewer", password: "NewPassword1" });
   });
 
   it("confirms before deleting a user", async () => {
