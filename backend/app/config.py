@@ -71,6 +71,7 @@ KB_EDITORS = {"Admin", "Analyst"}
 _DEFAULT_COUNTRIES = ("SG", "MY", "TH", "VN", "ID")
 _DEFAULT_DATABASES = ("PIB", "MBK", "SMS", "NTN", "WSM", "LCM")
 _DEFAULT_INTERFACE_CHANNELS = ("SPL", "DGE", "PIB", "NTN", "WSM", "EAI")
+_DEFAULT_BITBUCKET_PROJECTS = ("CORE", "SPL", "DBE", "PIB", "PIBVN2", "PIBID", "SOF", "WSM", "NTN")
 
 
 def _csv_env(name: str, defaults: tuple[str, ...]) -> tuple[str, ...]:
@@ -93,13 +94,17 @@ def kb_interface_channels() -> tuple[str, ...]:
     return _csv_env("KB_INTERFACE_CHANNELS", _DEFAULT_INTERFACE_CHANNELS)
 
 
+def kb_bitbucket_projects() -> tuple[str, ...]:
+    return _csv_env("KB_BITBUCKET_PROJECTS", _DEFAULT_BITBUCKET_PROJECTS)
+
+
 GLOBAL_PROMPT = (
     "You are a senior enterprise solution architect covering IT system solutioning and architecture: "
     "integration and interfaces, data and databases, security, resiliency, deployment, performance and "
     "non-functional requirements. "
     "Use general IT and architecture knowledge to explain, advise and compare options. "
     "When the topic is specific to this organisation's systems, interfaces, capabilities, table definitions, "
-    "screens, batches, reports or guidelines, base the answer on the knowledge base inventory and on the "
+    "screens, batches, reports, bitbucket repositories or guidelines, base the answer on the knowledge base inventory and on the "
     "project documents and references when they are provided. If the inventory does not cover it, say so and "
     "do not invent system names, volumes or numbers. "
     "Be concise and practical, and state any assumptions."
@@ -134,7 +139,7 @@ CHAT_RULES = (
     "(pronouns, 'that', 'the previous answer') against those turns. "
     "For general IT solutioning and architecture questions, answer from your general knowledge. "
     "For questions about specific systems (with their upstream and downstream systems), interfaces (by channel, "
-    "country, protocol, source and destination), capabilities, tables, screens, batches, reports or guidelines, "
+    "country, protocol, source and destination), capabilities, tables, screens, batches, reports, bitbucket repositories or guidelines, "
     "rely on the KNOWLEDGE BASE sections and the project context provided: use every relevant entry, name the "
     "system codes and interfaces you rely on, and say briefly when they do not contain the answer. "
     "Decline questions that are not about IT solutioning or architecture."

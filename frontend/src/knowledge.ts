@@ -8,5 +8,6 @@ export const KNOWLEDGE_KINDS: KnowledgeKind[] = [
   { slug: "screens", label: "Screens", inventoryType: "Screens" },
   { slug: "batches", label: "Batches", inventoryType: "Batches" },
   { slug: "reports", label: "Reports", inventoryType: "Reports" },
+  { slug: "bitbucket", label: "Bitbucket Repository", inventoryType: "Bitbucket Repos" },
   { slug: "guidelines", label: "Guidelines", inventoryType: "Guidelines" },
 ];

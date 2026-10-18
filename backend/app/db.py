@@ -341,6 +341,19 @@ def _migrate() -> None:
         )
         """,
         """
+        CREATE TABLE IF NOT EXISTS kb_bitbucket_repos (
+            repo_id VARCHAR PRIMARY KEY,
+            bitbucket_project VARCHAR NOT NULL,
+            repo_name VARCHAR NOT NULL,
+            description VARCHAR NOT NULL DEFAULT '',
+            main_components VARCHAR NOT NULL DEFAULT '',
+            created_at TIMESTAMP NOT NULL,
+            last_modified TIMESTAMP NOT NULL,
+            embedding FLOAT[],
+            UNIQUE (bitbucket_project, repo_name)
+        )
+        """,
+        """
         CREATE TABLE IF NOT EXISTS kb_capability_interfaces (
             capability_id VARCHAR NOT NULL,
             interface_id VARCHAR NOT NULL,
@@ -497,6 +510,44 @@ def _ensure_columns() -> None:
     if "country_behavior" not in capability_columns:
         _conn.execute("ALTER TABLE kb_capabilities ADD COLUMN country_behavior VARCHAR DEFAULT ''")
         _conn.execute("UPDATE kb_capabilities SET country_behavior = '' WHERE country_behavior IS NULL")
+    repo_columns = {
+        row[0]
+        for row in _conn.execute(
+            "SELECT column_name FROM information_schema.columns WHERE table_name = 'kb_bitbucket_repos'"
+        ).fetchall()
+    }
+    # Repositories belong to a Bitbucket project, not a system. Rebuild so the unique key can change.
+    if "system_code" in repo_columns:
+        _conn.execute(
+            """
+            CREATE TABLE kb_bitbucket_repos_v2 (
+                repo_id VARCHAR PRIMARY KEY,
+                bitbucket_project VARCHAR NOT NULL,
+                repo_name VARCHAR NOT NULL,
+                description VARCHAR NOT NULL DEFAULT '',
+                main_components VARCHAR NOT NULL DEFAULT '',
+                created_at TIMESTAMP NOT NULL,
+                last_modified TIMESTAMP NOT NULL,
+                embedding FLOAT[],
+                UNIQUE (bitbucket_project, repo_name)
+            )
+            """
+        )
+        _conn.execute(
+            """
+            INSERT INTO kb_bitbucket_repos_v2
+            SELECT repo_id, bitbucket_project, repo_name, description, main_components, created_at, last_modified, embedding
+            FROM (
+                SELECT *, ROW_NUMBER() OVER (
+                    PARTITION BY bitbucket_project, repo_name ORDER BY last_modified DESC, repo_id
+                ) AS rn
+                FROM kb_bitbucket_repos
+            )
+            WHERE rn = 1
+            """
+        )
+        _conn.execute("DROP TABLE kb_bitbucket_repos")
+        _conn.execute("ALTER TABLE kb_bitbucket_repos_v2 RENAME TO kb_bitbucket_repos")
 
 
 def _seed_llm_providers() -> None:

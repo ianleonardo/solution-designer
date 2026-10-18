@@ -83,6 +83,22 @@ describe("KnowledgePage", () => {
     expect(fetchMock.mock.calls.map((call) => call[0])).toEqual(expect.arrayContaining(["/api/catalogs", "/api/systems", "/api/batches"]));
   });
 
+  it("shows the Bitbucket Repository screen, not the generic upload", async () => {
+    vi.stubGlobal("localStorage", { getItem: () => null });
+    const fetchMock = vi.fn().mockImplementation((url: string) => {
+      if (url === "/api/catalogs") return Promise.resolve(json({ countries: ["SG"], databases: [], interface_channels: [], bitbucket_projects: ["CORE"] }));
+      if (url === "/api/systems") return Promise.resolve(json([]));
+      if (url === "/api/bitbucket-repos") return Promise.resolve(json([]));
+      return Promise.resolve(json([]));
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    renderAt("/knowledge/bitbucket");
+    await waitFor(() => expect(screen.getByRole("heading", { name: "Bitbucket Repository" })).toBeTruthy());
+    expect(screen.queryByLabelText("Upload Bitbucket Repos")).toBeNull();
+    expect(screen.getByRole("tab", { name: "CORE" })).toBeTruthy();
+    expect(screen.getByLabelText("Upload CORE Excel")).toBeTruthy();
+  });
+
   it("shows the guideline documents screen, not the generic upload, on the Guidelines page", async () => {
     vi.stubGlobal("localStorage", { getItem: () => null });
     const fetchMock = vi.fn().mockResolvedValue(json([]));

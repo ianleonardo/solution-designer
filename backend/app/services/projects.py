@@ -360,6 +360,8 @@ def add_rag(user: dict, filename: str, data: bytes, inventory_type: str | None =
         raise AppError(400, "Add capabilities from the Capabilities page (upload Excel by country and system).")
     if inventory_type == "Tables":
         raise AppError(400, "Add tables from the Tables page.")
+    if inventory_type == "Bitbucket Repos":
+        raise AppError(400, "Add Bitbucket repositories from the Bitbucket Repository page (upload Excel on the project tab).")
     text = files.extract_text(filename, data, files.RAG_EXTENSIONS)
     folder = data_dir() / "uploads" / "rag"
     folder.mkdir(parents=True, exist_ok=True)

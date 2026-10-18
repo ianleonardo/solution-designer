@@ -201,6 +201,7 @@ export type Catalogs = {
   countries: string[];
   databases: string[];
   interface_channels: string[];
+  bitbucket_projects: string[];
 };
 
 export type ReindexStatus = {
@@ -267,6 +268,16 @@ export type TableCompareResult = {
     data_types: Record<string, string>;
     missing_in: string[];
   }[];
+};
+
+export type KbBitbucketRepoRecord = {
+  repo_id: string;
+  bitbucket_project: string;
+  repo_name: string;
+  description: string;
+  main_components: string;
+  created_at: string;
+  last_modified: string;
 };
 
 export type KbReportRecord = {

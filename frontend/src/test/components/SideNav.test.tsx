@@ -51,7 +51,7 @@ describe("SideNav", () => {
     );
     expect(screen.queryByRole("button", { name: "Screens" })).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: /Knowledge Base/ }));
-    for (const label of ["Systems", "Capabilities", "Interfaces", "Tables", "Screens", "Batches", "Reports", "Guidelines"]) {
+    for (const label of ["Systems", "Capabilities", "Interfaces", "Tables", "Screens", "Batches", "Reports", "Bitbucket Repository", "Guidelines"]) {
       expect(screen.getByRole("button", { name: label })).toBeTruthy();
     }
   });

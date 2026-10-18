@@ -55,6 +55,7 @@ SINGULAR = {
     "columns": "column",
     "reports": "report",
     "batches": "batch",
+    "bitbucket-repos": "bitbucket_repo",
     "catalogs": "catalogs",
     "settings": "settings",
     "providers": "provider",
@@ -75,6 +76,7 @@ ID_KEYS = {
     "column": "column_id",
     "report": "report_id",
     "batch": "batch_id",
+    "bitbucket_repo": "repo_id",
 }
 MAX_TEXT = 200
 MAX_DETAIL = 4000

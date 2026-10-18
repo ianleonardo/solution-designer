@@ -968,6 +968,7 @@ export function TablesPanel() {
     countries: DEFAULT_COUNTRIES,
     databases: DEFAULT_DATABASES,
     interface_channels: [],
+    bitbucket_projects: [],
   });
   const [tables, setTables] = useState<KbTableRecord[]>([]);
   const [loading, setLoading] = useState(true);
@@ -1008,6 +1009,7 @@ export function TablesPanel() {
           countries,
           databases,
           interface_channels: data.interface_channels ?? [],
+          bitbucket_projects: data.bitbucket_projects ?? [],
         });
         setCountryFilter((current) => {
           if (countryFromUrl && (countries.includes(countryFromUrl) || countryFromUrl === "Unspecified")) return countryFromUrl;

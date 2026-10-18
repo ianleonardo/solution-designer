@@ -8,6 +8,7 @@ import { GuidelinesPanel } from "../components/GuidelinesPanel";
 import { InterfacesPanel } from "../components/InterfacesPanel";
 import { SystemsPanel } from "../components/SystemsPanel";
 import { BatchesPanel } from "../components/BatchesPanel";
+import { BitbucketReposPanel } from "../components/BitbucketReposPanel";
 import { CapabilitiesPanel } from "../components/CapabilitiesPanel";
 import { ReportsPanel } from "../components/ReportsPanel";
 import { SelectField } from "../components/SelectField";
@@ -34,7 +35,7 @@ function itemCountry(item: RagItem): string {
 export function KnowledgePage() {
   const { kind: slug } = useParams();
   if (slug === "table-definitions") return <Navigate to="/knowledge/tables" replace />;
-  // Guidelines, systems, interfaces, tables, batches and reports are structured records, so they have their own screens.
+  // Structured catalogues have their own screens. A generic inventory upload would bypass their validation.
   if (slug === "guidelines") return <GuidelinesPanel />;
   if (slug === "systems") return <SystemsPanel />;
   if (slug === "interfaces") return <InterfacesPanel />;
@@ -42,6 +43,7 @@ export function KnowledgePage() {
   if (slug === "batches") return <BatchesPanel />;
   if (slug === "reports") return <ReportsPanel />;
   if (slug === "capabilities") return <CapabilitiesPanel />;
+  if (slug === "bitbucket") return <BitbucketReposPanel />;
   return <InventoryPage />;
 }
 

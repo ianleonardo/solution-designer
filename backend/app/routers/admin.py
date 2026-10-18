@@ -2,11 +2,12 @@ from fastapi import APIRouter, Depends, File, Form, Query, UploadFile
 from fastapi.responses import FileResponse
 
 from app import cache, db
-from app.config import kb_countries, kb_databases, kb_interface_channels
+from app.config import kb_bitbucket_projects, kb_countries, kb_databases, kb_interface_channels
 from app.deps import current_user, require_admin, require_kb_editor
 from app.services import (
     audit,
     batches,
+    bitbucket_repos,
     capabilities,
     guidelines,
     interfaces,
@@ -248,6 +249,7 @@ def get_catalogs(user: dict = Depends(current_user)):
         "countries": list(kb_countries()),
         "databases": list(kb_databases()),
         "interface_channels": list(kb_interface_channels()),
+        "bitbucket_projects": list(kb_bitbucket_projects()),
     }
 
 
@@ -425,6 +427,34 @@ def update_batch(batch_id: str, body: dict, user: dict = Depends(require_kb_edit
 @router.delete("/batches/{batch_id}")
 def delete_batch(batch_id: str, user: dict = Depends(require_kb_editor)):
     batches.delete_batch(user, batch_id)
+    return {"ok": True}
+
+
+@router.get("/bitbucket-repos/{project}")
+def list_bitbucket_repos(project: str, user: dict = Depends(current_user)):
+    del user
+    return bitbucket_repos.list_repos(project)
+
+
+@router.post("/bitbucket-repos/{project}")
+def create_bitbucket_repo(project: str, body: dict, user: dict = Depends(require_kb_editor)):
+    return bitbucket_repos.create_repo(user, project, body)
+
+
+@router.post("/bitbucket-repos/{project}/upload")
+async def upload_bitbucket_repos(project: str, file: UploadFile = File(...), user: dict = Depends(require_kb_editor)):
+    data = await file.read()
+    return bitbucket_repos.upload_from_excel(user, project, file.filename or "bitbucket.xlsx", data)
+
+
+@router.patch("/bitbucket-repos/{project}/{repo_id}")
+def update_bitbucket_repo(project: str, repo_id: str, body: dict, user: dict = Depends(require_kb_editor)):
+    return bitbucket_repos.update_repo(user, project, repo_id, body)
+
+
+@router.delete("/bitbucket-repos/{project}/{repo_id}")
+def delete_bitbucket_repo(project: str, repo_id: str, user: dict = Depends(require_kb_editor)):
+    bitbucket_repos.delete_repo(user, project, repo_id)
     return {"ok": True}
 
 

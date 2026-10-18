@@ -37,7 +37,7 @@ def retrieve(query: str, limit: int = 6) -> list[dict]:
     query_tokens = _tokens(query)
     query_vector = llm.embed(query) if llm.embedding_configured() else None
     scored = []
-    skip_rag = {"Batches", "Reports", "Capabilities", "Tables"}
+    skip_rag = {"Batches", "Reports", "Capabilities", "Tables", "Bitbucket Repos"}
     for row in rows:
         if row.get("inventory_type") in skip_rag:
             continue
@@ -68,6 +68,7 @@ def retrieve(query: str, limit: int = 6) -> list[dict]:
     scored.extend(_report_hits(query_tokens, query_vector))
     scored.extend(_batch_hits(query_tokens, query_vector))
     scored.extend(_capability_hits(query_tokens, query_vector))
+    scored.extend(_bitbucket_hits(query_tokens, query_vector))
     scored.sort(key=lambda item: item["score"], reverse=True)
     top = scored[:limit]
     return top + _related_systems(top)
@@ -216,6 +217,33 @@ def _capability_hits(query_tokens: set[str], query_vector: list[float] | None) -
     return hits
 
 
+def _bitbucket_hits(query_tokens: set[str], query_vector: list[float] | None) -> list[dict]:
+    """Structured Bitbucket repositories from kb_bitbucket_repos."""
+    from app.services import bitbucket_repos as bitbucket_svc
+
+    hits = []
+    for row in db.fetchall("SELECT * FROM kb_bitbucket_repos"):
+        text = bitbucket_svc.text_for(row)
+        score = score_text(query_tokens, text, query_vector, row.get("embedding"))
+        for field in ("repo_name", "bitbucket_project"):
+            if str(row[field]).lower() in query_tokens:
+                score += 2
+                break
+        if score <= 0:
+            continue
+        hits.append(
+            _entry(
+                row["repo_id"],
+                "Bitbucket Repos",
+                row["repo_name"],
+                text[:800],
+                {"project": row["bitbucket_project"]},
+                score,
+            )
+        )
+    return hits
+
+
 def _related_systems(hits: list[dict], most: int = 3) -> list[dict]:
     """The direct upstream and downstream systems of the best matching systems, so 'what is downstream of X' is answered fully."""
     from app.services import systems
@@ -260,8 +288,13 @@ def summary() -> str:
     kb_capabilities = db.fetchall("SELECT country, COUNT(*) AS c FROM kb_capabilities GROUP BY country ORDER BY country")
     if kb_capabilities:
         lines.append("Capabilities: " + ", ".join(f"{row['country']} {row['c']}" for row in kb_capabilities))
+    kb_repos = db.fetchall(
+        "SELECT bitbucket_project, COUNT(*) AS c FROM kb_bitbucket_repos GROUP BY bitbucket_project ORDER BY bitbucket_project"
+    )
+    if kb_repos:
+        lines.append("Bitbucket Repos: " + ", ".join(f"{row['bitbucket_project']} {row['c']}" for row in kb_repos))
     for row in db.fetchall("SELECT inventory_type, COUNT(*) AS c FROM rag_inventory GROUP BY inventory_type ORDER BY inventory_type"):
-        if row["inventory_type"] in ("Reports", "Batches", "Capabilities", "Tables"):
+        if row["inventory_type"] in ("Reports", "Batches", "Capabilities", "Tables", "Bitbucket Repos"):
             continue
         lines.append(f"{row['inventory_type']}: {row['c']} entries")
     guidelines = db.fetchone("SELECT COUNT(*) AS c FROM guidelines")
@@ -283,7 +316,7 @@ def format_context(hits: list[dict], limit_chars: int = 12000) -> str:
         out.append(header)
         used += len(header) + 1
         for hit in groups[name]:
-            if hit["inventory_type"] in ("Systems", "Interfaces", "Tables", "Reports", "Batches"):
+            if hit["inventory_type"] in ("Systems", "Interfaces", "Tables", "Reports", "Batches", "Bitbucket Repos"):
                 body = hit["raw_content"]
             else:
                 extra = {key: value for key, value in (hit.get("parsed") or {}).items() if value}
