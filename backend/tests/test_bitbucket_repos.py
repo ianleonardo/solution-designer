@@ -87,7 +87,7 @@ def test_upload_normalizes_case_and_rejects_another_project(client):
         headers=auth(admin),
     )
     assert blocked.status_code == 400
-    assert "Bitbucket Repository" in blocked.json()["detail"]
+    assert "Bitbucket Repositories" in blocked.json()["detail"]
 
 
 def test_empty_description_is_kept_on_reupload_and_inferred_when_missing(client, monkeypatch):

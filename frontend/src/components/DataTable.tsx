@@ -31,6 +31,7 @@ export function DataTable<T>({
   searchLabel = "Search",
   searchPlaceholder = "Search",
   toolbar,
+  onRowClick,
 }: {
   rows: T[];
   columns: Column<T>[];
@@ -43,6 +44,8 @@ export function DataTable<T>({
   searchPlaceholder?: string;
   /** Rendered beside the search box (e.g. a create button). */
   toolbar?: ReactNode;
+  /** Makes each data row open this row. Clicks inside buttons do not fire it when they stop propagation. */
+  onRowClick?: (row: T) => void;
 }) {
   const [query, setQuery] = useState("");
   const [sort, setSort] = useState<SortState>(null);
@@ -144,7 +147,23 @@ export function DataTable<T>({
               </tr>
             )}
             {visible.map((row) => (
-              <tr key={rowKey(row)} className="border-t border-hairline row-hover">
+              <tr
+                key={rowKey(row)}
+                className={`border-t border-hairline row-hover ${onRowClick ? "cursor-pointer" : ""}`}
+                tabIndex={onRowClick ? 0 : undefined}
+                onClick={onRowClick ? () => onRowClick(row) : undefined}
+                onKeyDown={
+                  onRowClick
+                    ? (event) => {
+                        if (event.target !== event.currentTarget) return;
+                        if (event.key === "Enter" || event.key === " ") {
+                          event.preventDefault();
+                          onRowClick(row);
+                        }
+                      }
+                    : undefined
+                }
+              >
                 {columns.map((column) => (
                   <td key={column.key} className={`px-3 py-2 align-middle ${column.className ?? ""}`}>
                     {column.render(row)}

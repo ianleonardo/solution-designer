@@ -5,6 +5,7 @@ import { useOptionalAuth } from "../auth";
 import type { Catalogs, KbBitbucketRepoRecord } from "../types";
 import { ConfirmDialog } from "./ConfirmDialog";
 import { type Column, DataTable } from "./DataTable";
+import { ProcessingRulesEditor } from "./ProcessingRulesEditor";
 
 const PAGE_SIZE = 50;
 const DEFAULT_PROJECTS = ["CORE", "SPL", "DBE", "PIB", "PIBVN2", "PIBID", "SOF", "WSM", "NTN"];
@@ -23,7 +24,6 @@ function RepoFormDialog({
   const editing = Boolean(repo);
   const [name, setName] = useState(repo?.repo_name ?? "");
   const [description, setDescription] = useState(repo?.description ?? "");
-  const [components, setComponents] = useState(repo?.main_components ?? "");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
 
@@ -39,7 +39,6 @@ function RepoFormDialog({
       const payload = {
         repo_name: name.trim(),
         description: description.trim(),
-        main_components: components.trim(),
       };
       const saved = repo
         ? await api<KbBitbucketRepoRecord>(`/api/bitbucket-repos/${encodeURIComponent(project)}/${encodeURIComponent(repo.repo_id)}`, {
@@ -73,10 +72,6 @@ function RepoFormDialog({
           <span className="font-label text-[10px] uppercase text-muted">Description</span>
           <textarea className="field mt-1 min-h-20" aria-label="Description" value={description} disabled={busy} placeholder="Leave empty to infer a description" onChange={(e) => setDescription(e.target.value)} />
         </label>
-        <label className="block">
-          <span className="font-label text-[10px] uppercase text-muted">Main components</span>
-          <textarea className="field mt-1 min-h-16" aria-label="Main components" value={components} disabled={busy} onChange={(e) => setComponents(e.target.value)} />
-        </label>
         {error && <p className="text-alert text-sm">{error}</p>}
         <div className="flex justify-end gap-2 pt-2">
           <button type="button" className="btn" disabled={busy} onClick={onClose}>
@@ -87,6 +82,69 @@ function RepoFormDialog({
           </button>
         </div>
       </form>
+    </div>
+  );
+}
+
+function RepoDetailDialog({
+  project,
+  repo,
+  canEdit,
+  onClose,
+  onSaved,
+}: {
+  project: string;
+  repo: KbBitbucketRepoRecord;
+  canEdit: boolean;
+  onClose: () => void;
+  onSaved: (saved: KbBitbucketRepoRecord) => void;
+}) {
+  const [components, setComponents] = useState(repo.main_components);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+
+  async function save() {
+    setBusy(true);
+    setError("");
+    try {
+      const saved = await api<KbBitbucketRepoRecord>(`/api/bitbucket-repos/${encodeURIComponent(project)}/${encodeURIComponent(repo.repo_id)}`, {
+        method: "PATCH",
+        body: JSON.stringify({ main_components: components }),
+      });
+      onSaved(saved);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Could not save main components");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" role="presentation" onMouseDown={(e) => e.target === e.currentTarget && !busy && onClose()}>
+      <div role="dialog" aria-modal="true" aria-label="Repository detail" className="w-full max-w-4xl max-h-[90vh] overflow-y-auto rounded-lg border border-hairline bg-panel p-6 shadow-xl space-y-4">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <p className="font-label text-[10px] uppercase text-muted">{project}</p>
+            <h2 className="font-headline text-xl font-semibold mt-0.5">{repo.repo_name}</h2>
+            {repo.description && <p className="text-sm text-muted mt-1">{repo.description}</p>}
+          </div>
+          <button type="button" className="icon-btn" aria-label="Close" onClick={onClose}>
+            <span className="material-symbols-outlined text-base">close</span>
+          </button>
+        </div>
+        {error && <p className="text-alert text-sm">{error}</p>}
+        <div>
+          <div className="flex items-center justify-between gap-2 mb-1">
+            <span className="font-label text-[10px] uppercase text-muted">Main components</span>
+            {canEdit && (
+              <button type="button" className="btn" disabled={busy} onClick={() => void save()}>
+                {busy ? "Saving…" : "Save components"}
+              </button>
+            )}
+          </div>
+          <ProcessingRulesEditor value={components} onChange={setComponents} readOnly={!canEdit || busy} label="Main components" toolbarLabel="Main components formatting" />
+        </div>
+      </div>
     </div>
   );
 }
@@ -105,6 +163,7 @@ export function BitbucketReposPanel() {
   const [problems, setProblems] = useState<RowError[]>([]);
   const [notice, setNotice] = useState("");
   const [form, setForm] = useState<{ repo?: KbBitbucketRepoRecord } | null>(null);
+  const [detail, setDetail] = useState<KbBitbucketRepoRecord | null>(null);
   const [deleting, setDeleting] = useState<KbBitbucketRepoRecord | null>(null);
 
   useEffect(() => {
@@ -164,30 +223,40 @@ export function BitbucketReposPanel() {
       {
         key: "description",
         header: "Description",
-        sortValue: (row) => row.description,
         className: "max-w-md",
         render: (row) => <span className="line-clamp-2">{row.description}</span>,
-      },
-      {
-        key: "components",
-        header: "Main components",
-        sortValue: (row) => row.main_components,
-        className: "max-w-xs",
-        render: (row) => <span className="line-clamp-2">{row.main_components}</span>,
       },
       ...(canEdit
         ? [
             {
               key: "actions",
               header: "",
-              className: "w-28 text-right",
+              className: "w-24 text-right",
               render: (row: KbBitbucketRepoRecord) => (
-                <span className="inline-flex gap-1">
-                  <button type="button" className="btn" aria-label={`Edit ${row.repo_name}`} onClick={() => setForm({ repo: row })}>
-                    Edit
+                <span className="inline-flex gap-1 justify-end">
+                  <button
+                    type="button"
+                    className="icon-btn"
+                    aria-label={`Edit ${row.repo_name}`}
+                    title="Edit"
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      setForm({ repo: row });
+                    }}
+                  >
+                    <span className="material-symbols-outlined text-base">edit</span>
                   </button>
-                  <button type="button" className="btn" aria-label={`Delete ${row.repo_name}`} onClick={() => setDeleting(row)}>
-                    Delete
+                  <button
+                    type="button"
+                    className="icon-btn icon-btn-danger"
+                    aria-label={`Delete ${row.repo_name}`}
+                    title="Delete"
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      setDeleting(row);
+                    }}
+                  >
+                    <span className="material-symbols-outlined text-base">delete</span>
                   </button>
                 </span>
               ),
@@ -201,7 +270,7 @@ export function BitbucketReposPanel() {
   return (
     <div className="p-6 max-w-[1400px] space-y-4">
       <div>
-        <h1 className="font-headline text-2xl font-semibold">Bitbucket Repository</h1>
+        <h1 className="font-headline text-2xl font-semibold">Bitbucket Repositories</h1>
         <p className="text-muted mt-0.5">
           Repositories for each Bitbucket project. Add them manually or upload an Excel (.xlsx) with columns BITBUCKET_PROJECT, BITBUCKET_REPO_NAME, DESCRIPTION, MAIN_COMPONENTS. An empty description is filled in from the project and repository.
         </p>
@@ -249,6 +318,7 @@ export function BitbucketReposPanel() {
         searchLabel={`Search ${project} repositories`}
         searchPlaceholder={`Search ${project} repositories`}
         searchText={(row) => [row.repo_name, row.description, row.main_components].join(" ")}
+        onRowClick={setDetail}
         toolbar={
           canEdit ? (
             <div className="flex items-center gap-2">
@@ -294,6 +364,18 @@ export function BitbucketReposPanel() {
               return next;
             });
             setForm(null);
+          }}
+        />
+      )}
+      {detail && (
+        <RepoDetailDialog
+          project={project}
+          repo={detail}
+          canEdit={canEdit}
+          onClose={() => setDetail(null)}
+          onSaved={(saved) => {
+            setRepos((current) => current.map((row) => (row.repo_id === saved.repo_id ? saved : row)));
+            setDetail(saved);
           }}
         />
       )}

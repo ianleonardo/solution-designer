@@ -83,7 +83,7 @@ describe("KnowledgePage", () => {
     expect(fetchMock.mock.calls.map((call) => call[0])).toEqual(expect.arrayContaining(["/api/catalogs", "/api/systems", "/api/batches"]));
   });
 
-  it("shows the Bitbucket Repository screen, not the generic upload", async () => {
+  it("shows the Bitbucket Repositories screen, not the generic upload", async () => {
     vi.stubGlobal("localStorage", { getItem: () => null });
     const fetchMock = vi.fn().mockImplementation((url: string) => {
       if (url === "/api/catalogs") return Promise.resolve(json({ countries: ["SG"], databases: [], interface_channels: [], bitbucket_projects: ["CORE"] }));
@@ -93,7 +93,7 @@ describe("KnowledgePage", () => {
     });
     vi.stubGlobal("fetch", fetchMock);
     renderAt("/knowledge/bitbucket");
-    await waitFor(() => expect(screen.getByRole("heading", { name: "Bitbucket Repository" })).toBeTruthy());
+    await waitFor(() => expect(screen.getByRole("heading", { name: "Bitbucket Repositories" })).toBeTruthy());
     expect(screen.queryByLabelText("Upload Bitbucket Repos")).toBeNull();
     expect(screen.getByRole("tab", { name: "CORE" })).toBeTruthy();
     expect(screen.getByLabelText("Upload CORE Excel")).toBeTruthy();

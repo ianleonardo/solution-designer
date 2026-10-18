@@ -97,11 +97,13 @@ export function ProcessingRulesEditor({
   onChange,
   readOnly = false,
   label = "Processing rules",
+  toolbarLabel = "Processing rules formatting",
 }: {
   value: string;
   onChange: (markdown: string) => void;
   readOnly?: boolean;
   label?: string;
+  toolbarLabel?: string;
 }) {
   const editor = useEditor({
     extensions: EXTENSIONS,
@@ -183,7 +185,7 @@ export function ProcessingRulesEditor({
   return (
     <div className={`rules-editor rounded border border-hairline bg-panel ${readOnly ? "opacity-90" : ""}`}>
       {!readOnly && (
-        <div className="border-b border-hairline p-1 flex flex-wrap gap-1" role="toolbar" aria-label="Processing rules formatting">
+        <div className="border-b border-hairline p-1 flex flex-wrap gap-1" role="toolbar" aria-label={toolbarLabel}>
           {items.map((item) => (
             <button
               key={item.label}
