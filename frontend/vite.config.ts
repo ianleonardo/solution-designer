@@ -15,6 +15,8 @@ export default defineConfig({
     exclude: ["mermaid"],
   },
   server: {
+    // 0.0.0.0 accepts 127.0.0.1 (what the browser uses for localhost) and the LAN address.
+    host: "0.0.0.0",
     port: 5173,
     proxy: {
       "/api": "http://127.0.0.1:8000",

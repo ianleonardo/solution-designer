@@ -29,5 +29,5 @@ if defined LAN_IP (
 ) else (
   echo Local network address: not found. ipconfig did not report a usable IPv4 address.
 )
-npm run dev -- --host 0.0.0.0 --port %PORT%
+npm run dev --workspace frontend -- --host 0.0.0.0 --port %PORT%
 endlocal

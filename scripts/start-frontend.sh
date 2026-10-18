@@ -48,4 +48,4 @@ if ip="$(local_ip)"; then
 else
   echo "Local network address: not found."
 fi
-exec npm run dev -- --host 0.0.0.0 --port "$PORT"
+exec npm run dev --workspace frontend -- --host 0.0.0.0 --port "$PORT"
