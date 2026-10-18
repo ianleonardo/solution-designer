@@ -93,7 +93,20 @@ def test_section_and_block_builder(client):
         json={"section_name": "Too deep", "parent_id": body["template_id"]},
         headers=headers,
     )
-    assert nested.status_code == 400
+    assert nested.status_code == 200, nested.text
+    current = nested.json()["template_id"]
+    for name in ("Fourth", "Fifth", "Sixth"):
+        deeper = client.post(
+            "/api/layouts/runbook/templates",
+            json={"section_name": name, "parent_id": current},
+            headers=headers,
+        )
+        if name == "Sixth":
+            assert deeper.status_code == 400
+            assert "at most 5 levels" in deeper.json()["detail"]
+        else:
+            assert deeper.status_code == 200, deeper.text
+            current = deeper.json()["template_id"]
 
 
 def test_block_validation(client):
@@ -164,3 +177,55 @@ def test_legacy_top_level_order_still_works(client):
     again = [item["template_id"] for item in response.json() if item["parent_id"] is None]
     assert again == reordered
     assert client.get("/api/templates?layout_id=interface-spec", headers=headers).json()[0]["layout_id"] == "interface-spec"
+
+
+def test_promote_rejects_a_cycle_and_delete_removes_descendants(client):
+    headers = _admin(client)
+    _create(client, "Runbook")
+    overview = client.post("/api/layouts/runbook/templates", json={"section_name": "Overview"}, headers=headers).json()
+    child = client.post(
+        "/api/layouts/runbook/templates",
+        json={"section_name": "Contacts", "parent_id": overview["template_id"]},
+        headers=headers,
+    ).json()
+    grand = client.post(
+        "/api/layouts/runbook/templates",
+        json={"section_name": "Phones", "parent_id": child["template_id"]},
+        headers=headers,
+    ).json()
+    cycle = client.put(
+        "/api/layouts/runbook/order",
+        json={
+            "sections": [
+                {
+                    "template_id": overview["template_id"],
+                    "children": [
+                        {
+                            "template_id": child["template_id"],
+                            "children": [{"template_id": grand["template_id"], "children": [{"template_id": overview["template_id"], "children": []}]}],
+                        }
+                    ],
+                }
+            ]
+        },
+        headers=headers,
+    )
+    assert cycle.status_code == 400
+    assert "itself" in cycle.json()["detail"]
+    promoted = client.put(
+        "/api/layouts/runbook/order",
+        json={
+            "sections": [
+                {"template_id": overview["template_id"], "children": []},
+                {"template_id": child["template_id"], "children": [{"template_id": grand["template_id"], "children": []}]},
+            ]
+        },
+        headers=headers,
+    )
+    assert promoted.status_code == 200, promoted.text
+    rows = {item["template_id"]: item for item in promoted.json()["templates"]}
+    assert rows[child["template_id"]]["parent_id"] is None
+    assert rows[grand["template_id"]]["parent_id"] == child["template_id"]
+    assert client.delete(f"/api/templates/{child['template_id']}", headers=headers).status_code == 200
+    names = {item["section_name"] for item in client.get("/api/layouts/runbook", headers=headers).json()["templates"]}
+    assert names == {"Overview"}

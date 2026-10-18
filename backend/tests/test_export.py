@@ -3,6 +3,21 @@ from app.template_parser import parse_template
 from tests.conftest import auth, login
 
 
+def test_nested_sections_export_as_deeper_headings():
+    from app.services.export import render_html, render_markdown
+
+    templates = [
+        {"template_id": "a", "parent_id": None, "section_name": "Main", "sequence_order": 1},
+        {"template_id": "b", "parent_id": "a", "section_name": "Child", "sequence_order": 2},
+        {"template_id": "c", "parent_id": "b", "section_name": "Grandchild", "sequence_order": 3},
+    ]
+    content = {"sections": {}}
+    text = render_markdown("Doc", templates, content)
+    assert "## Main" in text and "### Child" in text and "#### Grandchild" in text
+    page = render_html("Doc", templates, content)
+    assert "<h2>Main</h2>" in page and "<h3>Child</h3>" in page and "<h4>Grandchild</h4>" in page
+
+
 def test_markdown_export_includes_top_level_sections_in_order(client):
     writer = login(client, "Write")
     created = client.post("/api/projects", json={"project_name": "Export Me"}, headers=auth(writer))

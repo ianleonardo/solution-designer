@@ -89,13 +89,13 @@ export function TableGrid({
       <table className="grid-table w-full text-sm border-collapse">
         <thead className="bg-inset">
           <tr>
+            {!readOnly && <th className="w-8 border-b border-hairline" aria-label="Delete" />}
             {!readOnly && <th className="w-8 border-b border-hairline" aria-label="Reorder" />}
             {columns.map((column, columnIndex) => (
               <th key={`${column}-${columnIndex}`} className="font-label text-[10px] uppercase tracking-wide text-muted text-left px-2 py-2 border-b border-hairline whitespace-nowrap">
                 {column}
               </th>
             ))}
-            {!readOnly && <th className="w-16 border-b border-hairline" />}
           </tr>
         </thead>
         <tbody>
@@ -109,6 +109,21 @@ export function TableGrid({
                 onDragOver={readOnly ? undefined : (event) => overRow(event, rowIndex)}
                 onDrop={readOnly ? undefined : dropRow}
               >
+                {!readOnly && (
+                  <td className="px-1 align-top pt-1 w-8">
+                    <button
+                      type="button"
+                      className="icon-btn icon-btn-danger"
+                      aria-label={`Delete row ${rowIndex + 1}`}
+                      title="Delete row"
+                      onClick={() => emit(rows.filter((_, index) => index !== rowIndex))}
+                    >
+                      <span className="material-symbols-outlined text-base" aria-hidden="true">
+                        delete
+                      </span>
+                    </button>
+                  </td>
+                )}
                 {!readOnly && (
                   <td className="px-1 align-top pt-1 w-8">
                     <button
@@ -145,13 +160,6 @@ export function TableGrid({
                       />
                     </td>
                   ),
-                )}
-                {!readOnly && (
-                  <td className="px-2 whitespace-nowrap align-top pt-1">
-                    <button type="button" className="text-alert text-xs" aria-label={`Delete row ${rowIndex + 1}`} onClick={() => emit(rows.filter((_, index) => index !== rowIndex))}>
-                      Delete
-                    </button>
-                  </td>
                 )}
               </tr>
             );

@@ -2,6 +2,7 @@ import { useEditor, EditorContent } from "@tiptap/react";
 import Link from "@tiptap/extension-link";
 import StarterKit from "@tiptap/starter-kit";
 import { Markdown } from "tiptap-markdown";
+import { UnderlineMarkdown } from "../underline";
 import { EditorToolbar } from "./EditorToolbar";
 
 type MarkdownStorage = { markdown: { getMarkdown: () => string } };
@@ -16,7 +17,7 @@ export function ProseEditor({
   readOnly: boolean;
 }) {
   const editor = useEditor({
-    extensions: [StarterKit, Link.configure({ openOnClick: false, autolink: false }), Markdown],
+    extensions: [StarterKit, UnderlineMarkdown, Link.configure({ openOnClick: false, autolink: false }), Markdown],
     content: value || "",
     editable: !readOnly,
     onUpdate: ({ editor: current }) => {

@@ -3,11 +3,17 @@ import MarkdownIt from "markdown-it";
 // Raw HTML is switched off, so text written in a document can only produce Markdown formatting.
 const markdown = new MarkdownIt({ html: false, linkify: false, breaks: true });
 
+/** TipTap stores underline as `<u>…</u>`; restore those tags after Markdown escapes everything else. */
+export function restoreUnderline(html: string): string {
+  return html.replace(/&lt;u&gt;/gi, "<u>").replace(/&lt;\/u&gt;/gi, "</u>");
+}
+
 /** Markdown of a table cell as HTML: inline formatting for one line, blocks (lists, paragraphs) for several. */
 export function renderCell(source: string): string {
   const text = (source ?? "").trim();
   if (!text) return "";
-  return text.includes("\n") ? markdown.render(text) : markdown.renderInline(text);
+  const html = text.includes("\n") ? markdown.render(text) : markdown.renderInline(text);
+  return restoreUnderline(html);
 }
 
 /** Only these link targets are accepted from the link box. A bare address gets https://. Null means refuse. */

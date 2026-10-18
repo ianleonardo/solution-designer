@@ -35,6 +35,29 @@ def existing_codes() -> set[str]:
     return {row["system_code"] for row in db.fetchall("SELECT system_code FROM systems")}
 
 
+def codes_with_batch() -> set[str]:
+    return {row["system_code"] for row in db.fetchall("SELECT system_code FROM systems WHERE has_batch")}
+
+
+def codes_with_report() -> set[str]:
+    return {row["system_code"] for row in db.fetchall("SELECT system_code FROM systems WHERE has_report")}
+
+
+def _flag(value, default: bool = False) -> bool:
+    if value is None:
+        return default
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (int, float)):
+        return bool(value)
+    text = str(value).strip().lower()
+    if text in ("1", "true", "yes", "y", "on"):
+        return True
+    if text in ("0", "false", "no", "n", "off", ""):
+        return False
+    return default
+
+
 def text_for(row: dict) -> str:
     """The system as one readable sentence: what is embedded, searched and shown to the chat model."""
     parts = [f"System {row['system_code']} - {row['system_name']}."]
@@ -59,6 +82,9 @@ def _payload(row: dict) -> dict:
         "description": row["description"],
         "upstreams": row["upstreams"],
         "downstreams": row["downstreams"],
+        "has_batch": bool(row.get("has_batch")),
+        "has_report": bool(row.get("has_report")),
+        "has_capability": bool(row.get("has_capability")),
         "created_at": row["created_at"],
         "last_modified": row["last_modified"],
     }
@@ -106,13 +132,18 @@ def create_system(user: dict, body: dict) -> dict:
         raise AppError(400, f"System code {code} already exists.")
     upstreams = _linked("Upstreams", body.get("upstreams"), code, known)
     downstreams = _linked("Downstreams", body.get("downstreams"), code, known)
+    has_batch = _flag(body.get("has_batch"), False)
+    has_report = _flag(body.get("has_report"), False)
+    has_capability = _flag(body.get("has_capability"), False)
     now = _now()
     db.exec_sql(
         """
-        INSERT INTO systems (system_code, system_name, description, upstreams, downstreams, created_at, last_modified)
-        VALUES (?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO systems (
+            system_code, system_name, description, upstreams, downstreams, has_batch, has_report, has_capability,
+            created_at, last_modified
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
-        [code, name, description, upstreams, downstreams, now, now],
+        [code, name, description, upstreams, downstreams, has_batch, has_report, has_capability, now, now],
     )
     _embed(_row(code))
     gcs.upload_db()
@@ -128,12 +159,21 @@ def update_system(user: dict, code: str, body: dict) -> dict:
     known = existing_codes()
     upstreams = _linked("Upstreams", body.get("upstreams", current["upstreams"]), code, known)
     downstreams = _linked("Downstreams", body.get("downstreams", current["downstreams"]), code, known)
+    has_batch = _flag(body["has_batch"], bool(current.get("has_batch"))) if "has_batch" in body else bool(current.get("has_batch"))
+    has_report = _flag(body["has_report"], bool(current.get("has_report"))) if "has_report" in body else bool(current.get("has_report"))
+    has_capability = (
+        _flag(body["has_capability"], bool(current.get("has_capability")))
+        if "has_capability" in body
+        else bool(current.get("has_capability"))
+    )
     db.exec_sql(
         """
-        UPDATE systems SET system_name = ?, description = ?, upstreams = ?, downstreams = ?, last_modified = ?
+        UPDATE systems
+        SET system_name = ?, description = ?, upstreams = ?, downstreams = ?, has_batch = ?, has_report = ?,
+            has_capability = ?, last_modified = ?
         WHERE system_code = ?
         """,
-        [name, description, upstreams, downstreams, _now(), code],
+        [name, description, upstreams, downstreams, has_batch, has_report, has_capability, _now(), code],
     )
     _embed(_row(code))
     gcs.upload_db()

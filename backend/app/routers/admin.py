@@ -2,15 +2,19 @@ from fastapi import APIRouter, Depends, File, Form, Query, UploadFile
 from fastapi.responses import FileResponse
 
 from app import cache, db
+from app.config import kb_countries, kb_databases, kb_interface_channels
 from app.deps import current_user, require_admin, require_kb_editor
 from app.services import (
     audit,
+    batches,
+    capabilities,
     guidelines,
     interfaces,
     layouts,
     llm_settings,
     projects,
     reindex,
+    reports,
     systems,
     tables,
 )
@@ -198,8 +202,14 @@ async def add_guideline(
 
 
 @router.get("/guidelines/{guideline_id}/download")
-def download_guideline(guideline_id: str, user: dict = Depends(current_user)):
+def download_guideline(
+    guideline_id: str,
+    inline: bool = Query(False),
+    user: dict = Depends(current_user),
+):
     path, name, media_type = guidelines.original_file(user, guideline_id)
+    if inline:
+        return FileResponse(path, media_type=media_type, content_disposition_type="inline", filename=name)
     return FileResponse(path, media_type=media_type, filename=name)
 
 
@@ -231,10 +241,36 @@ def delete_system(system_code: str, user: dict = Depends(require_kb_editor)):
     return {"ok": True}
 
 
+@router.get("/catalogs")
+def get_catalogs(user: dict = Depends(current_user)):
+    del user
+    return {
+        "countries": list(kb_countries()),
+        "databases": list(kb_databases()),
+        "interface_channels": list(kb_interface_channels()),
+    }
+
+
 @router.get("/interfaces/{channel}")
 def list_interfaces(channel: str, user: dict = Depends(current_user)):
     del user
     return interfaces.list_interfaces(channel)
+
+
+@router.post("/interfaces/{channel}")
+def create_interface(channel: str, body: dict, user: dict = Depends(require_kb_editor)):
+    return interfaces.create_interface(user, channel, body)
+
+
+@router.patch("/interfaces/{channel}/{interface_id}")
+def update_interface(channel: str, interface_id: str, body: dict, user: dict = Depends(require_kb_editor)):
+    return interfaces.update_interface(user, channel, interface_id, body)
+
+
+@router.delete("/interfaces/{channel}/{interface_id}")
+def delete_interface(channel: str, interface_id: str, user: dict = Depends(require_kb_editor)):
+    interfaces.delete_interface(user, channel, interface_id)
+    return {"ok": True}
 
 
 @router.post("/interfaces/{channel}/upload")
@@ -247,6 +283,16 @@ async def upload_interfaces(channel: str, file: UploadFile = File(...), user: di
 def list_tables(user: dict = Depends(current_user)):
     del user
     return tables.list_tables()
+
+
+@router.get("/tables/compare")
+def compare_tables(
+    database: str = Query(""),
+    schema: str = Query(""),
+    user: dict = Depends(current_user),
+):
+    del user
+    return tables.compare_tables(database, schema)
 
 
 @router.post("/tables")
@@ -302,3 +348,160 @@ def update_table_column(table_id: str, column_id: str, body: dict, user: dict = 
 def delete_table_column(table_id: str, column_id: str, user: dict = Depends(require_kb_editor)):
     tables.delete_column(user, table_id, column_id)
     return {"ok": True}
+
+
+@router.get("/reports")
+def list_reports(user: dict = Depends(current_user)):
+    del user
+    return reports.list_reports()
+
+
+@router.post("/reports")
+def create_report(body: dict, user: dict = Depends(require_kb_editor)):
+    return reports.create_report(user, body)
+
+
+@router.post("/reports/upload")
+async def upload_reports(
+    country: str = Form(""),
+    system: str = Form(""),
+    file: UploadFile = File(...),
+    user: dict = Depends(require_kb_editor),
+):
+    data = await file.read()
+    return reports.upload_from_excel(user, country, system, file.filename or "reports.xlsx", data)
+
+
+@router.get("/reports/{report_id}")
+def get_report(report_id: str, user: dict = Depends(current_user)):
+    del user
+    return reports.get_report(report_id)
+
+
+@router.patch("/reports/{report_id}")
+def update_report(report_id: str, body: dict, user: dict = Depends(require_kb_editor)):
+    return reports.update_report(user, report_id, body)
+
+
+@router.delete("/reports/{report_id}")
+def delete_report(report_id: str, user: dict = Depends(require_kb_editor)):
+    reports.delete_report(user, report_id)
+    return {"ok": True}
+
+
+@router.get("/batches")
+def list_batches(user: dict = Depends(current_user)):
+    del user
+    return batches.list_batches()
+
+
+@router.post("/batches")
+def create_batch(body: dict, user: dict = Depends(require_kb_editor)):
+    return batches.create_batch(user, body)
+
+
+@router.post("/batches/upload")
+async def upload_batches(
+    country: str = Form(""),
+    system: str = Form(""),
+    file: UploadFile = File(...),
+    user: dict = Depends(require_kb_editor),
+):
+    data = await file.read()
+    return batches.upload_from_excel(user, country, system, file.filename or "batches.xlsx", data)
+
+
+@router.get("/batches/{batch_id}")
+def get_batch(batch_id: str, user: dict = Depends(current_user)):
+    del user
+    return batches.get_batch(batch_id)
+
+
+@router.patch("/batches/{batch_id}")
+def update_batch(batch_id: str, body: dict, user: dict = Depends(require_kb_editor)):
+    return batches.update_batch(user, batch_id, body)
+
+
+@router.delete("/batches/{batch_id}")
+def delete_batch(batch_id: str, user: dict = Depends(require_kb_editor)):
+    batches.delete_batch(user, batch_id)
+    return {"ok": True}
+
+
+@router.get("/capabilities")
+def list_capabilities(user: dict = Depends(current_user)):
+    del user
+    return capabilities.list_capabilities()
+
+
+@router.post("/capabilities")
+def create_capability(body: dict, user: dict = Depends(require_kb_editor)):
+    return capabilities.create_capability(user, body)
+
+
+@router.post("/capabilities/upload")
+async def upload_capabilities(
+    country: str = Form(""),
+    system: str = Form(""),
+    file: UploadFile = File(...),
+    user: dict = Depends(require_kb_editor),
+):
+    data = await file.read()
+    return capabilities.upload_from_excel(user, country, system, file.filename or "capabilities.xlsx", data)
+
+
+@router.get("/capabilities/{capability_id}")
+def get_capability(capability_id: str, user: dict = Depends(current_user)):
+    del user
+    return capabilities.get_capability(capability_id)
+
+
+@router.patch("/capabilities/{capability_id}")
+def update_capability(capability_id: str, body: dict, user: dict = Depends(require_kb_editor)):
+    return capabilities.update_capability(user, capability_id, body)
+
+
+@router.delete("/capabilities/{capability_id}")
+def delete_capability(capability_id: str, user: dict = Depends(require_kb_editor)):
+    capabilities.delete_capability(user, capability_id)
+    return {"ok": True}
+
+
+@router.post("/capabilities/{capability_id}/interfaces/{interface_id}")
+def link_capability_interface(capability_id: str, interface_id: str, user: dict = Depends(require_kb_editor)):
+    return capabilities.link_interface(user, capability_id, interface_id)
+
+
+@router.delete("/capabilities/{capability_id}/interfaces/{interface_id}")
+def unlink_capability_interface(capability_id: str, interface_id: str, user: dict = Depends(require_kb_editor)):
+    return capabilities.unlink_interface(user, capability_id, interface_id)
+
+
+@router.post("/capabilities/{capability_id}/tables/{table_id}")
+def link_capability_table(capability_id: str, table_id: str, user: dict = Depends(require_kb_editor)):
+    return capabilities.link_table(user, capability_id, table_id)
+
+
+@router.delete("/capabilities/{capability_id}/tables/{table_id}")
+def unlink_capability_table(capability_id: str, table_id: str, user: dict = Depends(require_kb_editor)):
+    return capabilities.unlink_table(user, capability_id, table_id)
+
+
+@router.post("/capabilities/{capability_id}/batches/{batch_id}")
+def link_capability_batch(capability_id: str, batch_id: str, user: dict = Depends(require_kb_editor)):
+    return capabilities.link_batch(user, capability_id, batch_id)
+
+
+@router.delete("/capabilities/{capability_id}/batches/{batch_id}")
+def unlink_capability_batch(capability_id: str, batch_id: str, user: dict = Depends(require_kb_editor)):
+    return capabilities.unlink_batch(user, capability_id, batch_id)
+
+
+@router.post("/capabilities/{capability_id}/reports/{report_id}")
+def link_capability_report(capability_id: str, report_id: str, user: dict = Depends(require_kb_editor)):
+    return capabilities.link_report(user, capability_id, report_id)
+
+
+@router.delete("/capabilities/{capability_id}/reports/{report_id}")
+def unlink_capability_report(capability_id: str, report_id: str, user: dict = Depends(require_kb_editor)):
+    return capabilities.unlink_report(user, capability_id, report_id)

@@ -1,82 +1,142 @@
+import { MAX_SECTION_DEPTH, treeFrom, type SectionNode } from "../../structure";
 import type { LayoutTemplate } from "../../types";
 
-export type SectionNode = { template_id: string; children: string[] };
+export type { SectionNode };
+export { MAX_SECTION_DEPTH };
 
 export function byOrder(templates: LayoutTemplate[]): LayoutTemplate[] {
   return [...templates].sort((a, b) => a.sequence_order - b.sequence_order);
 }
 
 export function toStructure(templates: LayoutTemplate[]): SectionNode[] {
-  const ordered = byOrder(templates);
-  return ordered
-    .filter((item) => !item.parent_id)
-    .map((parent) => ({
-      template_id: parent.template_id,
-      children: ordered.filter((item) => item.parent_id === parent.template_id).map((item) => item.template_id),
-    }));
+  return treeFrom(templates);
 }
 
-/** Move `dragId` onto `targetId`. Returns null when the move is not allowed. */
-export function applyMove(structure: SectionNode[], dragId: string, targetId: string): SectionNode[] | null {
+type Placed = { list: SectionNode[]; index: number };
+
+function clone(tree: SectionNode[]): SectionNode[] {
+  return tree.map((entry) => ({ template_id: entry.template_id, children: clone(entry.children) }));
+}
+
+function findNode(nodes: SectionNode[], id: string): Placed | null {
+  const index = nodes.findIndex((node) => node.template_id === id);
+  if (index >= 0) return { list: nodes, index };
+  for (const node of nodes) {
+    const nested = findNode(node.children, id);
+    if (nested) return nested;
+  }
+  return null;
+}
+
+function contains(node: SectionNode, id: string): boolean {
+  return node.children.some((child) => child.template_id === id || contains(child, id));
+}
+
+function subtreeHeight(node: SectionNode): number {
+  if (node.children.length === 0) return 0;
+  return 1 + Math.max(...node.children.map(subtreeHeight));
+}
+
+function depthIn(nodes: SectionNode[], id: string, depth = 0): number | null {
+  for (const node of nodes) {
+    if (node.template_id === id) return depth;
+    const nested = depthIn(node.children, id, depth + 1);
+    if (nested !== null) return nested;
+  }
+  return null;
+}
+
+function fitsUnder(tree: SectionNode[], parentId: string | null, node: SectionNode) {
+  const parentDepth = parentId ? depthIn(tree, parentId) : -1;
+  if (parentDepth === null) return false;
+  return parentDepth + 1 + subtreeHeight(node) <= MAX_SECTION_DEPTH;
+}
+
+export type DropSpot = "before" | "after" | "inside";
+
+function parentOf(nodes: SectionNode[], id: string, parent: string | null = null): string | null | undefined {
+  for (const node of nodes) {
+    if (node.template_id === id) return parent;
+    const nested = parentOf(node.children, id, node.template_id);
+    if (nested !== undefined) return nested;
+  }
+  return undefined;
+}
+
+/** Place a section before, after, or inside the target. An omitted spot reorders siblings and nests anywhere else. */
+export function applyMove(structure: SectionNode[], dragId: string, targetId: string, spot?: DropSpot): SectionNode[] | null {
   if (dragId === targetId) return null;
-  const dragIsTop = structure.some((node) => node.template_id === dragId);
-  const targetIsTop = structure.some((node) => node.template_id === targetId);
-  if (dragIsTop) {
-    // A section with children can only be reordered among top-level sections.
-    if (!targetIsTop) return null;
-    const without = structure.filter((node) => node.template_id !== dragId);
-    const dragged = structure.find((node) => node.template_id === dragId)!;
-    const index = without.findIndex((node) => node.template_id === targetId);
-    // Dropping downwards lands after the target, upwards before it.
-    const from = structure.findIndex((node) => node.template_id === dragId);
-    const to = structure.findIndex((node) => node.template_id === targetId);
-    without.splice(from < to ? index + 1 : index, 0, dragged);
-    return without;
+  const next = clone(structure);
+  const drag = findNode(next, dragId);
+  const target = findNode(next, targetId);
+  if (!drag || !target) return null;
+  const place: DropSpot = spot ?? (drag.list === target.list ? (drag.index < target.index ? "after" : "before") : "inside");
+  const dragged = drag.list[drag.index];
+  if (contains(dragged, targetId)) return null;
+
+  if (place === "inside") {
+    if (target.list[target.index].children.some((child) => child.template_id === dragId)) return null;
+    if (!fitsUnder(next, targetId, dragged)) return null;
+    const [node] = drag.list.splice(drag.index, 1);
+    const landing = findNode(next, targetId);
+    if (!landing) return null;
+    landing.list[landing.index].children.push(node);
+    return next;
   }
-  const stripped = structure.map((node) => ({ ...node, children: node.children.filter((id) => id !== dragId) }));
-  if (targetIsTop) {
-    return stripped.map((node) => (node.template_id === targetId ? { ...node, children: [...node.children, dragId] } : node));
-  }
-  return stripped.map((node) => {
-    const original = structure.find((item) => item.template_id === node.template_id)!;
-    const targetIndex = original.children.indexOf(targetId);
-    if (targetIndex === -1) return node;
-    const dragIndex = original.children.indexOf(dragId);
-    const children = [...node.children];
-    const index = children.indexOf(targetId);
-    children.splice(dragIndex !== -1 && dragIndex < targetIndex ? index + 1 : index, 0, dragId);
-    return { ...node, children };
-  });
+
+  const parentId = parentOf(next, targetId);
+  if (parentId === undefined || !fitsUnder(next, parentId, dragged)) return null;
+  const [node] = drag.list.splice(drag.index, 1);
+  const landing = findNode(next, targetId);
+  if (!landing) return null;
+  landing.list.splice(place === "before" ? landing.index : landing.index + 1, 0, node);
+  return next;
 }
 
 /** Shift a section up (-1) or down (+1) among its siblings. */
 export function applyShift(structure: SectionNode[], id: string, delta: -1 | 1): SectionNode[] | null {
-  const topIndex = structure.findIndex((node) => node.template_id === id);
-  if (topIndex !== -1) {
-    const target = topIndex + delta;
-    if (target < 0 || target >= structure.length) return null;
-    const next = [...structure];
-    [next[topIndex], next[target]] = [next[target], next[topIndex]];
-    return next;
-  }
-  return structure.some((node) => node.children.includes(id))
-    ? structure.map((node) => {
-        const index = node.children.indexOf(id);
-        const target = index + delta;
-        if (index === -1 || target < 0 || target >= node.children.length) return node;
-        const children = [...node.children];
-        [children[index], children[target]] = [children[target], children[index]];
-        return { ...node, children };
-      })
-    : null;
+  const next = clone(structure);
+  const placed = findNode(next, id);
+  if (!placed) return null;
+  const target = placed.index + delta;
+  if (target < 0 || target >= placed.list.length) return null;
+  const [node] = placed.list.splice(placed.index, 1);
+  placed.list.splice(target, 0, node);
+  return next;
 }
 
+/** Move a section under `parentId`, or to the top level when `parentId` is empty. The subtree moves with it. */
 export function applyReparent(structure: SectionNode[], id: string, parentId: string): SectionNode[] | null {
-  const current = structure.find((node) => node.children.includes(id));
-  if (!current || current.template_id === parentId) return null;
-  return structure.map((node) => {
-    if (node.template_id === current.template_id) return { ...node, children: node.children.filter((child) => child !== id) };
-    if (node.template_id === parentId) return { ...node, children: [...node.children, id] };
-    return node;
-  });
+  const next = clone(structure);
+  const placed = findNode(next, id);
+  if (!placed) return null;
+  const node = placed.list[placed.index];
+  if (!parentId) {
+    if (placed.list === next) return null;
+    const anchor = next.findIndex((item) => item.template_id === id || contains(item, id));
+    placed.list.splice(placed.index, 1);
+    next.splice(Math.max(anchor, 0) + 1, 0, node);
+    return next;
+  }
+  if (parentId === id || contains(node, parentId) || !fitsUnder(next, parentId, node)) return null;
+  const parent = findNode(next, parentId);
+  if (!parent) return null;
+  if (parent.list[parent.index].children.some((child) => child.template_id === id)) return null;
+  placed.list.splice(placed.index, 1);
+  const landing = findNode(next, parentId);
+  if (!landing) return null;
+  landing.list[landing.index].children.push(node);
+  return next;
+}
+
+export function descendantIds(structure: SectionNode[], id: string): string[] {
+  const placed = findNode(structure, id);
+  if (!placed) return [];
+  const ids: string[] = [];
+  function walk(node: SectionNode) {
+    ids.push(node.template_id);
+    node.children.forEach(walk);
+  }
+  walk(placed.list[placed.index]);
+  return ids;
 }

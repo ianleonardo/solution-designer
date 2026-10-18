@@ -8,13 +8,14 @@ import { ExportPreview, type ExportFormat } from "../components/ExportPreview";
 import { AutoFillDialog, type AutoFillRequest } from "../components/AutoFillDialog";
 import { ConfirmDialog } from "../components/ConfirmDialog";
 import { ImageBlock } from "../components/ImageBlock";
-import { Outline, type OutlineEditor } from "../components/Outline";
+import { Outline, type OutlineEditor, type OutlineItem } from "../components/Outline";
 import { ProseEditor } from "../components/ProseEditor";
 import { ReferencesPanel } from "../components/ReferencesPanel";
 import { SectionDialog, type SectionDialogMode, type SectionValues } from "../components/SectionDialog";
 import { TableGrid } from "../components/TableGrid";
 import { sectionIsEmpty } from "../autofill";
-import { indentSection, moveSection, outdentSection, toTree, type OutlineTree } from "../structure";
+import { STARTER_FLOWCHART } from "../mermaidTemplates";
+import { indentSection, MAX_SECTION_DEPTH, moveSection, outdentSection, sectionDepth, sectionPlacement, toTree, type OutlineTree } from "../structure";
 import type { Block, Project, ProjectDocument, Sdd, Section, Template, WorkspaceData } from "../types";
 
 const HIDDEN_ALERTS = new Set([
@@ -26,6 +27,25 @@ const HIDDEN_ALERTS = new Set([
   "Missing database growth estimates",
 ]);
 
+function outlineItems(templates: Template[], missingCount: (id: string) => number): OutlineItem[] {
+  const tree = toTree(templates);
+  return templates.map((template) => {
+    const place = sectionPlacement(tree, template.template_id);
+    const depth = sectionDepth(templates, template.template_id);
+    return {
+      id: template.template_id,
+      name: template.section_name,
+      depth,
+      missing: missingCount(template.template_id),
+      canIndent: place.canIndent,
+      canOutdent: place.canOutdent,
+      canAddChild: depth < MAX_SECTION_DEPTH,
+      canMoveUp: place.canMoveUp,
+      canMoveDown: place.canMoveDown,
+    };
+  });
+}
+
 export function WorkspacePage() {
   const { projectId = "", documentId } = useParams();
   const navigate = useNavigate();
@@ -36,12 +56,8 @@ export function WorkspacePage() {
   const [saveState, setSaveState] = useState<"idle" | "saving" | "saved">("idle");
   const [revision, setRevision] = useState(0);
   const [outlineOpen, setOutlineOpen] = useState(false);
-  const [flyoutOpen, setFlyoutOpen] = useState(false);
   const [running, setRunning] = useState(false);
   const [progress, setProgress] = useState<Record<string, string>>({});
-  const [prompt, setPrompt] = useState("");
-  const [temperature, setTemperature] = useState(0.2);
-  const [maxWords, setMaxWords] = useState(2000);
   const [title, setTitle] = useState("");
   const [referencesOpen, setReferencesOpen] = useState(false);
   const [preview, setPreview] = useState<ExportFormat | null>(null);
@@ -80,13 +96,6 @@ export function WorkspacePage() {
     // Pick the first section again only when another document is opened.
   }, [docId]);
 
-  useEffect(() => {
-    if (!activeTemplate) return;
-    setPrompt(activeTemplate.system_prompt);
-    setTemperature(activeTemplate.temperature);
-    setMaxWords(activeTemplate.max_words === 500 ? 2000 : activeTemplate.max_words);
-  }, [activeTemplate]);
-
   const base = `/api/projects/${projectId}/documents/${docId}`;
 
   function updateDoc(id: string, change: (current: ProjectDocument) => ProjectDocument) {
@@ -98,6 +107,18 @@ export function WorkspacePage() {
   /** Apply a document payload from the API (which carries no templates) to the loaded document. */
   function mergeDoc(fresh: Sdd & { templates?: Template[] }) {
     updateDoc(fresh.document_id, (current) => ({ ...current, ...fresh, templates: fresh.templates ?? current.templates }));
+  }
+
+  function insertDiagram(afterIndex: number) {
+    if (!section) return;
+    const blocks = [...section.blocks];
+    blocks.splice(afterIndex + 1, 0, { type: "diagram", sequence: false, mermaid: STARTER_FLOWCHART });
+    replaceSection(activeId, { ...section, blocks });
+  }
+
+  function removeBlock(index: number) {
+    if (!section) return;
+    replaceSection(activeId, { ...section, blocks: section.blocks.filter((_, blockIndex) => blockIndex !== index) });
   }
 
   function replaceSection(sectionId: string, next: Section) {
@@ -208,7 +229,7 @@ export function WorkspacePage() {
         busy: structureBusy,
         onRename: (id, name) => void changeStructure(() => api<ProjectDocument>(`${base}/sections/${id}`, { method: "PATCH", body: JSON.stringify({ section_name: name }) })),
         onMove: (id, delta) => applyOrder(moveSection(toTree(templates), id, delta)),
-        onIndent: (id) => applyOrder(indentSection(toTree(templates), id), "Move or outdent its sub-sections first, or it has no section above to join."),
+        onIndent: (id) => applyOrder(indentSection(toTree(templates), id), "It has no section above to join, or nesting would go past 5 levels."),
         onOutdent: (id) => applyOrder(outdentSection(toTree(templates), id)),
         onDelete: (id) => setDeletingSection(templates.find((item) => item.template_id === id) ?? null),
         onSettings: (id) => {
@@ -389,12 +410,6 @@ export function WorkspacePage() {
           <button type="button" className="btn" onClick={() => setPreview("md")}>Markdown</button>
           <button type="button" className="btn" onClick={() => setPreview("html")}>HTML</button>
           <button type="button" className="btn" onClick={() => setPreview("pdf")}>PDF</button>
-          {user.role_name === "Admin" && (
-            <button type="button" className="btn" onClick={() => setFlyoutOpen(true)}>
-              <span className="material-symbols-outlined">tune</span>
-              Section prompt
-            </button>
-          )}
         </div>
       </div>
       <DocumentTabs
@@ -441,19 +456,12 @@ export function WorkspacePage() {
         <aside className={`${outlineOpen ? "fixed inset-y-14 left-0 z-30 w-[280px]" : "hidden"} xl:static xl:flex w-[280px] shrink-0 border-r border-hairline bg-panel`}>
           <Outline
             active={activeId}
-            fillingId={fillingId}
             editor={outlineEditor}
-            onFill={canFill ? (id) => setFillDialog({ scope: "section", id }) : undefined}
             onSelect={(id) => {
               setActiveId(id);
               setOutlineOpen(false);
             }}
-            items={templates.map((template) => ({
-              id: template.template_id,
-              name: template.section_name,
-              depth: template.parent_id ? 1 : 0,
-              missing: visibleMissing(template.template_id).length,
-            }))}
+            items={outlineItems(templates, (id) => visibleMissing(id).length)}
           />
         </aside>
         <section className="flex-1 overflow-auto p-6">
@@ -467,20 +475,45 @@ export function WorkspacePage() {
                 </button>
               )}
             </div>
-            {section?.blocks.map((block, index) => (
-              <BlockView
-                key={`${docId}-${activeId}-${index}-${revision}`}
-                projectId={projectId}
-                block={block}
-                readOnly={documentLocked}
-                onError={setError}
-                onChange={(next) => {
-                  if (!section) return;
-                  const blocks = section.blocks.map((item, blockIndex) => (blockIndex === index ? next : item));
-                  replaceSection(activeId, { ...section, blocks });
-                }}
-              />
-            ))}
+            {section?.blocks.map((block, index) => {
+              const diagramCount = section.blocks.filter((item) => item.type === "diagram").length;
+              const layoutDiagrams = (activeTemplate?.blocks ?? []).filter((item) => item.type === "diagram").length;
+              return (
+                <div key={`${docId}-${activeId}-${index}-${revision}`} className="space-y-2">
+                  <BlockView
+                    projectId={projectId}
+                    block={block}
+                    readOnly={documentLocked}
+                    onError={setError}
+                    onChange={(next) => {
+                      if (!section) return;
+                      const blocks = section.blocks.map((item, blockIndex) => (blockIndex === index ? next : item));
+                      replaceSection(activeId, { ...section, blocks });
+                    }}
+                  />
+                  {block.type === "diagram" && !documentLocked && (
+                    <div className="flex flex-wrap gap-2">
+                      <button type="button" className="btn" onClick={() => insertDiagram(index)}>
+                        <span className="material-symbols-outlined text-sm" aria-hidden="true">add</span>
+                        Add diagram
+                      </button>
+                      {diagramCount > layoutDiagrams && (
+                        <button type="button" className="btn" onClick={() => removeBlock(index)}>
+                          <span className="material-symbols-outlined text-sm" aria-hidden="true">close</span>
+                          Remove diagram
+                        </button>
+                      )}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+            {section && !documentLocked && section.blocks.every((item) => item.type !== "diagram") && (
+              <button type="button" className="btn" onClick={() => insertDiagram(section.blocks.length - 1)}>
+                <span className="material-symbols-outlined text-sm" aria-hidden="true">add</span>
+                Add diagram
+              </button>
+            )}
             {!documentLocked && (
               <button type="button" className="btn" onClick={() => void persist(doc.document_id, doc.content_json)}>
                 Save document
@@ -488,51 +521,6 @@ export function WorkspacePage() {
             )}
           </div>
         </section>
-        {user.role_name === "Admin" && (
-          <aside className={`${flyoutOpen ? "fixed inset-y-14 right-0 z-30 w-[380px]" : "hidden"} min-[1440px]:flex w-[380px] shrink-0 border-l border-hairline bg-panel p-4 overflow-auto`}>
-            <form
-              className="space-y-3 w-full"
-              onSubmit={(event) => {
-                event.preventDefault();
-                if (!activeTemplate) return;
-                void api<ProjectDocument>(`${base}/sections/${activeId}`, {
-                  method: "PATCH",
-                  body: JSON.stringify({ system_prompt: prompt, temperature, max_words: maxWords }),
-                })
-                  .then((fresh) => mergeDoc(fresh))
-                  .catch((err: unknown) => setError(err instanceof ApiError ? err.message : "Could not save the prompt"));
-              }}
-            >
-              <div className="flex items-center justify-between">
-                <h3 className="font-headline font-semibold">Section prompt</h3>
-                <button type="button" className="btn min-[1440px]:hidden" onClick={() => setFlyoutOpen(false)}>Close</button>
-              </div>
-              <label className="block text-sm">
-                Prompt
-                <textarea className="field mt-1 min-h-40" value={prompt} onChange={(event) => setPrompt(event.target.value)} />
-              </label>
-              <label className="block text-sm">
-                Temperature {temperature.toFixed(2)}
-                <input className="w-full" type="range" min={0} max={1} step={0.05} value={temperature} onChange={(event) => setTemperature(Number(event.target.value))} />
-              </label>
-              <label className="block text-sm">
-                Max words
-                <input
-                  className="field mt-1"
-                  type="text"
-                  inputMode="numeric"
-                  aria-label="Max words"
-                  value={maxWords || ""}
-                  onChange={(event) => {
-                    const digits = event.target.value.replace(/\D/g, "");
-                    setMaxWords(digits === "" ? 0 : Number(digits));
-                  }}
-                />
-              </label>
-              <button className="btn btn-primary" type="submit">Save prompt</button>
-            </form>
-          </aside>
-        )}
       </div>
       {sectionDialog && <SectionDialog mode={sectionDialog} onSubmit={saveSection} onClose={() => setSectionDialog(null)} />}
       {fillDialog && (

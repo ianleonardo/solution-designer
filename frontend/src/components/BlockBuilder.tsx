@@ -1,3 +1,5 @@
+import { useRef, useState, type DragEvent } from "react";
+import { moveItem } from "../tableRows";
 import type { BlockSpec } from "../types";
 
 const LABELS: Record<BlockSpec["type"], string> = {
@@ -17,6 +19,9 @@ export function newBlock(type: BlockSpec["type"]): BlockSpec {
 }
 
 export function BlockBuilder({ blocks, onChange }: { blocks: BlockSpec[]; onChange: (blocks: BlockSpec[]) => void }) {
+  const columnDrag = useRef<{ block: number; column: number } | null>(null);
+  const [draggedColumn, setDraggedColumn] = useState<{ block: number; column: number } | null>(null);
+
   function update(index: number, next: BlockSpec) {
     onChange(blocks.map((block, position) => (position === index ? next : block)));
   }
@@ -71,9 +76,46 @@ export function BlockBuilder({ blocks, onChange }: { blocks: BlockSpec[]; onChan
             <div className="space-y-1">
               <p className="text-sm">Columns</p>
               {block.columns.map((column, columnIndex) => (
-                <div key={columnIndex} className="flex gap-1">
+                <div
+                  key={columnIndex}
+                  className={`flex items-center gap-1 rounded ${draggedColumn?.block === index && draggedColumn.column === columnIndex ? "opacity-60" : ""}`}
+                  onDragOver={(event) => event.preventDefault()}
+                  onDrop={(event) => {
+                    event.preventDefault();
+                    const source = columnDrag.current;
+                    columnDrag.current = null;
+                    setDraggedColumn(null);
+                    if (!source || source.block !== index || source.column === columnIndex) return;
+                    update(index, { ...block, columns: moveItem(block.columns, source.column, columnIndex) });
+                  }}
+                >
+                  <button
+                    type="button"
+                    draggable
+                    className="icon-btn cursor-grab active:cursor-grabbing touch-none"
+                    aria-label={`Drag column ${columnIndex + 1} of block ${index + 1}`}
+                    title="Drag to reorder"
+                    onDragStart={(event: DragEvent<HTMLButtonElement>) => {
+                      columnDrag.current = { block: index, column: columnIndex };
+                      setDraggedColumn({ block: index, column: columnIndex });
+                      const transfer = event.dataTransfer;
+                      if (!transfer) return;
+                      transfer.effectAllowed = "move";
+                      try {
+                        transfer.setData("text/plain", column);
+                      } catch {
+                        // Some browsers reject setData outside a real drag.
+                      }
+                    }}
+                    onDragEnd={() => {
+                      columnDrag.current = null;
+                      setDraggedColumn(null);
+                    }}
+                  >
+                    <span className="material-symbols-outlined text-base" aria-hidden="true">drag_indicator</span>
+                  </button>
                   <input
-                    className="field"
+                    className="field flex-1"
                     aria-label={`Block ${index + 1} column ${columnIndex + 1}`}
                     value={column}
                     onChange={(event) => update(index, { ...block, columns: block.columns.map((item, position) => (position === columnIndex ? event.target.value : item)) })}

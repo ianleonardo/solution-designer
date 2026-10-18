@@ -107,6 +107,9 @@ def _tables() -> list[tuple[str, str, str, str]]:
         ("systems", "system_code", "system", "systems"),
         ("interfaces", "interface_id", "interface", "interfaces"),
         ("kb_tables", "table_id", "kb_table", "database tables"),
+        ("kb_reports", "report_id", "kb_report", "reports"),
+        ("kb_batches", "batch_id", "kb_batch", "batches"),
+        ("kb_capabilities", "capability_id", "kb_capability", "capabilities"),
     ]
 
 
@@ -136,6 +139,21 @@ def _rows(kind: str, only_missing: bool) -> list[tuple[str, str]]:
     if kind == "kb_table":
         rows = db.fetchall(f"SELECT * FROM kb_tables{where}")
         return [(row["table_id"], tables.text_for(row)[:2000]) for row in rows]
+    if kind == "kb_report":
+        from app.services import reports as reports_svc
+
+        rows = db.fetchall(f"SELECT * FROM kb_reports{where}")
+        return [(row["report_id"], reports_svc.text_for(row)[:2000]) for row in rows]
+    if kind == "kb_batch":
+        from app.services import batches as batches_svc
+
+        rows = db.fetchall(f"SELECT * FROM kb_batches{where}")
+        return [(row["batch_id"], batches_svc.text_for(row)[:2000]) for row in rows]
+    if kind == "kb_capability":
+        from app.services import capabilities as capabilities_svc
+
+        rows = db.fetchall(f"SELECT * FROM kb_capabilities{where}")
+        return [(row["capability_id"], capabilities_svc.text_for(row)[:2000]) for row in rows]
     rows = db.fetchall(f"SELECT * FROM interfaces{where}")
     return [(row["interface_id"], interfaces.text_for(row)) for row in rows]
 

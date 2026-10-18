@@ -37,7 +37,10 @@ def retrieve(query: str, limit: int = 6) -> list[dict]:
     query_tokens = _tokens(query)
     query_vector = llm.embed(query) if llm.embedding_configured() else None
     scored = []
+    skip_rag = {"Batches", "Reports", "Capabilities", "Tables"}
     for row in rows:
+        if row.get("inventory_type") in skip_rag:
+            continue
         parsed = row.get("parsed_json") or ""
         score = score_text(
             query_tokens,
@@ -62,6 +65,9 @@ def retrieve(query: str, limit: int = 6) -> list[dict]:
     scored.extend(_system_hits(query_tokens, query_vector))
     scored.extend(_interface_hits(query_tokens, query_vector))
     scored.extend(_table_hits(query_tokens, query_vector))
+    scored.extend(_report_hits(query_tokens, query_vector))
+    scored.extend(_batch_hits(query_tokens, query_vector))
+    scored.extend(_capability_hits(query_tokens, query_vector))
     scored.sort(key=lambda item: item["score"], reverse=True)
     top = scored[:limit]
     return top + _related_systems(top)
@@ -127,6 +133,89 @@ def _table_hits(query_tokens: set[str], query_vector: list[float] | None) -> lis
     return hits
 
 
+def _report_hits(query_tokens: set[str], query_vector: list[float] | None) -> list[dict]:
+    """Structured reports from kb_reports."""
+    from app.services import reports as reports_svc
+
+    hits = []
+    for row in db.fetchall("SELECT * FROM kb_reports"):
+        text = reports_svc.text_for(row)
+        score = score_text(query_tokens, text, query_vector, row.get("embedding"))
+        if row["report_name"].lower() in query_tokens or row["system_code"].lower() in query_tokens:
+            score += 2
+        if score <= 0:
+            continue
+        hits.append(
+            _entry(
+                row["report_id"],
+                "Reports",
+                row["report_name"],
+                text[:800],
+                {"country": row["country"], "system": row["system_code"]},
+                score,
+            )
+        )
+    return hits
+
+
+def _batch_hits(query_tokens: set[str], query_vector: list[float] | None) -> list[dict]:
+    """Structured batches from kb_batches."""
+    from app.services import batches as batches_svc
+
+    hits = []
+    for row in db.fetchall("SELECT * FROM kb_batches"):
+        text = batches_svc.text_for(row)
+        score = score_text(query_tokens, text, query_vector, row.get("embedding"))
+        if row["batch_name"].lower() in query_tokens or row["system_code"].lower() in query_tokens:
+            score += 2
+        if score <= 0:
+            continue
+        hits.append(
+            _entry(
+                row["batch_id"],
+                "Batches",
+                row["batch_name"],
+                text[:800],
+                {"country": row["country"], "system": row["system_code"], "batch_type": row["batch_type"]},
+                score,
+            )
+        )
+    return hits
+
+
+def _capability_hits(query_tokens: set[str], query_vector: list[float] | None) -> list[dict]:
+    """Structured capabilities from kb_capabilities."""
+    from app.services import capabilities as capabilities_svc
+
+    hits = []
+    for row in db.fetchall("SELECT * FROM kb_capabilities"):
+        text = capabilities_svc.text_for(row)
+        score = score_text(query_tokens, text, query_vector, row.get("embedding"))
+        for field in ("l1_capability", "l2_capability", "l3_capability", "system_code"):
+            if str(row[field]).lower() in query_tokens:
+                score += 2
+                break
+        if score <= 0:
+            continue
+        hits.append(
+            _entry(
+                row["capability_id"],
+                "Capabilities",
+                f"{row['l1_capability']} / {row['l2_capability']} / {row['l3_capability']}",
+                text[:800],
+                {
+                    "country": row["country"],
+                    "system": row["system_code"],
+                    "l1": row["l1_capability"],
+                    "l2": row["l2_capability"],
+                    "l3": row["l3_capability"],
+                },
+                score,
+            )
+        )
+    return hits
+
+
 def _related_systems(hits: list[dict], most: int = 3) -> list[dict]:
     """The direct upstream and downstream systems of the best matching systems, so 'what is downstream of X' is answered fully."""
     from app.services import systems
@@ -162,7 +251,18 @@ def summary() -> str:
     kb_tables = db.fetchall("SELECT database_name, COUNT(*) AS c FROM kb_tables GROUP BY database_name ORDER BY database_name")
     if kb_tables:
         lines.append("Tables: " + ", ".join(f"{row['database_name']} {row['c']}" for row in kb_tables))
+    kb_reports = db.fetchall("SELECT country, COUNT(*) AS c FROM kb_reports GROUP BY country ORDER BY country")
+    if kb_reports:
+        lines.append("Reports: " + ", ".join(f"{row['country']} {row['c']}" for row in kb_reports))
+    kb_batches = db.fetchall("SELECT country, COUNT(*) AS c FROM kb_batches GROUP BY country ORDER BY country")
+    if kb_batches:
+        lines.append("Batches: " + ", ".join(f"{row['country']} {row['c']}" for row in kb_batches))
+    kb_capabilities = db.fetchall("SELECT country, COUNT(*) AS c FROM kb_capabilities GROUP BY country ORDER BY country")
+    if kb_capabilities:
+        lines.append("Capabilities: " + ", ".join(f"{row['country']} {row['c']}" for row in kb_capabilities))
     for row in db.fetchall("SELECT inventory_type, COUNT(*) AS c FROM rag_inventory GROUP BY inventory_type ORDER BY inventory_type"):
+        if row["inventory_type"] in ("Reports", "Batches", "Capabilities", "Tables"):
+            continue
         lines.append(f"{row['inventory_type']}: {row['c']} entries")
     guidelines = db.fetchone("SELECT COUNT(*) AS c FROM guidelines")
     if guidelines and guidelines["c"]:
@@ -183,7 +283,7 @@ def format_context(hits: list[dict], limit_chars: int = 12000) -> str:
         out.append(header)
         used += len(header) + 1
         for hit in groups[name]:
-            if hit["inventory_type"] in ("Systems", "Interfaces", "Tables"):
+            if hit["inventory_type"] in ("Systems", "Interfaces", "Tables", "Reports", "Batches"):
                 body = hit["raw_content"]
             else:
                 extra = {key: value for key, value in (hit.get("parsed") or {}).items() if value}

@@ -10,6 +10,8 @@ from app.template_parser import slugify
 BLOCK_TYPES = ("header", "prose", "table", "image", "diagram")
 MAX_BLOCKS = 12
 MAX_COLUMNS = 12
+# Depth 0 is a main section. Four further levels make five in total (export headings h2–h6).
+MAX_SECTION_DEPTH = 4
 SDD_LAYOUT_ID = "sdd"
 
 
@@ -262,6 +264,62 @@ def clean_prompt_fields(body: dict) -> dict:
     return values
 
 
+def section_depth(templates: list[dict], template_id: str | None) -> int:
+    """How many parents a section has. A main section is 0. Unknown or empty is -1."""
+    if not template_id:
+        return -1
+    by_id = {item["template_id"]: item for item in templates}
+    depth = 0
+    current = template_id
+    seen: set[str] = set()
+    while current:
+        if current in seen:
+            return depth
+        seen.add(current)
+        row = by_id.get(current)
+        if row is None or not row.get("parent_id"):
+            return depth
+        current = row["parent_id"]
+        depth += 1
+    return depth
+
+
+def ensure_child_depth(templates: list[dict], parent_id: str | None) -> None:
+    """Reject a new child that would be a sixth level."""
+    if parent_id and section_depth(templates, parent_id) >= MAX_SECTION_DEPTH:
+        raise AppError(400, "Sections can be nested at most 5 levels")
+
+
+def subtree_ids(templates: list[dict], root_id: str) -> list[str]:
+    """The section and every descendant, so a delete removes the whole branch."""
+    children: dict[str | None, list[str]] = {}
+    for item in templates:
+        children.setdefault(item.get("parent_id"), []).append(item["template_id"])
+    found: list[str] = []
+    stack = [root_id]
+    seen: set[str] = set()
+    while stack:
+        current = stack.pop()
+        if current in seen:
+            continue
+        seen.add(current)
+        found.append(current)
+        stack.extend(children.get(current, []))
+    return found
+
+
+def nested_sections(templates: list[dict], parent_id: str | None = None) -> list[dict]:
+    """The outline as `{template_id, children}` nodes, parents before descendants."""
+    rows = sorted(
+        (item for item in templates if (item.get("parent_id") or None) == parent_id),
+        key=lambda item: item["sequence_order"],
+    )
+    return [
+        {"template_id": item["template_id"], "children": nested_sections(templates, item["template_id"])}
+        for item in rows
+    ]
+
+
 def add_template(user: dict, layout_id: str, body: dict) -> dict:
     _admin(user)
     layout = _layout_row(layout_id)
@@ -272,17 +330,12 @@ def add_template(user: dict, layout_id: str, body: dict) -> dict:
         parent = next((item for item in templates if item["template_id"] == parent_id), None)
         if parent is None:
             raise AppError(404, "Parent section not found")
-        if parent["parent_id"]:
-            raise AppError(400, "Sub-sections cannot be nested further")
+        ensure_child_depth(templates, parent_id)
     blocks = normalize_blocks(body.get("blocks") or [{"type": "prose"}])
     fields = clean_prompt_fields(body)
     hint = fields.get("hint", "")
-    siblings = [item for item in templates if (item["parent_id"] or None) == parent_id]
-    if parent_id:
-        sequence = parent["sequence_order"] + len(siblings) + 1
-    else:
-        top = [item["sequence_order"] for item in templates if item["parent_id"] is None]
-        sequence = (max(top) // 100 + 1) * 100 if top else 100
+    siblings = [item["sequence_order"] for item in templates if (item.get("parent_id") or None) == parent_id]
+    sequence = (max(siblings) if siblings else (parent["sequence_order"] if parent_id else 0)) + 1
     identifier = _template_id(layout_id, name)
     db.insert_template(
         layout_id,
@@ -299,6 +352,10 @@ def add_template(user: dict, layout_id: str, body: dict) -> dict:
             "hint": hint,
         },
     )
+    cache.invalidate()
+    stored = cache.get_templates(layout_id)
+    for identifier_row, _parent, sequence_order in plan_order(nested_sections(stored), {item["template_id"] for item in stored}):
+        db.exec_sql("UPDATE layout_templates SET sequence_order = ? WHERE template_id = ?", [sequence_order, identifier_row])
     _touch_layout(layout_id)
     return admin_template(next(item for item in cache.get_templates(layout_id) if item["template_id"] == identifier))
 
@@ -335,9 +392,7 @@ def update_template(user: dict, template_id: str, body: dict) -> dict:
 def delete_template(user: dict, template_id: str) -> None:
     _admin(user)
     row = _template(template_id)
-    ids = [template_id] + [
-        item["template_id"] for item in cache.get_templates(row["layout_id"]) if item["parent_id"] == template_id
-    ]
+    ids = subtree_ids(cache.get_templates(row["layout_id"]), template_id)
     for identifier in ids:
         db.exec_sql("DELETE FROM layout_templates WHERE template_id = ?", [identifier])
     _touch_layout(row["layout_id"])
@@ -346,21 +401,34 @@ def delete_template(user: dict, template_id: str) -> None:
 def plan_order(sections, known: set[str]) -> list[tuple[str, str | None, int]]:
     """Validate a requested order and return (template_id, parent_id, sequence_order) for every section.
 
-    `sections` is [{template_id, children: [template_id]}]; every known section must appear exactly once.
+    Each node is `{template_id, children: [node | template_id]}`. A plain id is a leaf, so older
+    clients that send one level of string ids still work. Sequence numbers follow reading order.
     """
     seen: list[str] = []
     plan: list[tuple[str, str | None, int]] = []
     if not isinstance(sections, list):
         raise AppError(400, "Provide the sections in order")
-    for index, section in enumerate(sections, start=1):
-        if not isinstance(section, dict) or not section.get("template_id"):
+
+    def walk(nodes, parent_id: str | None, depth: int) -> None:
+        if not isinstance(nodes, list):
             raise AppError(400, "Each section needs a template_id")
-        parent = section["template_id"]
-        seen.append(parent)
-        plan.append((parent, None, index * 100))
-        for child_index, child in enumerate(section.get("children") or [], start=1):
-            seen.append(child)
-            plan.append((child, parent, index * 100 + child_index))
+        for node in nodes:
+            if isinstance(node, str):
+                identifier, children = node, []
+            elif isinstance(node, dict) and node.get("template_id"):
+                identifier = node["template_id"]
+                children = node.get("children") or []
+            else:
+                raise AppError(400, "Each section needs a template_id")
+            if depth > MAX_SECTION_DEPTH:
+                raise AppError(400, "Sections can be nested at most 5 levels")
+            if identifier in seen:
+                raise AppError(400, "A section cannot be nested under itself")
+            seen.append(identifier)
+            plan.append((identifier, parent_id, len(plan) + 1))
+            walk(children, identifier, depth + 1)
+
+    walk(sections, None, 0)
     if sorted(seen) != sorted(known):
         raise AppError(400, "Provide every section of the layout exactly once")
     return plan
@@ -390,9 +458,6 @@ def reorder_top_level(user: dict, template_ids: list[str]) -> list[dict]:
         raise AppError(400, "Provide every top-level section id exactly once")
     sections = []
     for template_id in template_ids:
-        children = sorted(
-            (item for item in templates if item["parent_id"] == template_id), key=lambda item: item["sequence_order"]
-        )
-        sections.append({"template_id": template_id, "children": [item["template_id"] for item in children]})
+        sections.append({"template_id": template_id, "children": nested_sections(templates, template_id)})
     reorder_layout(user, SDD_LAYOUT_ID, sections)
     return [db.public_template(item) for item in cache.get_templates(SDD_LAYOUT_ID)]

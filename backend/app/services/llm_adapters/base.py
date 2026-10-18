@@ -11,6 +11,7 @@ class ProviderConfig:
     embedding_base_url: str = ""
     api_key: str = ""
     embedding_api_key: str = ""
+    verify_ssl: bool = True
 
 
 def message_text(content) -> str:

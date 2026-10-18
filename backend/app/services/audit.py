@@ -53,6 +53,9 @@ SINGULAR = {
     "interfaces": "interface",
     "tables": "table",
     "columns": "column",
+    "reports": "report",
+    "batches": "batch",
+    "catalogs": "catalogs",
     "settings": "settings",
     "providers": "provider",
     "auth": "user",
@@ -70,6 +73,8 @@ ID_KEYS = {
     "system": "system_code",
     "table": "table_id",
     "column": "column_id",
+    "report": "report_id",
+    "batch": "batch_id",
 }
 MAX_TEXT = 200
 MAX_DETAIL = 4000

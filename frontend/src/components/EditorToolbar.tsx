@@ -14,6 +14,12 @@ export function EditorToolbar({ editor, variant = "full" }: { editor: Editor | n
   const chain = () => editor.chain().focus();
   const bold: Item = { label: "Bold", icon: "format_bold", run: () => chain().toggleBold().run(), active: editor.isActive("bold") };
   const italic: Item = { label: "Italic", icon: "format_italic", run: () => chain().toggleItalic().run(), active: editor.isActive("italic") };
+  const underline: Item = {
+    label: "Underline",
+    icon: "format_underlined",
+    run: () => chain().toggleUnderline().run(),
+    active: editor.isActive("underline"),
+  };
   const linkItem: Item = {
     label: "Link",
     icon: "link",
@@ -29,7 +35,7 @@ export function EditorToolbar({ editor, variant = "full" }: { editor: Editor | n
 
   const items: Item[] =
     variant === "cell"
-      ? [bold, italic, linkItem, bullet, numbered]
+      ? [bold, italic, underline, linkItem, bullet, numbered]
       : [
           ...([1, 2, 3] as const).map((level) => ({
             label: `Heading ${level}`,
@@ -39,6 +45,7 @@ export function EditorToolbar({ editor, variant = "full" }: { editor: Editor | n
           })),
           bold,
           italic,
+          underline,
           { label: "Strikethrough", icon: "strikethrough_s", run: () => chain().toggleStrike().run(), active: editor.isActive("strike") },
           { label: "Code", icon: "code", run: () => chain().toggleCode().run(), active: editor.isActive("code") },
           linkItem,

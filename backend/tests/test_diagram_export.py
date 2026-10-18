@@ -8,6 +8,18 @@ from tests.conftest import auth, login
 TEMPLATES = [{"template_id": "s", "parent_id": None, "section_name": "Flows", "sequence_order": 100}]
 FLOWCHART = "flowchart LR\n  A[Start] --> B{Is it OK?}\n  B -->|Yes| C(Done)\n  B -->|No| A"
 SEQUENCE = "sequenceDiagram\n  actor User as Customer\n  participant Core as Settlement Core\n  User->>Core: Submit payment\n  Core-->>User: Accepted\n  Core->>Core: Validate"
+CLASS = (
+    "classDiagram\n"
+    "    class Payment {\n"
+    "        +String id\n"
+    "        +Decimal amount\n"
+    "        +submit()\n"
+    "    }\n"
+    "    class Account {\n"
+    "        +String number\n"
+    "    }\n"
+    '    Account "1" --> "*" Payment : owns'
+)
 
 
 def _content(*blocks):
@@ -22,11 +34,15 @@ def _sequence_block(mermaid=SEQUENCE):
     return {"type": "diagram", "sequence": True, "mermaid": mermaid, "flow": mermaid_to_flow(mermaid)}
 
 
+def _class_block(mermaid=CLASS):
+    return {"type": "diagram", "sequence": False, "mermaid": mermaid, "flow": None}
+
+
 def test_html_export_draws_diagrams_as_svg_not_source_text():
-    page = export.render_html("T", TEMPLATES, _content(_flowchart_block(), _sequence_block()))
-    assert page.count("<svg ") == 2
-    assert "<pre>" not in page and "flowchart LR" not in page and "sequenceDiagram" not in page
-    for label in ("Start", "Is it OK?", "Yes", "Done", "Customer", "Settlement Core", "Submit payment", "Accepted", "Validate"):
+    page = export.render_html("T", TEMPLATES, _content(_flowchart_block(), _sequence_block(), _class_block()))
+    assert page.count("<svg ") == 3
+    assert "<pre>" not in page and "flowchart LR" not in page and "sequenceDiagram" not in page and "classDiagram" not in page
+    for label in ("Start", "Is it OK?", "Yes", "Done", "Customer", "Settlement Core", "Submit payment", "Accepted", "Validate", "Payment", "Account", "+String id", "+submit()", "1 owns *"):
         assert f">{label}</text>" in page, label
     assert page.count("<polygon") >= 5  # the decision diamond and the arrow heads
 
@@ -54,8 +70,37 @@ def test_the_scene_is_drawn_from_the_mermaid_text_whatever_else_the_block_holds(
     assert diagrams.scene_for_block({"type": "diagram", "mermaid": "erDiagram\n  A ||--o{ B : has"}) is None
 
 
+def test_html_export_draws_class_diagrams():
+    scene = diagrams.scene_for_block(_class_block())
+    assert scene is not None
+    texts = [item["text"] for item in scene.items if item["kind"] == "text"]
+    assert "Payment" in texts and "Account" in texts
+    assert "+String id" in texts and "+submit()" in texts
+    page = export.render_html("T", TEMPLATES, _content(_class_block()))
+    assert "<svg " in page and "<pre>" not in page and "classDiagram" not in page
+
+
+def test_class_diagram_skips_direction_and_notes_instead_of_falling_back_to_source():
+    mermaid = (
+        "classDiagram\n"
+        "    direction LR\n"
+        "    note for Payment \"settlement\"\n"
+        "    class Payment {\n"
+        "        +submit()\n"
+        "    }\n"
+        "    class Account\n"
+        "    Account --> Payment : owns\n"
+    )
+    scene = diagrams.scene_for_block(_class_block(mermaid))
+    assert scene is not None
+    texts = [item["text"] for item in scene.items if item["kind"] == "text"]
+    assert "Payment" in texts and "Account" in texts and "+submit()" in texts
+    page = export.render_html("T", TEMPLATES, _content(_class_block(mermaid)))
+    assert "<svg " in page and "classDiagram" not in page and "direction LR" not in page
+
+
 def test_scene_stays_inside_its_canvas():
-    for block in (_flowchart_block(), _sequence_block(), _flowchart_block("flowchart TB\n A --> A\n A --> B")):
+    for block in (_flowchart_block(), _sequence_block(), _class_block(), _flowchart_block("flowchart TB\n A --> A\n A --> B")):
         scene = diagrams.scene_for_block(block)
         for item in scene.items:
             xs = [item[k] for k in ("x", "x1", "x2") if k in item] + [p[0] for p in item.get("points", [])]

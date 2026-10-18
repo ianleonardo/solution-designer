@@ -111,6 +111,47 @@ def test_general_it_questions_reach_the_model(client, monkeypatch):
     assert response.json()["refused"] is False
 
 
+def test_chat_includes_previous_conversation_in_the_prompt(client, monkeypatch):
+    seen = {}
+
+    def fake(system, user, temperature):
+        seen["user"] = user
+        return "follow-up answer"
+
+    monkeypatch.setattr("app.services.llm.complete", fake)
+    writer = login(client, "Write")
+    response = client.post(
+        "/api/chat",
+        json={
+            "message": "And what about the destination?",
+            "history": [
+                {"role": "user", "content": "Which interfaces leave SPL?"},
+                {"role": "assistant", "content": "Remittance payment goes to DGE."},
+                {"role": "bogus", "content": "ignore me"},
+                {"role": "user", "content": ""},
+            ],
+        },
+        headers=auth(writer),
+    )
+    assert response.status_code == 200, response.text
+    assert response.json()["reply"] == "follow-up answer"
+    assert "PREVIOUS CONVERSATION:" in seen["user"]
+    assert "User: Which interfaces leave SPL?" in seen["user"]
+    assert "Assistant: Remittance payment goes to DGE." in seen["user"]
+    assert "ignore me" not in seen["user"]
+    assert "QUESTION:\nAnd what about the destination?" in seen["user"]
+
+
+def test_normalize_history_keeps_recent_turns_only():
+    from app.routers.chat import MAX_HISTORY_TURNS, normalize_history
+
+    raw = [{"role": "user", "content": f"turn {i}"} for i in range(MAX_HISTORY_TURNS + 5)]
+    kept = normalize_history(raw)
+    assert len(kept) == MAX_HISTORY_TURNS
+    assert kept[0]["content"] == f"turn {5}"
+    assert kept[-1]["content"] == f"turn {MAX_HISTORY_TURNS + 4}"
+
+
 def test_guardrails_still_refuse_off_topic_and_injection():
     from app.services import guardrails
 
@@ -128,11 +169,18 @@ def _knowledge(client):
 
     admin = login(client, "Admin")
     for code, name, up, down in (("SPL", "Payment gateway", "", "DGE"), ("DGE", "Digital engine", "SPL", "PIB"), ("PIB", "Internet banking", "DGE", ""), ("ZZZ", "Unrelated ledger", "", "")):
-        body = {"system_code": code, "system_name": name, "upstreams": up, "downstreams": down, "description": f"{name} platform"}
+        body = {
+            "system_code": code,
+            "system_name": name,
+            "upstreams": up,
+            "downstreams": down,
+            "description": f"{name} platform",
+            "has_capability": code == "SPL",
+        }
         response = client.post("/api/systems", json=body, headers=auth(admin))
         if response.status_code != 200:  # DGE is listed before it exists: create without links, link afterwards
             client.post("/api/systems", json={**body, "upstreams": "", "downstreams": ""}, headers=auth(admin))
-    client.patch("/api/systems/SPL", json={"downstreams": "DGE"}, headers=auth(admin))
+    client.patch("/api/systems/SPL", json={"downstreams": "DGE", "has_capability": True}, headers=auth(admin))
     client.patch("/api/systems/DGE", json={"upstreams": "SPL", "downstreams": "PIB"}, headers=auth(admin))
     client.patch("/api/systems/PIB", json={"upstreams": "DGE"}, headers=auth(admin))
     workbook = Workbook()
@@ -141,8 +189,22 @@ def _knowledge(client):
     buffer = io.BytesIO()
     workbook.save(buffer)
     client.post("/api/interfaces/EAI/upload", files={"file": ("i.xlsx", buffer.getvalue(), "application/octet-stream")}, headers=auth(admin))
+    assert (
+        client.post(
+            "/api/capabilities",
+            json={
+                "country": "SG",
+                "system_code": "SPL",
+                "l1_capability": "Payments",
+                "l2_capability": "Remittance",
+                "l3_capability": "Cross border",
+                "description": "Cross border remittance capability",
+            },
+            headers=auth(admin),
+        ).status_code
+        == 200
+    )
     for rag_id, kind, name, text in (
-        ("CA-0001", "Capabilities", "Remittance capability", "Cross border remittance capability"),
         ("TD-0001", "Table Definitions", "TXN_LEDGER", "Ledger table with remittance transactions"),
         ("SC-0001", "Screens", "Remit screen", "Remittance entry screen"),
     ):
@@ -192,7 +254,7 @@ def test_chat_context_summarises_everything_the_knowledge_base_holds(client, mon
     summary = prompt.split("KNOWLEDGE BASE CONTENTS:")[1].split("KNOWLEDGE BASE MATCHES")[0]
     assert "Systems (4)" in summary and "ZZZ (Unrelated ledger)" in summary
     assert "Interfaces: EAI 1" in summary
-    assert "Capabilities: 1 entries" in summary and "Guidelines: 1 documents" in summary
+    assert "Capabilities: SG 1" in summary and "Guidelines: 1 documents" in summary
 
 
 def test_interface_question_naming_a_system_finds_its_interfaces(client, monkeypatch):

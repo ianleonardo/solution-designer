@@ -14,6 +14,44 @@ router = APIRouter(tags=["chat"])
 
 KNOWLEDGE_HITS = 12
 KNOWLEDGE_CHARS = 12000
+MAX_HISTORY_TURNS = 20
+MAX_HISTORY_CHARS = 12000
+
+
+def normalize_history(raw) -> list[dict]:
+    """Keep recent user/assistant turns so follow-ups can refer to earlier answers."""
+    if not isinstance(raw, list):
+        return []
+    turns: list[dict] = []
+    for item in raw:
+        if not isinstance(item, dict):
+            continue
+        role = str(item.get("role") or "").strip().lower()
+        text = str(item.get("content") or item.get("text") or "").strip()
+        if role not in ("user", "assistant") or not text:
+            continue
+        turns.append({"role": role, "content": text[:4000]})
+    if len(turns) > MAX_HISTORY_TURNS:
+        turns = turns[-MAX_HISTORY_TURNS:]
+    total = 0
+    kept: list[dict] = []
+    for turn in reversed(turns):
+        total += len(turn["content"])
+        if total > MAX_HISTORY_CHARS and kept:
+            break
+        kept.append(turn)
+    kept.reverse()
+    return kept
+
+
+def format_history(turns: list[dict]) -> str:
+    if not turns:
+        return ""
+    lines = []
+    for turn in turns:
+        label = "User" if turn["role"] == "user" else "Assistant"
+        lines.append(f"{label}: {turn['content']}")
+    return "PREVIOUS CONVERSATION:\n" + "\n".join(lines)
 
 
 @router.post("/chat")
@@ -23,6 +61,7 @@ def chat(body: dict, user: dict = Depends(current_user)):
     allowed, refusal = guardrails.evaluate(message)
     if not allowed:
         return {"reply": refusal, "refused": True}
+    history = normalize_history(body.get("history"))
     project_id = body.get("project_id")
     context_parts = []
     if project_id:
@@ -33,6 +72,9 @@ def chat(body: dict, user: dict = Depends(current_user)):
     hits = retrieve(message, limit=KNOWLEDGE_HITS)
     context_parts.append(f"KNOWLEDGE BASE CONTENTS:\n{summary()}")
     context_parts.append(f"KNOWLEDGE BASE MATCHES FOR THE QUESTION:\n{format_context(hits, KNOWLEDGE_CHARS) or 'No matching entries.'}")
+    history_block = format_history(history)
+    if history_block:
+        context_parts.append(history_block)
     # The admin-editable global prompt sets the role; the chat rules come last so they win on output format.
     system = f"{cache.get_settings()['global_system_prompt']}\n{CHAT_RULES}"
     try:

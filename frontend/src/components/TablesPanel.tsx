@@ -1,28 +1,35 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { api, ApiError, type RowError } from "../api";
 import { useOptionalAuth } from "../auth";
 import type {
+  Catalogs,
   KbColumnRecord,
   KbTableRecord,
   MissingColumnItem,
-  TableCountry,
-  TableDatabase,
+  TableCompareResult,
   TablesUploadResponse,
 } from "../types";
 import { ConfirmDialog } from "./ConfirmDialog";
+import { SelectField } from "./SelectField";
+import { SortHeader, sortRows, toggleColumnSort, type ColumnSort } from "./SortHeader";
 
-export const COUNTRIES: TableCountry[] = ["Singapore", "Malaysia", "Thailand", "Indonesia", "Vietnam"];
-export const DATABASES: TableDatabase[] = ["PIB", "MBK", "SMS", "NTN", "LCM"];
+const DEFAULT_COUNTRIES = ["SG", "MY", "TH", "VN", "ID"];
+const DEFAULT_DATABASES = ["PIB", "MBK", "SMS", "NTN", "WSM", "LCM"];
 
 function UploadTablesDialog({
+  countries,
+  databases,
   onUploaded,
   onClose,
 }: {
+  countries: string[];
+  databases: string[];
   onUploaded: (response: TablesUploadResponse) => void;
   onClose: () => void;
 }) {
-  const [country, setCountry] = useState<TableCountry>("Singapore");
-  const [database, setDatabase] = useState<TableDatabase>("PIB");
+  const [country, setCountry] = useState(countries.includes("SG") ? "SG" : countries[0] ?? "SG");
+  const [database, setDatabase] = useState(databases[0] ?? "PIB");
   const [schema, setSchema] = useState("");
   const [file, setFile] = useState<File | null>(null);
   const [busy, setBusy] = useState(false);
@@ -83,35 +90,29 @@ function UploadTablesDialog({
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <label className="block">
             <span className="font-label text-[10px] uppercase text-muted">Country</span>
-            <select
-              className="field mt-1"
-              aria-label="Country"
-              value={country}
-              disabled={busy}
-              onChange={(event) => setCountry(event.target.value as TableCountry)}
-            >
-              {COUNTRIES.map((item) => (
-                <option key={item} value={item}>
-                  {item}
-                </option>
-              ))}
-            </select>
+            <div className="mt-1">
+              <SelectField
+                aria-label="Country"
+                value={country}
+                disabled={busy}
+                className="w-full [&_button]:w-full [&_button]:max-w-none"
+                options={countries.map((item) => ({ value: item, label: item }))}
+                onChange={setCountry}
+              />
+            </div>
           </label>
           <label className="block">
             <span className="font-label text-[10px] uppercase text-muted">Database</span>
-            <select
-              className="field mt-1"
-              aria-label="Database"
-              value={database}
-              disabled={busy}
-              onChange={(event) => setDatabase(event.target.value as TableDatabase)}
-            >
-              {DATABASES.map((item) => (
-                <option key={item} value={item}>
-                  {item}
-                </option>
-              ))}
-            </select>
+            <div className="mt-1">
+              <SelectField
+                aria-label="Database"
+                value={database}
+                disabled={busy}
+                className="w-full [&_button]:w-full [&_button]:max-w-none"
+                options={databases.map((item) => ({ value: item, label: item }))}
+                onChange={setDatabase}
+              />
+            </div>
           </label>
         </div>
         <label className="block">
@@ -273,16 +274,20 @@ function MissingColumnsDialog({
 
 function TableFormDialog({
   table,
+  countries,
+  databases,
   onSaved,
   onClose,
 }: {
   table?: KbTableRecord;
+  countries: string[];
+  databases: string[];
   onSaved: (saved: KbTableRecord) => void;
   onClose: () => void;
 }) {
   const editing = Boolean(table);
-  const [country, setCountry] = useState<TableCountry>(table?.country ?? "Singapore");
-  const [database, setDatabase] = useState<TableDatabase>(table?.database_name ?? "PIB");
+  const [country, setCountry] = useState(table?.country ?? (countries.includes("SG") ? "SG" : countries[0] ?? "SG"));
+  const [database, setDatabase] = useState(table?.database_name ?? databases[0] ?? "PIB");
   const [schema, setSchema] = useState(table?.schema_name ?? "");
   const [tableName, setTableName] = useState(table?.table_name ?? "");
   const [description, setDescription] = useState(table?.description ?? "");
@@ -301,11 +306,12 @@ function TableFormDialog({
     event.preventDefault();
     setBusy(true);
     setError("");
+    const name = tableName.trim().toUpperCase();
     try {
       const saved = table
         ? await api<KbTableRecord>(`/api/tables/${encodeURIComponent(table.table_id)}`, {
             method: "PATCH",
-            body: JSON.stringify({ table_name: tableName.trim(), description: description.trim() }),
+            body: JSON.stringify({ table_name: name, description: description.trim() }),
           })
         : await api<KbTableRecord>("/api/tables", {
             method: "POST",
@@ -313,7 +319,7 @@ function TableFormDialog({
               country,
               database_name: database,
               schema_name: schema.trim(),
-              table_name: tableName.trim(),
+              table_name: name,
               description: description.trim(),
             }),
           });
@@ -344,35 +350,29 @@ function TableFormDialog({
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <label className="block">
                 <span className="font-label text-[10px] uppercase text-muted">Country</span>
-                <select
-                  className="field mt-1"
-                  aria-label="Country"
-                  value={country}
-                  disabled={busy}
-                  onChange={(event) => setCountry(event.target.value as TableCountry)}
-                >
-                  {COUNTRIES.map((item) => (
-                    <option key={item} value={item}>
-                      {item}
-                    </option>
-                  ))}
-                </select>
+                <div className="mt-1">
+                  <SelectField
+                    aria-label="Country"
+                    value={country}
+                    disabled={busy}
+                    className="w-full [&_button]:w-full [&_button]:max-w-none"
+                    options={countries.map((item) => ({ value: item, label: item }))}
+                    onChange={setCountry}
+                  />
+                </div>
               </label>
               <label className="block">
                 <span className="font-label text-[10px] uppercase text-muted">Database</span>
-                <select
-                  className="field mt-1"
-                  aria-label="Database"
-                  value={database}
-                  disabled={busy}
-                  onChange={(event) => setDatabase(event.target.value as TableDatabase)}
-                >
-                  {DATABASES.map((item) => (
-                    <option key={item} value={item}>
-                      {item}
-                    </option>
-                  ))}
-                </select>
+                <div className="mt-1">
+                  <SelectField
+                    aria-label="Database"
+                    value={database}
+                    disabled={busy}
+                    className="w-full [&_button]:w-full [&_button]:max-w-none"
+                    options={databases.map((item) => ({ value: item, label: item }))}
+                    onChange={setDatabase}
+                  />
+                </div>
               </label>
             </div>
             <label className="block">
@@ -397,6 +397,7 @@ function TableFormDialog({
             required
             disabled={busy}
             onChange={(event) => setTableName(event.target.value)}
+            onBlur={() => setTableName((value) => value.trim().toUpperCase())}
           />
         </label>
         <label className="block">
@@ -450,8 +451,8 @@ function ColumnFormDialog({
     setBusy(true);
     setError("");
     const payload = {
-      column_name: columnName.trim(),
-      data_type: dataType.trim(),
+      column_name: columnName.trim().toUpperCase(),
+      data_type: dataType.trim().toUpperCase(),
       is_null: isNull || "N",
       primary_key: primaryKey.trim(),
       foreign_key: foreignKey.trim(),
@@ -499,6 +500,7 @@ function ColumnFormDialog({
               required
               disabled={busy}
               onChange={(event) => setColumnName(event.target.value)}
+              onBlur={() => setColumnName((value) => value.trim().toUpperCase())}
             />
           </label>
           <label className="block">
@@ -511,6 +513,7 @@ function ColumnFormDialog({
               disabled={busy}
               placeholder="e.g. VARCHAR(50), NUMBER"
               onChange={(event) => setDataType(event.target.value)}
+              onBlur={() => setDataType((value) => value.trim().toUpperCase())}
             />
           </label>
         </div>
@@ -746,6 +749,8 @@ function TableDetailsDialog({
       {editingTable && table && (
         <TableFormDialog
           table={table}
+          countries={DEFAULT_COUNTRIES}
+          databases={DEFAULT_DATABASES}
           onClose={() => setEditingTable(false)}
           onSaved={(saved) => {
             setTable((current) => (current ? { ...current, ...saved, columns: saved.columns ?? current.columns } : saved));
@@ -786,29 +791,202 @@ function TableDetailsDialog({
   );
 }
 
+
 type SchemaGroup = {
   key: string;
-  country: TableCountry;
-  database: TableDatabase;
+  country: string;
+  database: string;
   schema: string;
   tables: KbTableRecord[];
 };
 
+function TableCompareDialog({
+  databases,
+  schemaOptions,
+  onClose,
+}: {
+  databases: string[];
+  schemaOptions: { database: string; schema: string }[];
+  onClose: () => void;
+}) {
+  const [database, setDatabase] = useState(databases[0] ?? "");
+  const schemasForDb = useMemo(
+    () => schemaOptions.filter((item) => item.database === database).map((item) => item.schema),
+    [schemaOptions, database],
+  );
+  const [schema, setSchema] = useState(schemasForDb[0] ?? "");
+  const [result, setResult] = useState<TableCompareResult | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    setSchema(schemasForDb[0] ?? database);
+  }, [database, schemasForDb]);
+
+  useEffect(() => {
+    function onKey(event: KeyboardEvent) {
+      if (event.key === "Escape" && !busy) onClose();
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose, busy]);
+
+  async function runCompare(event: FormEvent) {
+    event.preventDefault();
+    if (!database.trim()) {
+      setError("Select a database.");
+      return;
+    }
+    setBusy(true);
+    setError("");
+    setResult(null);
+    try {
+      const params = new URLSearchParams({ database, schema: schema.trim() || database });
+      const data = await api<TableCompareResult>(`/api/tables/compare?${params}`);
+      setResult(data);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Comparison failed");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+      role="presentation"
+      onMouseDown={(event) => event.target === event.currentTarget && !busy && onClose()}
+    >
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-label="Table Comparison"
+        className="w-full max-w-3xl max-h-[90vh] flex flex-col rounded-lg border border-hairline bg-panel shadow-xl"
+      >
+        <div className="flex items-start justify-between gap-3 border-b border-hairline p-5">
+          <div>
+            <h2 className="font-headline text-xl font-semibold">Table Comparison</h2>
+            <p className="text-sm text-muted mt-1">Compare tables and columns across countries for a database and schema.</p>
+          </div>
+          <button type="button" className="icon-btn" aria-label="Close" onClick={onClose}>
+            <span className="material-symbols-outlined">close</span>
+          </button>
+        </div>
+        <form className="flex flex-nowrap items-end gap-3 border-b border-hairline px-5 py-4 overflow-x-auto" onSubmit={(event) => void runCompare(event)}>
+          <label className="block">
+            <span className="font-label text-[10px] uppercase text-muted">Database</span>
+            <div className="mt-1">
+              <SelectField
+                aria-label="Compare database"
+                value={database}
+                disabled={busy}
+                options={databases.map((item) => ({ value: item, label: item }))}
+                onChange={setDatabase}
+              />
+            </div>
+          </label>
+          <label className="block">
+            <span className="font-label text-[10px] uppercase text-muted">Schema</span>
+            <div className="mt-1">
+              <SelectField
+                aria-label="Compare schema"
+                value={schema}
+                disabled={busy || schemasForDb.length === 0}
+                options={
+                  schemasForDb.length === 0
+                    ? [{ value: database, label: database || "—" }]
+                    : schemasForDb.map((item) => ({ value: item, label: item }))
+                }
+                onChange={setSchema}
+              />
+            </div>
+          </label>
+          <button type="submit" className="btn btn-primary" disabled={busy || !database}>
+            {busy ? "Comparing…" : "Compare"}
+          </button>
+        </form>
+        <div className="flex-1 overflow-auto p-5 space-y-4">
+          {error && <p className="text-alert text-sm">{error}</p>}
+          {result && (
+            <>
+              <p className="text-sm text-muted">
+                {result.database} / {result.schema} · countries with data:{" "}
+                {result.countries.length ? result.countries.join(", ") : "none"}
+              </p>
+              <section>
+                <h3 className="font-headline text-base font-semibold">Missing tables</h3>
+                {result.missing_tables.length === 0 ? (
+                  <p className="text-sm text-muted mt-1">No missing tables among countries that have this database/schema.</p>
+                ) : (
+                  <ul className="mt-2 space-y-2 text-sm">
+                    {result.missing_tables.map((item) => (
+                      <li key={item.table_name} className="rounded border border-hairline bg-inset px-3 py-2">
+                        <span className="font-label text-xs font-medium">{item.table_name}</span>
+                        <div className="text-muted text-xs mt-0.5">
+                          Present in {item.present_in.join(", ") || "—"}; missing in {item.missing_in.join(", ")}
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </section>
+              <section>
+                <h3 className="font-headline text-base font-semibold">Column differences</h3>
+                {result.column_diffs.length === 0 ? (
+                  <p className="text-sm text-muted mt-1">No column name or data type differences.</p>
+                ) : (
+                  <ul className="mt-2 space-y-2 text-sm">
+                    {result.column_diffs.map((item) => (
+                      <li key={`${item.table_name}.${item.column_name}`} className="rounded border border-hairline bg-inset px-3 py-2">
+                        <span className="font-label text-xs font-medium">
+                          {item.table_name}.{item.column_name}
+                        </span>
+                        <div className="text-muted text-xs mt-0.5">
+                          {Object.entries(item.data_types)
+                            .map(([country, dtype]) => `${country}: ${dtype}`)
+                            .join(" · ")}
+                          {item.missing_in.length > 0 ? `; missing in ${item.missing_in.join(", ")}` : ""}
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </section>
+            </>
+          )}
+          {!result && !error && !busy && <p className="text-muted text-sm">Select a database and schema, then run Compare.</p>}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function TablesPanel() {
   const auth = useOptionalAuth();
   const canEdit = auth?.user?.role_name !== "Viewer";
+  const [catalogs, setCatalogs] = useState<Catalogs>({
+    countries: DEFAULT_COUNTRIES,
+    databases: DEFAULT_DATABASES,
+    interface_channels: [],
+  });
   const [tables, setTables] = useState<KbTableRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
+  const [searchParams] = useSearchParams();
+  const countryFromUrl = searchParams.get("country");
   const [search, setSearch] = useState("");
-  const [countryFilter, setCountryFilter] = useState<string>("");
-  const [databaseFilter, setDatabaseFilter] = useState<string>("");
+  const [countryFilter, setCountryFilter] = useState(countryFromUrl || "SG");
+  const [databaseFilter, setDatabaseFilter] = useState("");
+  const [schemaFilter, setSchemaFilter] = useState("");
   const [uploading, setUploading] = useState(false);
+  const [comparing, setComparing] = useState(false);
   const [missingColumns, setMissingColumns] = useState<MissingColumnItem[] | null>(null);
   const [tableForm, setTableForm] = useState<{ table?: KbTableRecord } | null>(null);
   const [deletingTable, setDeletingTable] = useState<KbTableRecord | null>(null);
   const [inspectingId, setInspectingId] = useState<string | null>(null);
+  const [sort, setSort] = useState<ColumnSort>(null);
+  const [filtersReady, setFiltersReady] = useState(false);
 
   function load() {
     setLoading(true);
@@ -822,8 +1000,55 @@ export function TablesPanel() {
   }
 
   useEffect(() => {
+    api<Catalogs>("/api/catalogs")
+      .then((data) => {
+        const countries = data.countries?.length ? data.countries : DEFAULT_COUNTRIES;
+        const databases = data.databases?.length ? data.databases : DEFAULT_DATABASES;
+        setCatalogs({
+          countries,
+          databases,
+          interface_channels: data.interface_channels ?? [],
+        });
+        setCountryFilter((current) => {
+          if (countryFromUrl && (countries.includes(countryFromUrl) || countryFromUrl === "Unspecified")) return countryFromUrl;
+          if (countries.includes(current)) return current;
+          return countries.includes("SG") ? "SG" : countries[0] ?? "SG";
+        });
+      })
+      .catch(() => undefined);
     load();
-  }, []);
+  }, [countryFromUrl]);
+
+  const catalogDatabases = catalogs.databases.length ? catalogs.databases : DEFAULT_DATABASES;
+
+  const databasesForCountry = useMemo(() => {
+    const allowed = new Set(catalogDatabases);
+    const present = new Set(
+      tables.filter((item) => item.country === countryFilter).map((item) => item.database_name),
+    );
+    return catalogDatabases.filter((name) => allowed.has(name) && present.has(name));
+  }, [tables, countryFilter, catalogDatabases]);
+
+  const schemasForSelection = useMemo(() => {
+    if (!databaseFilter) return [] as string[];
+    const schemas = new Set(
+      tables
+        .filter((item) => item.country === countryFilter && item.database_name === databaseFilter)
+        .map((item) => item.schema_name),
+    );
+    return Array.from(schemas).sort((a, b) => a.localeCompare(b));
+  }, [tables, countryFilter, databaseFilter]);
+
+  useEffect(() => {
+    if (loading) return;
+    setDatabaseFilter((current) => (current && databasesForCountry.includes(current) ? current : databasesForCountry[0] ?? ""));
+    setFiltersReady(true);
+  }, [countryFilter, databasesForCountry, loading]);
+
+  useEffect(() => {
+    if (!filtersReady) return;
+    setSchemaFilter((current) => (current && schemasForSelection.includes(current) ? current : schemasForSelection[0] ?? ""));
+  }, [databaseFilter, schemasForSelection, filtersReady]);
 
   async function removeTable() {
     if (!deletingTable) return;
@@ -833,11 +1058,27 @@ export function TablesPanel() {
     setDeletingTable(null);
   }
 
+  const compareDatabases = useMemo(() => {
+    const allowed = new Set(catalogDatabases);
+    const present = new Set(tables.map((item) => item.database_name).filter((name) => allowed.has(name)));
+    return catalogDatabases.filter((name) => present.has(name));
+  }, [tables, catalogDatabases]);
+
+  const compareSchemaOptions = useMemo(() => {
+    const map = new Map<string, { database: string; schema: string }>();
+    for (const row of tables) {
+      const key = `${row.database_name}|${row.schema_name}`;
+      if (!map.has(key)) map.set(key, { database: row.database_name, schema: row.schema_name });
+    }
+    return Array.from(map.values());
+  }, [tables]);
+
   const groups = useMemo<SchemaGroup[]>(() => {
     const query = search.trim().toLowerCase();
     const filtered = tables.filter((item) => {
       if (countryFilter && item.country !== countryFilter) return false;
       if (databaseFilter && item.database_name !== databaseFilter) return false;
+      if (schemaFilter && item.schema_name !== schemaFilter) return false;
       if (!query) return true;
       return `${item.country} ${item.database_name} ${item.schema_name} ${item.table_name} ${item.description}`
         .toLowerCase()
@@ -860,7 +1101,11 @@ export function TablesPanel() {
       group.tables.push(row);
     }
     return Array.from(map.values());
-  }, [tables, search, countryFilter, databaseFilter]);
+  }, [tables, search, countryFilter, databaseFilter, schemaFilter]);
+
+  const countries = catalogs.countries.length ? catalogs.countries : DEFAULT_COUNTRIES;
+  const countryOptions = countryFilter && !countries.includes(countryFilter) ? [...countries, countryFilter] : countries;
+  const allDatabases = catalogs.databases.length ? catalogs.databases : DEFAULT_DATABASES;
 
   return (
     <div className="p-6 max-w-[1400px] space-y-4">
@@ -876,51 +1121,50 @@ export function TablesPanel() {
           {notice}
         </p>
       )}
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex flex-wrap items-center gap-2 flex-1">
-          <label className="relative flex-1 min-w-[200px] max-w-sm block">
-            <span className="sr-only">Search Tables</span>
-            <span className="material-symbols-outlined pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-muted">
-              search
-            </span>
-            <input
-              className="field pl-9"
-              type="search"
-              aria-label="Search Tables"
-              placeholder="Search tables"
-              value={search}
-              onChange={(event) => setSearch(event.target.value)}
-            />
-          </label>
-          <select
-            className="field w-auto min-w-[9rem]"
-            aria-label="Filter by country"
-            value={countryFilter}
-            onChange={(event) => setCountryFilter(event.target.value)}
-          >
-            <option value="">All countries</option>
-            {COUNTRIES.map((item) => (
-              <option key={item} value={item}>
-                {item}
-              </option>
-            ))}
-          </select>
-          <select
-            className="field w-auto min-w-[8rem]"
-            aria-label="Filter by database"
-            value={databaseFilter}
-            onChange={(event) => setDatabaseFilter(event.target.value)}
-          >
-            <option value="">All databases</option>
-            {DATABASES.map((item) => (
-              <option key={item} value={item}>
-                {item}
-              </option>
-            ))}
-          </select>
-        </div>
+      <div className="flex flex-nowrap items-center gap-2">
+        <SelectField
+          aria-label="Filter by country"
+          value={countryFilter}
+          options={countryOptions.map((item) => ({ value: item, label: item }))}
+          onChange={(next) => {
+            setFiltersReady(false);
+            setCountryFilter(next);
+          }}
+        />
+        <SelectField
+          aria-label="Filter by database"
+          value={databaseFilter}
+          disabled={databasesForCountry.length === 0}
+          options={
+            databasesForCountry.length === 0
+              ? [{ value: "", label: "No databases" }]
+              : databasesForCountry.map((item) => ({ value: item, label: item }))
+          }
+          onChange={setDatabaseFilter}
+        />
+        <SelectField
+          aria-label="Filter by schema"
+          value={schemaFilter}
+          disabled={schemasForSelection.length === 0}
+          options={
+            schemasForSelection.length === 0
+              ? [{ value: "", label: "No schemas" }]
+              : schemasForSelection.map((item) => ({ value: item, label: item }))
+          }
+          onChange={setSchemaFilter}
+        />
+      </div>
+      <div className="flex flex-wrap items-center gap-2">
+        <input
+          className="field flex-1 min-w-[200px] max-w-md"
+          type="search"
+          aria-label="Search Tables"
+          placeholder="Search tables"
+          value={search}
+          onChange={(event) => setSearch(event.target.value)}
+        />
         {canEdit && (
-          <div className="flex items-center gap-2">
+          <>
             <button type="button" className="btn" onClick={() => setTableForm({})}>
               <span className="material-symbols-outlined text-base">add</span>
               Add table
@@ -929,8 +1173,12 @@ export function TablesPanel() {
               <span className="material-symbols-outlined text-base">upload</span>
               Upload
             </button>
-          </div>
+          </>
         )}
+        <button type="button" className="btn" onClick={() => setComparing(true)}>
+          <span className="material-symbols-outlined text-base">compare_arrows</span>
+          Table Comparison
+        </button>
       </div>
 
       {groups.length === 0 ? (
@@ -956,13 +1204,15 @@ export function TablesPanel() {
               <table className="w-full text-left border-collapse">
                 <thead>
                   <tr className="border-b border-hairline font-label text-[10px] uppercase text-muted">
-                    <th className="py-2.5 px-3 w-72">Table Name</th>
+                    <th className="py-2.5 px-3 w-72" aria-sort={sort?.key === "table_name" ? (sort.dir === "asc" ? "ascending" : "descending") : "none"}>
+                      <SortHeader label="Table Name" active={sort?.key === "table_name" ? sort.dir : null} onClick={() => setSort((current) => toggleColumnSort(current, "table_name"))} />
+                    </th>
                     <th className="py-2.5 px-3">Description</th>
                     {canEdit && <th className="py-2.5 px-3 w-24" />}
                   </tr>
                 </thead>
                 <tbody>
-                  {group.tables.map((row) => (
+                  {sortRows(group.tables, sort, (row) => row.table_name).map((row) => (
                     <tr key={row.table_id} className="border-b border-hairline last:border-b-0 hover:bg-inset/50">
                       <td className="py-2.5 px-3 font-label text-xs font-medium whitespace-nowrap">
                         <button
@@ -1014,6 +1264,8 @@ export function TablesPanel() {
 
       {uploading && (
         <UploadTablesDialog
+          countries={countries}
+          databases={allDatabases}
           onClose={() => setUploading(false)}
           onUploaded={(response) => {
             setTables(response.tables);
@@ -1025,6 +1277,14 @@ export function TablesPanel() {
               setMissingColumns(response.missing_columns);
             }
           }}
+        />
+      )}
+
+      {comparing && (
+        <TableCompareDialog
+          databases={compareDatabases.length ? compareDatabases : allDatabases}
+          schemaOptions={compareSchemaOptions}
+          onClose={() => setComparing(false)}
         />
       )}
 
@@ -1044,6 +1304,8 @@ export function TablesPanel() {
       {tableForm && (
         <TableFormDialog
           table={tableForm.table}
+          countries={countries}
+          databases={allDatabases}
           onClose={() => setTableForm(null)}
           onSaved={(saved) => {
             setTables((current) => {

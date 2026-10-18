@@ -3,7 +3,7 @@ import re
 
 from app import db
 from app.config import DIAGRAM_RULES, GENERATION_RULES
-from app.content import clean_mermaid, header_block, image_block, number_rows, starter_diagram
+from app.content import diagram_block, diagram_groups, header_block, image_block, number_rows
 from app.services import llm
 
 
@@ -54,13 +54,35 @@ def _apply(schema_blocks: list[dict], payload: dict, max_words: int, existing: l
     for block in existing or []:
         if isinstance(block, dict) and block.get("type") in STATIC_BLOCKS:
             kept.setdefault(block["type"], []).append(block)
+    groups = diagram_groups(existing)
+    group_index = 0
     result = []
-    for schema in schema_blocks:
+    index = 0
+    while index < len(schema_blocks):
+        schema = schema_blocks[index]
         kind = schema.get("type")
         if kind in STATIC_BLOCKS:
             previous = kept.get(kind, [])
             source = previous.pop(0) if previous else None
             result.append(header_block(schema, source) if kind == "header" else image_block(schema, source))
+            index += 1
+            continue
+        if kind == "diagram":
+            run = 1
+            while index + run < len(schema_blocks) and schema_blocks[index + run].get("type") == "diagram":
+                run += 1
+            group = groups[group_index] if group_index < len(groups) else []
+            if group:
+                group_index += 1
+            model_diagrams = pools.get("diagram", [])
+            for offset in range(run):
+                found = model_diagrams.pop(0) if model_diagrams else {}
+                sequence = bool(schema_blocks[index + offset].get("sequence"))
+                text = _first_text(found, "mermaid", "code", "diagram", "source")
+                result.append(diagram_block({"mermaid": text} if text else None, sequence))
+            for extra in group[run:]:
+                result.append(diagram_block(extra, bool(extra.get("sequence"))))
+            index += run
             continue
         source = pools.get(kind, [])
         found = source.pop(0) if source else {}
@@ -77,10 +99,10 @@ def _apply(schema_blocks: list[dict], payload: dict, max_words: int, existing: l
             if not rows:
                 rows = [[""] * len(columns)]
             result.append({"type": "table", "columns": columns, "rows": number_rows(columns, rows)})
-        elif kind == "diagram":
-            sequence = bool(schema.get("sequence"))
-            mermaid = clean_mermaid(_first_text(found, "mermaid", "code", "diagram", "source")) or starter_diagram(sequence)
-            result.append({"type": "diagram", "sequence": sequence, "mermaid": mermaid})
+        index += 1
+    for group in groups[group_index:]:
+        for extra in group:
+            result.append(diagram_block(extra, bool(extra.get("sequence"))))
     return result
 
 

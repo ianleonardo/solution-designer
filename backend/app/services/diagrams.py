@@ -1,13 +1,14 @@
 """Draws a diagram block as a picture for the HTML and PDF exports.
 
 Mermaid needs a browser to draw, which an export does not have, so the diagram is drawn from the Mermaid text when
-it is simple enough to read (flowcharts and sequence diagrams of the common kind). The result is a `Scene`: a list of simple
-shapes that become an inline SVG for HTML (and WeasyPrint) or are drawn with FPDF when WeasyPrint is not available.
-Diagrams that cannot be read are left to the caller, which prints the Mermaid source.
+it is simple enough to read (flowcharts, sequence diagrams and class diagrams of the common kind). The result is a
+`Scene`: a list of simple shapes that become an inline SVG for HTML (and WeasyPrint) or are drawn with FPDF when
+WeasyPrint is not available. Diagrams that cannot be read are left to the caller, which prints the Mermaid source.
 """
 
 import html
 import math
+import re
 import textwrap
 from dataclasses import dataclass, field
 
@@ -197,12 +198,272 @@ def sequence_scene(flow: dict) -> Scene | None:
     return _shift(scene, bounds.min_x, bounds.min_y, bounds.max_x, bounds.max_y)
 
 
+# Class names may include Mermaid generics: Square~Shape~
+_CLASS_NAME = r"[A-Za-z_][\w]*(?:~[^~\s]+~)?"
+_CLASS_REL = re.compile(
+    rf'^({_CLASS_NAME})\s+(?:"([^"]*)"\s+)?'
+    r"([^\s\"]+?)"
+    rf'\s+(?:"([^"]*)"\s+)?({_CLASS_NAME})(?:\s*:\s*(.*))?$'
+)
+_CLASS_MEMBER = re.compile(rf"^({_CLASS_NAME})\s*:\s*(.+)$")
+_CLASS_DECL = re.compile(rf"^class\s+({_CLASS_NAME})(?:\s*\{{\s*)?$")
+_CLASS_SKIP = re.compile(
+    r"^(direction\b|note\b|click\b|link\b|style\b|cssClass\b|namespace\b|<<|title\b)",
+    re.I,
+)
+# Known relationship tokens; unknown arrows still draw as a plain association.
+_CLASS_ARROWS = {
+    "<|--",
+    "--|>",
+    "<|..",
+    "..|>",
+    "<|--|>",
+    "*--",
+    "--*",
+    "o--",
+    "--o",
+    "-->",
+    "<--",
+    "--",
+    "..>",
+    "<..",
+    "..",
+    "*..",
+    "..*",
+    "o..",
+    "..o",
+    "<--*",
+    "*-->",
+    "<--o",
+    "o-->",
+}
+
+
+def _class_diagram_lines(source: str) -> list[str]:
+    lines = [line.rstrip() for line in (source or "").replace("\r\n", "\n").replace("\r", "\n").splitlines()]
+    return [line for line in lines if line.strip() and not line.strip().startswith("%%")]
+
+
+def is_class_diagram(source: str) -> bool:
+    lines = _class_diagram_lines(source)
+    if not lines:
+        return False
+    head = lines[0].strip().lower()
+    return head == "classdiagram" or head.startswith("classdiagram ")
+
+
+def parse_class_diagram(source: str) -> dict | None:
+    """Read a class diagram into classes and relations.
+
+    Unknown lines (direction, notes, stereotypes, …) are skipped so a drawable subset still exports as a picture
+    instead of falling back to the Mermaid source.
+    """
+    lines = _class_diagram_lines(source)
+    if not lines or not is_class_diagram(source):
+        return None
+    classes: dict[str, dict] = {}
+    relations: list[dict] = []
+
+    def ensure(name: str) -> dict:
+        key = name.strip()
+        if key not in classes:
+            classes[key] = {"name": key, "members": []}
+        return classes[key]
+
+    index = 1
+    while index < len(lines):
+        line = lines[index].strip()
+        index += 1
+        if _CLASS_SKIP.match(line) or line in ("{", "}"):
+            # Skip a `{ ... }` body that followed a stereotype / note we do not draw.
+            if line.endswith("{") or line == "{":
+                while index < len(lines) and lines[index].strip() != "}":
+                    index += 1
+                if index < len(lines) and lines[index].strip() == "}":
+                    index += 1
+            continue
+        opened = _CLASS_DECL.match(line)
+        if opened:
+            entry = ensure(opened.group(1))
+            if "{" in line or (index < len(lines) and lines[index].strip() == "{"):
+                if "{" not in line:
+                    index += 1
+                while index < len(lines):
+                    member = lines[index].strip()
+                    index += 1
+                    if member == "}":
+                        break
+                    if member and not _CLASS_SKIP.match(member):
+                        entry["members"].append(member)
+            continue
+        member = _CLASS_MEMBER.match(line)
+        if member:
+            ensure(member.group(1))["members"].append(member.group(2).strip())
+            continue
+        rel = _CLASS_REL.match(line)
+        if rel:
+            left, left_card, arrow, right_card, right, label = rel.groups()
+            # Relations must look like Mermaid connectors, not free text.
+            if not re.fullmatch(r"[|o*<.\->]+", arrow):
+                continue
+            ensure(left)
+            ensure(right)
+            relations.append(
+                {
+                    "source": left,
+                    "target": right,
+                    "arrow": arrow if arrow in _CLASS_ARROWS else "-->",
+                    "label": (label or "").strip(),
+                    "left_card": left_card or "",
+                    "right_card": right_card or "",
+                }
+            )
+            continue
+        # Bare class name on its own line (Mermaid allows this).
+        bare = re.fullmatch(_CLASS_NAME, line)
+        if bare:
+            ensure(bare.group(0))
+            continue
+        # Anything else is ignored so the rest of the diagram still draws.
+        continue
+    if not classes:
+        return None
+    return {"classes": list(classes.values()), "relations": relations}
+
+
+def class_scene(diagram: dict) -> Scene | None:
+    classes = list((diagram or {}).get("classes") or [])
+    if not classes:
+        return None
+    scene, bounds = Scene(), _Bounds()
+    boxes: dict[str, dict] = {}
+    gap_x, gap_y, start_x, start_y = 48, 40, 0.0, 0.0
+    columns = 2 if len(classes) > 1 else 1
+    row_heights: dict[int, float] = {}
+    col_widths: dict[int, float] = {}
+    prepared: list[dict] = []
+    for index, item in enumerate(classes):
+        name = item["name"]
+        fields = [m for m in item.get("members") or [] if "(" not in m]
+        methods = [m for m in item.get("members") or [] if "(" in m]
+        name_w = _text_width(name) + 28
+        member_w = max((_text_width(m) for m in fields + methods), default=0) + 28
+        width = min(max(name_w, member_w, 120), 260)
+        header_h = 28
+        field_h = max(22, len(fields) * 16 + 8) if fields else 0
+        method_h = max(22, len(methods) * 16 + 8) if methods else 0
+        if not fields and not methods:
+            field_h = 18
+        height = header_h + field_h + method_h
+        col, row = index % columns, index // columns
+        prepared.append(
+            {
+                "name": name,
+                "fields": fields,
+                "methods": methods,
+                "w": width,
+                "h": height,
+                "header_h": header_h,
+                "field_h": field_h,
+                "method_h": method_h,
+                "col": col,
+                "row": row,
+            }
+        )
+        col_widths[col] = max(col_widths.get(col, 0), width)
+        row_heights[row] = max(row_heights.get(row, 0), height)
+
+    for item in prepared:
+        x = start_x + sum(col_widths[c] + gap_x for c in range(item["col"]))
+        y = start_y + sum(row_heights[r] + gap_y for r in range(item["row"]))
+        w, h = item["w"], item["h"]
+        boxes[item["name"]] = {"c": (x + w / 2, y + h / 2), "w": w, "h": h, "x": x, "y": y}
+        bounds.box(x, y, w, h)
+        scene.items.append({"kind": "rect", "x": x, "y": y, "w": w, "h": h, "r": 0, "fill": FILL, "stroke": LINE})
+        scene.items.append({"kind": "text", "x": x + w / 2, "y": y + item["header_h"] / 2, "text": item["name"], "size": FONT, "anchor": "middle", "fill": INK})
+        y_cursor = y + item["header_h"]
+        if item["field_h"]:
+            scene.items.append({"kind": "line", "x1": x, "y1": y_cursor, "x2": x + w, "y2": y_cursor, "stroke": LINE})
+            top = y_cursor + 12
+            for line in item["fields"] or [""]:
+                scene.items.append({"kind": "text", "x": x + 10, "y": top, "text": line, "size": 11, "anchor": "start", "fill": INK})
+                top += 16
+            y_cursor += item["field_h"]
+        if item["method_h"]:
+            scene.items.append({"kind": "line", "x1": x, "y1": y_cursor, "x2": x + w, "y2": y_cursor, "stroke": LINE})
+            top = y_cursor + 12
+            for line in item["methods"]:
+                scene.items.append({"kind": "text", "x": x + 10, "y": top, "text": line, "size": 11, "anchor": "start", "fill": INK})
+                top += 16
+
+    for edge in diagram.get("relations") or []:
+        source, target = boxes.get(edge["source"]), boxes.get(edge["target"])
+        if not source or not target:
+            continue
+        start = _clip(source["c"], target["c"], source["w"], source["h"], False)
+        end = _clip(target["c"], source["c"], target["w"], target["h"], False)
+        angle = math.atan2(end[1] - start[1], end[0] - start[0])
+        arrow = edge["arrow"]
+        dash = ".." in arrow
+        # Leave room for a marker at the end.
+        tip = end
+        tail = (end[0] - 12 * math.cos(angle), end[1] - 12 * math.sin(angle))
+        scene.items.append({"kind": "line", "x1": start[0], "y1": start[1], "x2": tail[0], "y2": tail[1], "stroke": LINE, "dash": dash})
+        if "<|" in arrow or "|>" in arrow:
+            # Inheritance / realization: hollow triangle at the generalisation end.
+            head_at_target = "|>" in arrow or arrow.endswith("|>")
+            hx, hy, hang = (tip[0], tip[1], angle) if head_at_target else (start[0], start[1], angle + math.pi)
+            scene.items.append({"kind": "poly", "points": _arrow_head(hx, hy, hang, size=12), "fill": "#ffffff", "stroke": LINE})
+        elif arrow.startswith("*") or arrow.endswith("*"):
+            # Composition: filled diamond near the * end.
+            at_source = arrow.startswith("*")
+            dx, dy = (math.cos(angle), math.sin(angle)) if not at_source else (-math.cos(angle), -math.sin(angle))
+            base = start if at_source else tip
+            diamond = [
+                (base[0], base[1]),
+                (base[0] - 10 * dx + 6 * dy, base[1] - 10 * dy - 6 * dx),
+                (base[0] - 20 * dx, base[1] - 20 * dy),
+                (base[0] - 10 * dx - 6 * dy, base[1] - 10 * dy + 6 * dx),
+            ]
+            scene.items.append({"kind": "poly", "points": diamond, "fill": LINE, "stroke": LINE})
+        elif arrow.startswith("o") or arrow.endswith("o"):
+            at_source = arrow.startswith("o")
+            dx, dy = (math.cos(angle), math.sin(angle)) if not at_source else (-math.cos(angle), -math.sin(angle))
+            base = start if at_source else tip
+            diamond = [
+                (base[0], base[1]),
+                (base[0] - 10 * dx + 6 * dy, base[1] - 10 * dy - 6 * dx),
+                (base[0] - 20 * dx, base[1] - 20 * dy),
+                (base[0] - 10 * dx - 6 * dy, base[1] - 10 * dy + 6 * dx),
+            ]
+            scene.items.append({"kind": "poly", "points": diamond, "fill": "#ffffff", "stroke": LINE})
+        elif arrow.endswith(">") or arrow.startswith("<"):
+            head_at_target = arrow.endswith(">")
+            hx, hy, hang = (tip[0], tip[1], angle) if head_at_target else (start[0], start[1], angle + math.pi)
+            scene.items.append({"kind": "poly", "points": _arrow_head(hx, hy, hang), "fill": LINE, "stroke": LINE})
+        bounds.add(*start)
+        bounds.add(*end)
+        mid = ((start[0] + end[0]) / 2, (start[1] + end[1]) / 2)
+        bits = [bit for bit in (edge.get("left_card"), edge.get("label"), edge.get("right_card")) if bit]
+        label = " ".join(bits)
+        if label:
+            width = _text_width(label) + 8
+            scene.items.append({"kind": "rect", "x": mid[0] - width / 2, "y": mid[1] - 9, "w": width, "h": 18, "r": 2, "fill": "#ffffff", "stroke": "none"})
+            scene.items.append({"kind": "text", "x": mid[0], "y": mid[1], "text": label, "size": 11, "anchor": "middle", "fill": INK})
+            bounds.box(mid[0] - width / 2, mid[1] - 9, width, 18)
+    return _shift(scene, bounds.min_x, bounds.min_y, bounds.max_x, bounds.max_y)
+
+
 def scene_for_block(block: dict) -> Scene | None:
     """A picture of a diagram block, or None when its Mermaid cannot be drawn here (the caller prints the source)."""
     mermaid = str(block.get("mermaid") or "")
-    if mermaid.lstrip().startswith("sequenceDiagram"):
+    stripped = mermaid.lstrip()
+    if stripped.startswith("sequenceDiagram"):
         flow = mermaid_to_flow(mermaid)
         return sequence_scene(flow) if flow else None
+    if is_class_diagram(mermaid):
+        parsed = parse_class_diagram(mermaid)
+        return class_scene(parsed) if parsed else None
     chart = mermaid_to_flowchart(mermaid)
     return flowchart_scene(chart) if chart else None
 

@@ -67,6 +67,32 @@ DEFAULT_USERS = [
 
 CONTENT_AUTHORS = {"Analyst"}
 KB_EDITORS = {"Admin", "Analyst"}
+
+_DEFAULT_COUNTRIES = ("SG", "MY", "TH", "VN", "ID")
+_DEFAULT_DATABASES = ("PIB", "MBK", "SMS", "NTN", "WSM", "LCM")
+_DEFAULT_INTERFACE_CHANNELS = ("SPL", "DGE", "PIB", "NTN", "WSM", "EAI")
+
+
+def _csv_env(name: str, defaults: tuple[str, ...]) -> tuple[str, ...]:
+    raw = os.environ.get(name, "")
+    if not raw.strip():
+        return defaults
+    items = [part.strip().upper() for part in raw.split(",") if part.strip()]
+    return tuple(items) if items else defaults
+
+
+def kb_countries() -> tuple[str, ...]:
+    return _csv_env("KB_COUNTRIES", _DEFAULT_COUNTRIES)
+
+
+def kb_databases() -> tuple[str, ...]:
+    return _csv_env("KB_DATABASES", _DEFAULT_DATABASES)
+
+
+def kb_interface_channels() -> tuple[str, ...]:
+    return _csv_env("KB_INTERFACE_CHANNELS", _DEFAULT_INTERFACE_CHANNELS)
+
+
 GLOBAL_PROMPT = (
     "You are a senior enterprise solution architect covering IT system solutioning and architecture: "
     "integration and interfaces, data and databases, security, resiliency, deployment, performance and "
@@ -104,6 +130,8 @@ DIAGRAM_RULES = (
 CHAT_RULES = (
     "Answer the question directly in plain conversational text (Markdown is fine). "
     "Do not reply with JSON or code fences. "
+    "When PREVIOUS CONVERSATION is provided, treat it as the ongoing thread and resolve follow-ups "
+    "(pronouns, 'that', 'the previous answer') against those turns. "
     "For general IT solutioning and architecture questions, answer from your general knowledge. "
     "For questions about specific systems (with their upstream and downstream systems), interfaces (by channel, "
     "country, protocol, source and destination), capabilities, tables, screens, batches, reports or guidelines, "

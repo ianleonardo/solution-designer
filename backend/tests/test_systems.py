@@ -73,3 +73,23 @@ def test_analyst_can_edit_and_viewer_can_only_view_systems(client):
     assert client.post("/api/systems", json={"system_code": "X", "system_name": "x"}, headers=viewer).status_code == 403
     assert client.patch("/api/systems/SPL", json={"system_name": "x"}, headers=viewer).status_code == 403
     assert client.delete("/api/systems/SPL", headers=viewer).status_code == 403
+
+
+def test_has_batch_and_has_report_flags(client):
+    admin = login(client, "Admin")
+    created = _create(client, admin, "SPL", has_batch=True, has_report=False, has_capability=True)
+    assert created.status_code == 200, created.text
+    assert created.json()["has_batch"] is True
+    assert created.json()["has_report"] is False
+    assert created.json()["has_capability"] is True
+    edited = client.patch(
+        "/api/systems/SPL",
+        json={"has_report": True, "has_batch": False, "has_capability": False},
+        headers=auth(admin),
+    )
+    assert edited.status_code == 200
+    assert edited.json()["has_batch"] is False
+    assert edited.json()["has_report"] is True
+    assert edited.json()["has_capability"] is False
+    listed = client.get("/api/systems", headers=auth(admin)).json()
+    assert listed[0]["has_report"] is True

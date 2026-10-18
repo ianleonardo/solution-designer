@@ -10,6 +10,8 @@ export function SystemDialog({ system, onSaved, onClose }: { system?: SystemReco
   const [description, setDescription] = useState(system?.description ?? "");
   const [upstreams, setUpstreams] = useState(system?.upstreams ?? "");
   const [downstreams, setDownstreams] = useState(system?.downstreams ?? "");
+  const [hasBatch, setHasBatch] = useState(Boolean(system?.has_batch));
+  const [hasReport, setHasReport] = useState(Boolean(system?.has_report));
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
 
@@ -25,7 +27,14 @@ export function SystemDialog({ system, onSaved, onClose }: { system?: SystemReco
     event.preventDefault();
     setBusy(true);
     setError("");
-    const body = { system_name: name.trim(), description: description.trim(), upstreams: upstreams.trim(), downstreams: downstreams.trim() };
+    const body = {
+      system_name: name.trim(),
+      description: description.trim(),
+      upstreams: upstreams.trim(),
+      downstreams: downstreams.trim(),
+      has_batch: hasBatch,
+      has_report: hasReport,
+    };
     try {
       const saved = system
         ? await api<SystemRecord>(`/api/systems/${encodeURIComponent(system.system_code)}`, { method: "PATCH", body: JSON.stringify(body) })
@@ -60,10 +69,20 @@ export function SystemDialog({ system, onSaved, onClose }: { system?: SystemReco
           <span className="font-label text-[10px] uppercase text-muted">Upstreams</span>
           <input className="field mt-1" value={upstreams} onChange={(event) => setUpstreams(event.target.value)} aria-label="Upstreams" placeholder="System codes separated by commas, or empty" disabled={busy} />
         </label>
-        <label className="block mb-4">
+        <label className="block mb-3">
           <span className="font-label text-[10px] uppercase text-muted">Downstreams</span>
           <input className="field mt-1" value={downstreams} onChange={(event) => setDownstreams(event.target.value)} aria-label="Downstreams" placeholder="System codes separated by commas, or empty" disabled={busy} />
         </label>
+        <div className="flex flex-wrap gap-4 mb-4">
+          <label className="inline-flex items-center gap-2 text-sm">
+            <input type="checkbox" aria-label="Has batch" checked={hasBatch} disabled={busy} onChange={(event) => setHasBatch(event.target.checked)} />
+            Has batch
+          </label>
+          <label className="inline-flex items-center gap-2 text-sm">
+            <input type="checkbox" aria-label="Has report" checked={hasReport} disabled={busy} onChange={(event) => setHasReport(event.target.checked)} />
+            Has report
+          </label>
+        </div>
         {error && <p className="text-alert mb-3">{error}</p>}
         <div className="flex justify-end gap-2">
           <button type="button" className="btn" disabled={busy} onClick={onClose}>

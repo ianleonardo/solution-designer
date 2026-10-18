@@ -73,7 +73,7 @@ def public_section(item: dict) -> dict:
 
 
 def payload(row: dict, with_templates: bool = False) -> dict:
-    """API shape of a document. Content is reconciled with the layout as it is today."""
+    """API shape of a document. Content follows the document's own section copy, not the live layout."""
     templates = document_templates(row)
     content = row["content_json"]
     if isinstance(content, str):
@@ -173,17 +173,29 @@ STRUCTURE_FIELDS = {"section_name", "blocks"}
 
 
 def _renumber(templates: list[dict]) -> list[dict]:
-    """Rewrite sequence_order as 100, 200, ... for sections and 101, 102, ... for their sub-sections."""
-    top = sorted((item for item in templates if not item["parent_id"]), key=lambda item: item["sequence_order"])
+    """Rewrite sequence_order in reading order so a parent stays before its descendants."""
+    grouped: dict[str | None, list[dict]] = {}
+    for item in templates:
+        grouped.setdefault(item.get("parent_id") or None, []).append(item)
     result: list[dict] = []
-    for index, parent in enumerate(top, start=1):
-        result.append({**parent, "sequence_order": index * 100})
-        children = sorted(
-            (item for item in templates if item["parent_id"] == parent["template_id"]),
-            key=lambda item: item["sequence_order"],
-        )
-        for child_index, child in enumerate(children, start=1):
-            result.append({**child, "sequence_order": index * 100 + child_index})
+    seen: set[str] = set()
+
+    def walk(parent_id: str | None) -> None:
+        kids = sorted(grouped.get(parent_id, []), key=lambda item: item["sequence_order"])
+        for kid in kids:
+            if kid["template_id"] in seen:
+                continue
+            seen.add(kid["template_id"])
+            result.append({**kid, "sequence_order": len(result) + 1})
+            walk(kid["template_id"])
+
+    walk(None)
+    for item in sorted(templates, key=lambda entry: entry["sequence_order"]):
+        if item["template_id"] in seen:
+            continue
+        seen.add(item["template_id"])
+        result.append({**item, "parent_id": None, "sequence_order": len(result) + 1})
+        walk(item["template_id"])
     return result
 
 
@@ -218,8 +230,7 @@ def add_section(user: dict, project_id: str, document_id: str, body: dict) -> di
     parent = None
     if parent_id:
         parent = _find(templates, parent_id)
-        if parent["parent_id"]:
-            raise AppError(400, "Sub-sections cannot be nested further")
+        layouts.ensure_child_depth(templates, parent_id)
     blocks = layouts.normalize_blocks(body.get("blocks") or [{"type": "prose"}])
     fields = layouts.clean_prompt_fields(body)
     hint = fields.get("hint", "")
@@ -272,11 +283,14 @@ def update_section(user: dict, project_id: str, document_id: str, section_id: st
 
 
 def delete_section(user: dict, project_id: str, document_id: str, section_id: str) -> dict:
+    from app.services import layouts
+
     _ensure(user, CONTENT_AUTHORS)
     current = document_row(project_id, document_id)
     templates = document_templates(current)
     _find(templates, section_id)
-    remaining = [item for item in templates if item["template_id"] != section_id and item["parent_id"] != section_id]
+    removed = set(layouts.subtree_ids(templates, section_id))
+    remaining = [item for item in templates if item["template_id"] not in removed]
     if not remaining:
         raise AppError(400, "A document needs at least one section")
     return _store_structure(current, remaining)

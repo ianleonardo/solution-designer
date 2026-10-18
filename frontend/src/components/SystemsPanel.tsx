@@ -41,6 +41,8 @@ export function SystemsPanel() {
     { key: "description", header: "Description", sortValue: (row) => row.description, className: "text-muted max-w-md", render: (row) => <span className="line-clamp-2">{row.description || "—"}</span> },
     { key: "upstreams", header: "Upstreams", sortValue: (row) => row.upstreams, className: "text-muted", render: (row) => row.upstreams || "—" },
     { key: "downstreams", header: "Downstreams", sortValue: (row) => row.downstreams, className: "text-muted", render: (row) => row.downstreams || "—" },
+    { key: "has_batch", header: "Has batch", sortValue: (row) => (row.has_batch ? 1 : 0), className: "text-muted whitespace-nowrap", render: (row) => (row.has_batch ? "Yes" : "No") },
+    { key: "has_report", header: "Has report", sortValue: (row) => (row.has_report ? 1 : 0), className: "text-muted whitespace-nowrap", render: (row) => (row.has_report ? "Yes" : "No") },
     ...(canEdit
       ? [
           {
@@ -75,7 +77,7 @@ export function SystemsPanel() {
         rowKey={(row) => row.system_code}
         pageSize={SYSTEMS_PAGE_SIZE}
         emptyLabel="No systems found."
-        searchText={(row) => `${row.system_code} ${row.system_name} ${row.description} ${row.upstreams} ${row.downstreams}`}
+        searchText={(row) => `${row.system_code} ${row.system_name} ${row.description} ${row.upstreams} ${row.downstreams} ${row.has_batch ? "Yes" : "No"} ${row.has_report ? "Yes" : "No"}`}
         searchLabel="Search Systems"
         searchPlaceholder="Search systems"
         toolbar={

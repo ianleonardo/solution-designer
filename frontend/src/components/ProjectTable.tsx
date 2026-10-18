@@ -6,12 +6,6 @@ import { ConfirmDialog } from "./ConfirmDialog";
 import { type Column, DataTable } from "./DataTable";
 import { ProjectDialog } from "./ProjectDialog";
 
-function badgeClass(role: string) {
-  if (role === "Admin") return "text-gold border-gold";
-  if (role === "Analyst") return "text-celadon";
-  return "text-muted";
-}
-
 export const PROJECT_PAGE_SIZE = 30;
 
 export function ProjectTable({
@@ -61,12 +55,7 @@ export function ProjectTable({
       key: "owner",
       header: "Owner",
       sortValue: (row) => row.owner_name,
-      render: (row) => (
-        <div>
-          <div>{row.owner_name}</div>
-          <span className={`text-[10px] uppercase ${badgeClass(row.owner_role)}`}>{row.owner_role}</span>
-        </div>
-      ),
+      render: (row) => row.owner_name,
     },
     {
       key: "modified",

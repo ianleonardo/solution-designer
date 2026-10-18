@@ -30,10 +30,10 @@ def _systems(client, admin):
 def test_valid_upload_replaces_only_that_channel(client):
     admin = login(client, "Admin")
     _systems(client, admin)
-    first = _upload(client, admin, "SPL", _excel([["sg", "Get balance", "Reads it", "api", "spl", "DGE"], ["All", "Notify", "", "Kafka", "DGE", "PIB"]]))
+    first = _upload(client, admin, "SPL", _excel([["sg", "Get balance", "Reads it", "api", "spl", "DGE"], ["VN", "Notify", "", "Kafka", "DGE", "PIB"]]))
     assert first.status_code == 200, first.text
     rows = first.json()
-    assert [(r["country"], r["protocol"], r["source"], r["destination"]) for r in rows] == [("SG", "API", "SPL", "DGE"), ("All", "Kafka", "DGE", "PIB")]
+    assert [(r["country"], r["protocol"], r["source"], r["destination"]) for r in rows] == [("SG", "API", "SPL", "DGE"), ("VN", "Kafka", "DGE", "PIB")]
     _upload(client, admin, "DGE", _excel([["MY", "Other", "", "MQ", "DGE", "PIB"]]))
     replaced = _upload(client, admin, "SPL", _excel([["TH", "Only one", "", "gRPC", "PIB", "SPL"], [None, None, None, None, None, None]]))
     assert replaced.status_code == 200 and len(replaced.json()) == 1
@@ -96,3 +96,56 @@ def test_analyst_can_upload_and_viewer_can_only_view_interfaces(client):
     viewer = login(client, "Viewer")
     assert client.get("/api/interfaces/SPL", headers=auth(viewer)).status_code == 200
     assert _upload(client, viewer, "SPL", _excel([["SG", "x", "", "API", "SPL", "DGE"]])).status_code == 403
+
+
+def test_manual_interface_crud(client):
+    admin = login(client, "Admin")
+    _systems(client, admin)
+    analyst = login(client, "Analyst")
+    viewer = login(client, "Viewer")
+
+    created = client.post(
+        "/api/interfaces/SPL",
+        json={
+            "country": "SG",
+            "interface_name": "Balance API",
+            "description": "Get balance",
+            "protocol": "API",
+            "source": "SPL",
+            "destination": "DGE",
+        },
+        headers=auth(analyst),
+    )
+    assert created.status_code == 200, created.text
+    row = created.json()
+    assert row["channel"] == "SPL" and row["country"] == "SG"
+    interface_id = row["interface_id"]
+
+    assert (
+        client.post(
+            "/api/interfaces/SPL",
+            json={"country": "SG", "interface_name": "X", "protocol": "API", "source": "SPL", "destination": "DGE"},
+            headers=auth(viewer),
+        ).status_code
+        == 403
+    )
+
+    updated = client.patch(
+        f"/api/interfaces/SPL/{interface_id}",
+        json={
+            "country": "MY",
+            "interface_name": "Balance API v2",
+            "description": "Updated",
+            "protocol": "MQ",
+            "source": "DGE",
+            "destination": "PIB",
+        },
+        headers=auth(analyst),
+    )
+    assert updated.status_code == 200
+    assert updated.json()["interface_name"] == "Balance API v2"
+    assert updated.json()["protocol"] == "MQ"
+
+    assert client.delete(f"/api/interfaces/SPL/{interface_id}", headers=auth(viewer)).status_code == 403
+    assert client.delete(f"/api/interfaces/SPL/{interface_id}", headers=auth(analyst)).status_code == 200
+    assert client.get("/api/interfaces/SPL", headers=auth(admin)).json() == []

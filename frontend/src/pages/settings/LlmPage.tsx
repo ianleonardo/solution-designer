@@ -9,6 +9,7 @@ type ProviderForm = {
   embedding_base_url: string;
   api_key: string;
   embedding_api_key: string;
+  verify_ssl: boolean;
 };
 
 function formFor(provider: LlmProvider): ProviderForm {
@@ -19,6 +20,7 @@ function formFor(provider: LlmProvider): ProviderForm {
     embedding_base_url: provider.embedding_base_url,
     api_key: "",
     embedding_api_key: "",
+    verify_ssl: provider.verify_ssl !== false,
   };
 }
 
@@ -129,6 +131,18 @@ export function ProviderCard({ provider, active, onActivate, onSaved }: CardProp
           <button type="button" className="btn" onClick={() => void clearKey("embedding_api_key")}>Remove embedding key</button>
         )}
       </fieldset>
+
+      {provider.provider === "spirare" && (
+        <label className="flex items-center gap-2 text-sm">
+          <input
+            type="checkbox"
+            aria-label="Bypass SSL certificate check"
+            checked={!form.verify_ssl}
+            onChange={(event) => setForm((current) => ({ ...current, verify_ssl: !event.target.checked }))}
+          />
+          Bypass SSL certificate check
+        </label>
+      )}
 
       {error && <p className="text-alert">{error}</p>}
       {message && <p className="text-muted" role="status">{message}</p>}

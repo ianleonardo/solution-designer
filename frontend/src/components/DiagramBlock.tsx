@@ -1,11 +1,18 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type WheelEvent } from "react";
 import mermaid from "mermaid";
 import { MERMAID_SYNTAX_HELP, MERMAID_TEMPLATES, STARTER_DIAGRAMS, type MermaidTemplate } from "../mermaidTemplates";
 import type { Block } from "../types";
 import { ConfirmDialog } from "./ConfirmDialog";
+import { SelectField } from "./SelectField";
 
 /** Rendered diagrams are shown at half of Mermaid's natural size; they were too large on the page. */
 export const DIAGRAM_SCALE = 0.5;
+
+/** Zoom range for the expanded diagram viewer (1 = Mermaid natural size). */
+export const POPUP_ZOOM_MIN = 0.25;
+export const POPUP_ZOOM_MAX = 4;
+export const POPUP_ZOOM_STEP = 0.25;
+export const POPUP_ZOOM_DEFAULT = 1;
 
 /** How long to wait after typing before the preview is redrawn. */
 export const PREVIEW_DELAY_MS = 350;
@@ -27,10 +34,13 @@ export function errorLine(message: string): number | null {
 export function MermaidPreview({
   source,
   scale = DIAGRAM_SCALE,
+  fit = true,
   onError,
 }: {
   source: string;
   scale?: number;
+  /** When true, the SVG may shrink to the container width; turn off for zoomed popups. */
+  fit?: boolean;
   /** Called with the syntax error, or "" when the diagram drew. */
   onError?: (message: string) => void;
 }) {
@@ -77,10 +87,10 @@ export function MermaidPreview({
     const width = naturalWidth(element);
     if (width <= 0) return;
     element.style.width = `${Math.round(width * scale)}px`;
-    element.style.maxWidth = "100%";
+    element.style.maxWidth = fit ? "100%" : "none";
     element.style.height = "auto";
     element.removeAttribute("height");
-  }, [svg, scale]);
+  }, [svg, scale, fit]);
 
   if (error) {
     return (
@@ -89,7 +99,116 @@ export function MermaidPreview({
       </pre>
     );
   }
-  return <div ref={holder} className="overflow-auto rounded border border-hairline bg-inset p-3" dangerouslySetInnerHTML={{ __html: svg }} />;
+  return (
+    <div
+      ref={holder}
+      className="overflow-auto rounded border border-hairline bg-inset p-3"
+      dangerouslySetInnerHTML={{ __html: svg }}
+    />
+  );
+}
+
+function clampZoom(value: number): number {
+  return Math.min(POPUP_ZOOM_MAX, Math.max(POPUP_ZOOM_MIN, Math.round(value / POPUP_ZOOM_STEP) * POPUP_ZOOM_STEP));
+}
+
+/** Full-screen diagram viewer with zoom in / out. */
+export function DiagramPopup({ source, onClose }: { source: string; onClose: () => void }) {
+  const [zoom, setZoom] = useState(POPUP_ZOOM_DEFAULT);
+  const stage = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    function onKey(event: KeyboardEvent) {
+      if (event.key === "Escape") onClose();
+      if (event.key === "+" || event.key === "=") {
+        event.preventDefault();
+        setZoom((current) => clampZoom(current + POPUP_ZOOM_STEP));
+      }
+      if (event.key === "-" || event.key === "_") {
+        event.preventDefault();
+        setZoom((current) => clampZoom(current - POPUP_ZOOM_STEP));
+      }
+      if (event.key === "0" && (event.metaKey || event.ctrlKey)) {
+        event.preventDefault();
+        setZoom(POPUP_ZOOM_DEFAULT);
+      }
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
+
+  function onWheel(event: WheelEvent<HTMLDivElement>) {
+    if (!(event.ctrlKey || event.metaKey)) return;
+    event.preventDefault();
+    const delta = event.deltaY > 0 ? -POPUP_ZOOM_STEP : POPUP_ZOOM_STEP;
+    setZoom((current) => clampZoom(current + delta));
+  }
+
+  const percent = Math.round(zoom * 100);
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+      role="presentation"
+      onMouseDown={(event) => {
+        if (event.target === event.currentTarget) onClose();
+      }}
+    >
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-label="Diagram viewer"
+        className="flex h-[90vh] w-full max-w-6xl flex-col rounded-lg border border-hairline bg-panel shadow-xl"
+      >
+        <div className="flex flex-wrap items-center gap-2 border-b border-hairline px-4 py-3">
+          <h2 className="font-headline text-lg font-semibold">Diagram</h2>
+          <div className="ml-auto flex items-center gap-1">
+            <button
+              type="button"
+              className="icon-btn"
+              aria-label="Zoom out"
+              title="Zoom out (−)"
+              disabled={zoom <= POPUP_ZOOM_MIN}
+              onClick={() => setZoom((current) => clampZoom(current - POPUP_ZOOM_STEP))}
+            >
+              <span className="material-symbols-outlined">zoom_out</span>
+            </button>
+            <button
+              type="button"
+              className="btn min-w-[4.5rem] tabular-nums"
+              aria-label="Reset zoom"
+              title="Reset zoom"
+              onClick={() => setZoom(POPUP_ZOOM_DEFAULT)}
+            >
+              {percent}%
+            </button>
+            <button
+              type="button"
+              className="icon-btn"
+              aria-label="Zoom in"
+              title="Zoom in (+)"
+              disabled={zoom >= POPUP_ZOOM_MAX}
+              onClick={() => setZoom((current) => clampZoom(current + POPUP_ZOOM_STEP))}
+            >
+              <span className="material-symbols-outlined">zoom_in</span>
+            </button>
+            <button type="button" className="icon-btn" aria-label="Close diagram viewer" title="Close" onClick={onClose}>
+              <span className="material-symbols-outlined">close</span>
+            </button>
+          </div>
+        </div>
+        <div
+          ref={stage}
+          className="min-h-0 flex-1 overflow-auto p-4"
+          onWheel={onWheel}
+        >
+          <div className="inline-block min-w-full">
+            <MermaidPreview source={source} scale={zoom} fit={false} />
+          </div>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 type DiagramValue = Extract<Block, { type: "diagram" }>;
@@ -154,6 +273,7 @@ export function DiagramBlock({
   const [error, setError] = useState("");
   const [pending, setPending] = useState<MermaidTemplate | null>(null);
   const [help, setHelp] = useState(false);
+  const [popupOpen, setPopupOpen] = useState(false);
   const preview = useDebounced(block.mermaid, PREVIEW_DELAY_MS);
 
   function applyTemplate(template: MermaidTemplate) {
@@ -176,19 +296,22 @@ export function DiagramBlock({
         <div className="flex flex-wrap items-center gap-2">
           <label className="flex items-center gap-2 text-xs text-muted">
             Start from a template
-            <select
-              className="field w-auto py-1 text-sm"
+            <SelectField
               aria-label="Diagram template"
+              className="min-w-[12rem]"
               value=""
-              onChange={(event) => pickTemplate(event.target.value)}
-            >
-              <option value="">Choose…</option>
-              {MERMAID_TEMPLATES.map((template) => (
-                <option key={template.id} value={template.id} title={template.hint}>
-                  {template.label}
-                </option>
-              ))}
-            </select>
+              options={[
+                { value: "", label: "Choose…" },
+                ...MERMAID_TEMPLATES.map((template) => ({
+                  value: template.id,
+                  label: template.label,
+                  hint: template.hint,
+                })),
+              ]}
+              onChange={(id) => {
+                if (id) pickTemplate(id);
+              }}
+            />
           </label>
           <button type="button" className="btn ml-auto" aria-expanded={help} onClick={() => setHelp((value) => !value)}>
             {help ? "Hide syntax help" : "Syntax help"}
@@ -212,10 +335,26 @@ export function DiagramBlock({
           errorAt={error ? errorLine(error) : null}
           onChange={(mermaidText) => onChange({ ...block, mermaid: mermaidText })}
         />
-        <div className="min-w-0 overflow-auto lg:max-h-72">
-          <MermaidPreview source={preview} onError={setError} />
+        <div className="min-w-0 space-y-2">
+          <div className="flex items-center justify-end">
+            <button
+              type="button"
+              className="btn"
+              aria-label="Expand diagram"
+              title="Expand diagram"
+              disabled={Boolean(error)}
+              onClick={() => setPopupOpen(true)}
+            >
+              <span className="material-symbols-outlined text-base">open_in_full</span>
+              Expand
+            </button>
+          </div>
+          <div className="overflow-auto lg:max-h-72">
+            <MermaidPreview source={preview} onError={setError} />
+          </div>
         </div>
       </div>
+      {popupOpen && !error && <DiagramPopup source={preview} onClose={() => setPopupOpen(false)} />}
       {pending && (
         <ConfirmDialog
           title="Replace the diagram"

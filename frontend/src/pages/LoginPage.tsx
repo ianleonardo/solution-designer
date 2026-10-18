@@ -39,12 +39,12 @@ export function LoginPage() {
               <span className="material-symbols-outlined">hub</span>
             </span>
             <h1 className="font-wordmark text-[40px] font-bold leading-10 tracking-tight whitespace-nowrap" data-testid="wordmark">
-              <span>Solution</span>
-              <span className="text-accent">Crafter</span>
+              <span>Spec</span>
+              <span className="text-accent">Forge</span>
             </h1>
           </div>
           <p className="mt-3 text-sm text-muted">
-            An AI-powered tool to craft Project Solution Design document and other related documents.
+            Transform requirements into solution designs, diagrams, and living specs in minutes.
           </p>
         </div>
         <label className="block mb-3">

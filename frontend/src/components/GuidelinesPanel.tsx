@@ -1,18 +1,82 @@
 import { useEffect, useState } from "react";
-import { api, ApiError, downloadFile, formatDate } from "../api";
+import MarkdownIt from "markdown-it";
+import { api, ApiError, authHeaders, downloadFile, formatDate } from "../api";
 import { useOptionalAuth } from "../auth";
-import type { Guideline, GuidelineStatus } from "../types";
+import type { Guideline } from "../types";
 import { ConfirmDialog } from "./ConfirmDialog";
 import { type Column, DataTable } from "./DataTable";
 import { GuidelineDialog } from "./GuidelineDialog";
 
+const markdown = new MarkdownIt({ html: false, linkify: true, breaks: true });
+
 export const GUIDELINES_PAGE_SIZE = 50;
 
-const STATUS: Record<GuidelineStatus, { label: string; tip: string; className: string }> = {
-  embedded: { label: "Embedded", tip: "All chunks are embedded with the active embedding model.", className: "text-accent" },
-  keyword_only: { label: "Keyword only", tip: "No embeddings yet. Searched by keyword. Configure an embedding model under Settings > LLM; everything is re-indexed automatically.", className: "text-muted" },
-  outdated: { label: "Outdated model", tip: "Embeddings were made with a different embedding model, or are incomplete. They are re-made at the next re-index.", className: "text-alert" },
-};
+function GuidelinePreview({ guideline, onClose }: { guideline: Guideline; onClose: () => void }) {
+  const [url, setUrl] = useState("");
+  const [text, setText] = useState("");
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(true);
+  const isPdf = guideline.file_type === "pdf";
+  const isMarkdown = ["md", "markdown"].includes((guideline.file_type || "").toLowerCase());
+
+  useEffect(() => {
+    let revoked = "";
+    setLoading(true);
+    setError("");
+    fetch(`/api/guidelines/${encodeURIComponent(guideline.guideline_id)}/download?inline=1`, { headers: authHeaders() })
+      .then(async (response) => {
+        if (!response.ok) {
+          let detail = response.statusText;
+          try {
+            const body = (await response.json()) as { detail?: string };
+            if (body.detail) detail = body.detail;
+          } catch {
+            /* ignore */
+          }
+          throw new Error(detail);
+        }
+        if (isPdf) {
+          const blob = await response.blob();
+          revoked = URL.createObjectURL(blob);
+          setUrl(revoked);
+        } else {
+          setText(await response.text());
+        }
+      })
+      .catch((err: unknown) => setError(err instanceof Error ? err.message : "Could not load preview"))
+      .finally(() => setLoading(false));
+    return () => {
+      if (revoked) URL.revokeObjectURL(revoked);
+    };
+  }, [guideline.guideline_id, isPdf]);
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" role="presentation" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
+      <div role="dialog" aria-modal="true" aria-label={`Preview ${guideline.title}`} className="w-full max-w-4xl max-h-[90vh] flex flex-col rounded-lg border border-hairline bg-panel shadow-xl">
+        <div className="flex items-center justify-between gap-3 border-b border-hairline px-4 py-3">
+          <div className="min-w-0">
+            <h2 className="font-headline text-lg font-semibold truncate">{guideline.title}</h2>
+            <p className="text-xs text-muted truncate">{guideline.file_name}</p>
+          </div>
+          <button type="button" className="icon-btn" aria-label="Close preview" onClick={onClose}>
+            <span className="material-symbols-outlined">close</span>
+          </button>
+        </div>
+        <div className="flex-1 overflow-auto p-4 min-h-[50vh]">
+          {loading && <p className="text-muted">Loading preview…</p>}
+          {error && <p className="text-alert">{error}</p>}
+          {!loading && !error && isPdf && url && <iframe title={guideline.title} src={url} className="w-full h-[65vh] rounded border border-hairline bg-white" />}
+          {!loading && !error && !isPdf && isMarkdown && (
+            <div className="md-preview rounded-lg border border-hairline bg-inset p-5" aria-label="Rendered markdown" dangerouslySetInnerHTML={{ __html: markdown.render(text) }} />
+          )}
+          {!loading && !error && !isPdf && !isMarkdown && (
+            <pre className="whitespace-pre-wrap text-sm font-mono bg-inset rounded-lg p-4 border border-hairline">{text}</pre>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
 
 export function GuidelinesPanel() {
   const auth = useOptionalAuth();
@@ -20,6 +84,7 @@ export function GuidelinesPanel() {
   const [items, setItems] = useState<Guideline[]>([]);
   const [adding, setAdding] = useState(false);
   const [deleting, setDeleting] = useState<Guideline | null>(null);
+  const [previewing, setPreviewing] = useState<Guideline | null>(null);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
 
@@ -51,18 +116,6 @@ export function GuidelinesPanel() {
     { key: "title", header: "Title", sortValue: (row) => row.title, className: "font-medium", render: (row) => row.title },
     { key: "description", header: "Description", sortValue: (row) => row.description, className: "text-muted max-w-md", render: (row) => <span className="line-clamp-2">{row.description || "—"}</span> },
     { key: "file", header: "File", sortValue: (row) => row.file_name, className: "text-muted", render: (row) => row.file_name || "—" },
-    { key: "chunks", header: "Chunks", sortValue: (row) => row.chunk_count, className: "whitespace-nowrap", render: (row) => `${row.embedded_count}/${row.chunk_count}` },
-    {
-      key: "embedding",
-      header: "Embedding",
-      sortValue: (row) => STATUS[row.status].label,
-      className: "whitespace-nowrap",
-      render: (row) => (
-        <span className={`rounded-full border border-hairline px-2 py-0.5 text-xs ${STATUS[row.status].className}`} title={`${STATUS[row.status].tip}${row.embedding_model ? ` Model: ${row.embedding_model}.` : ""}`}>
-          {STATUS[row.status].label}
-        </span>
-      ),
-    },
     { key: "added", header: "Added", sortValue: (row) => row.created_at, className: "text-muted whitespace-nowrap", render: (row) => formatDate(row.created_at) },
     {
       key: "actions",
@@ -71,9 +124,14 @@ export function GuidelinesPanel() {
       render: (row) => (
         <div className="flex items-center gap-1">
           {row.has_file && (
-            <button type="button" className="icon-btn" aria-label={`Download ${row.title}`} title={`Download the original file (${row.file_name})`} onClick={() => void download(row)}>
-              <span className="material-symbols-outlined text-base">download</span>
-            </button>
+            <>
+              <button type="button" className="icon-btn" aria-label={`Preview ${row.title}`} title="Preview" onClick={() => setPreviewing(row)}>
+                <span className="material-symbols-outlined text-base">visibility</span>
+              </button>
+              <button type="button" className="icon-btn" aria-label={`Download ${row.title}`} title={`Download the original file (${row.file_name})`} onClick={() => void download(row)}>
+                <span className="material-symbols-outlined text-base">download</span>
+              </button>
+            </>
           )}
           {canEdit && (
             <button type="button" className="icon-btn icon-btn-danger" aria-label={`Delete ${row.title}`} title="Delete" onClick={() => setDeleting(row)}>
@@ -124,6 +182,7 @@ export function GuidelinesPanel() {
       {deleting && (
         <ConfirmDialog title="Delete guideline" message={`Delete "${deleting.title}" and its ${deleting.chunk_count} chunks? This cannot be undone.`} onConfirm={remove} onClose={() => setDeleting(null)} />
       )}
+      {previewing && <GuidelinePreview guideline={previewing} onClose={() => setPreviewing(null)} />}
     </div>
   );
 }

@@ -2,6 +2,7 @@ import { useEditor, EditorContent } from "@tiptap/react";
 import Link from "@tiptap/extension-link";
 import StarterKit from "@tiptap/starter-kit";
 import { Markdown } from "tiptap-markdown";
+import { UnderlineMarkdown } from "../underline";
 import { EditorToolbar } from "./EditorToolbar";
 
 type MarkdownStorage = { markdown: { getMarkdown: () => string } };
@@ -11,6 +12,7 @@ export function CellEditor({ value, label, onChange }: { value: string; label: s
   const editor = useEditor({
     extensions: [
       StarterKit.configure({ heading: false, blockquote: false, codeBlock: false, horizontalRule: false }),
+      UnderlineMarkdown,
       Link.configure({ openOnClick: false, autolink: false }),
       Markdown,
     ],

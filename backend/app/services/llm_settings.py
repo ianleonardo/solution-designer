@@ -29,6 +29,7 @@ def runtime_config(provider: str) -> ProviderConfig:
         # Environment keys keep earlier single-provider setups working.
         api_key = api_key or os.environ.get("LLM_API_KEY", "")
         embedding_key = embedding_key or os.environ.get("EMBEDDING_API_KEY", "")
+    verify_raw = row.get("verify_ssl")
     return ProviderConfig(
         provider=provider,
         chat_model=row["chat_model"],
@@ -37,6 +38,7 @@ def runtime_config(provider: str) -> ProviderConfig:
         embedding_base_url=row["embedding_base_url"],
         api_key=api_key,
         embedding_api_key=embedding_key,
+        verify_ssl=True if verify_raw is None else bool(verify_raw),
     )
 
 
@@ -61,6 +63,7 @@ def provider_payload(row: dict) -> dict:
         # The key itself is write-only; the API only says whether one exists.
         "api_key_configured": bool(config.api_key),
         "embedding_api_key_configured": bool(config.embedding_api_key),
+        "verify_ssl": config.verify_ssl,
         "updated_at": row["updated_at"],
     }
 
@@ -120,6 +123,9 @@ def update_provider(user: dict, provider: str, body: dict) -> dict:
         elif incoming:
             assignments.append(f"{column} = ?")
             params.append(encrypt(incoming))
+    if provider == "spirare" and "verify_ssl" in body:
+        assignments.append("verify_ssl = ?")
+        params.append(bool(body.get("verify_ssl")))
     if assignments:
         assignments.append("updated_at = ?")
         params.append(db._now())

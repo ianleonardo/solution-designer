@@ -17,17 +17,21 @@ logger = logging.getLogger(__name__)
 _MARKDOWN = MarkdownIt("commonmark", {"html": False}).enable("strikethrough")
 
 
+def _restore_underline(html_text: str) -> str:
+    """TipTap stores underline as <u>…</u>; keep that tag after Markdown escapes other HTML."""
+    return html_text.replace("&lt;u&gt;", "<u>").replace("&lt;/u&gt;", "</u>").replace("&lt;U&gt;", "<u>").replace("&lt;/U&gt;", "</u>")
+
+
 def _html_text(markdown: str) -> str:
     """Prose written with the rich text editor, as HTML."""
-    return _MARKDOWN.render(markdown or "")
+    return _restore_underline(_MARKDOWN.render(markdown or ""))
 
 
 def _html_cell(markdown: str) -> str:
     """A table cell: inline formatting for one line, full blocks (lists, paragraphs) for several."""
     text = (markdown or "").strip()
-    if "\n" in text:
-        return _MARKDOWN.render(text)
-    return _MARKDOWN.renderInline(text)
+    rendered = _MARKDOWN.render(text) if "\n" in text else _MARKDOWN.renderInline(text)
+    return _restore_underline(rendered)
 
 
 _LIST_ITEM = re.compile(r"^(\s*)[-*+]\s+")
@@ -43,11 +47,19 @@ def _cells(row: list[str]) -> str:
     return " | ".join(_markdown_cell(cell) for cell in row)
 
 
+def heading_level(templates: list[dict], template: dict) -> int:
+    """Main sections are h2. Each nesting level goes one deeper, and h6 is the deepest heading."""
+    from app.services.layouts import section_depth
+
+    return min(2 + max(section_depth(templates, template.get("template_id")), 0), 6)
+
+
 def render_markdown(project_name: str, templates: list[dict], content: dict) -> str:
     lines = [f"# {project_name}", ""]
     sections = content.get("sections") or {}
-    for template in sorted(templates, key=lambda item: item["sequence_order"]):
-        level = "##" if template["parent_id"] is None else "###"
+    ordered = sorted(templates, key=lambda item: item["sequence_order"])
+    for template in ordered:
+        level = "#" * heading_level(ordered, template)
         lines.append(f"{level} {template['section_name']}")
         lines.append("")
         section = sections.get(template["template_id"]) or {}
@@ -114,7 +126,7 @@ def _render_html(
         html.escape(project_name),
         "</title><style>",
         "body{font-family:Inter,sans-serif;background:#fafcff;color:#131b2e;margin:2rem auto;max-width:920px;}",
-        "h1,h2,h3{font-family:'Plus Jakarta Sans',sans-serif;color:#1a4b8c;}",
+        "h1,h2,h3,h4,h5,h6{font-family:'Plus Jakarta Sans',sans-serif;color:#1a4b8c;}",
         "table{border-collapse:collapse;width:100%;margin:1rem 0;}",
         "th,td{border:1px solid #c3c6d2;padding:6px 8px;vertical-align:top;font-size:14px;}",
         "th{background:#f0f4f8;text-align:left;}",
@@ -126,8 +138,9 @@ def _render_html(
         f"<h1>{html.escape(project_name)}</h1>",
     ]
     sections = content.get("sections") or {}
-    for template in sorted(templates, key=lambda item: item["sequence_order"]):
-        tag = "h2" if template["parent_id"] is None else "h3"
+    ordered = sorted(templates, key=lambda item: item["sequence_order"])
+    for template in ordered:
+        tag = f"h{heading_level(ordered, template)}"
         parts.append(f"<{tag}>{html.escape(template['section_name'])}</{tag}>")
         section = sections.get(template["template_id"]) or {}
         for block in section.get("blocks") or []:

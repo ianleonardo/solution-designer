@@ -1,10 +1,12 @@
-import { FormEvent, useEffect, useState } from "react";
+import { FormEvent, useEffect, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { api, ApiError } from "../../api";
 import { BlockBuilder } from "../../components/BlockBuilder";
+import { SelectField } from "../../components/SelectField";
 import { ConfirmDialog } from "../../components/ConfirmDialog";
 import type { BlockSpec, LayoutDetail, LayoutTemplate } from "../../types";
-import { applyMove, applyReparent, applyShift, byOrder, toStructure, type SectionNode } from "./layoutStructure";
+import { applyMove, applyReparent, byOrder, descendantIds, MAX_SECTION_DEPTH, toStructure, type DropSpot, type SectionNode } from "./layoutStructure";
+import { sectionDepth } from "../../structure";
 
 function errorText(err: unknown, fallback: string) {
   return err instanceof ApiError ? err.message : fallback;
@@ -67,6 +69,46 @@ type SectionForm = {
   maxWords: string;
 };
 
+function dropSpot(row: HTMLElement, clientY: number): DropSpot {
+  const rect = row.getBoundingClientRect();
+  if (rect.height <= 0) return "inside";
+  const ratio = (clientY - rect.top) / rect.height;
+  if (ratio < 0.2) return "before";
+  if (ratio > 0.8) return "after";
+  return "inside";
+}
+
+function parentOptions(structure: SectionNode[], templates: LayoutTemplate[], id: string) {
+  const current = templates.find((item) => item.template_id === id)?.parent_id ?? "";
+  return [
+    { value: "", label: "Main section" },
+    ...templates
+      .filter((item) => item.template_id === current || applyReparent(structure, id, item.template_id))
+      .map((item) => ({ value: item.template_id, label: item.section_name })),
+  ];
+}
+
+function OutlineNodes({
+  nodes,
+  depth,
+  row,
+}: {
+  nodes: SectionNode[];
+  depth: number;
+  row: (id: string, depth: number) => JSX.Element;
+}) {
+  return (
+    <ul className="space-y-0.5">
+      {nodes.map((node) => (
+        <li key={node.template_id}>
+          {row(node.template_id, depth)}
+          {node.children.length > 0 && <OutlineNodes nodes={node.children} depth={depth + 1} row={row} />}
+        </li>
+      ))}
+    </ul>
+  );
+}
+
 function formFor(template: LayoutTemplate): SectionForm {
   return {
     name: template.section_name,
@@ -89,6 +131,8 @@ export function LayoutEditorPage() {
   const [adding, setAdding] = useState<null | { parentId: string | null }>(null);
   const [removing, setRemoving] = useState<LayoutTemplate | null>(null);
   const [dragId, setDragId] = useState("");
+  const [dropHint, setDropHint] = useState<{ id: string; spot: DropSpot } | null>(null);
+  const draggedId = useRef("");
   const [formVersion, setFormVersion] = useState(0);
 
   useEffect(() => {
@@ -176,35 +220,49 @@ export function LayoutEditorPage() {
 
   const structure = toStructure(layout.templates);
   const nameOf = (id: string) => templates.find((item) => item.template_id === id)?.section_name ?? id;
-  const selectedIsChild = Boolean(selected?.parent_id);
-
-  function row(id: string, depth: 0 | 1) {
+  function row(id: string, depth: number) {
     const template = templates.find((item) => item.template_id === id)!;
+    const hint = dropHint?.id === id ? dropHint.spot : null;
     return (
-      <li
+      <div
         key={id}
         draggable
-        onDragStart={() => setDragId(id)}
-        onDragOver={(event) => event.preventDefault()}
+        onDragStart={(event) => {
+          draggedId.current = id;
+          setDragId(id);
+          const transfer = event.dataTransfer;
+          if (!transfer) return;
+          transfer.effectAllowed = "move";
+          transfer.setData("text/plain", id);
+        }}
+        onDragEnd={() => {
+          draggedId.current = "";
+          setDragId("");
+          setDropHint(null);
+        }}
+        onDragOver={(event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          const spot = dropSpot(event.currentTarget, event.clientY);
+          setDropHint((current) => (current?.id === id && current.spot === spot ? current : { id, spot }));
+        }}
         onDrop={(event) => {
           event.preventDefault();
-          if (dragId) void saveOrder(applyMove(structure, dragId, id));
+          event.stopPropagation();
+          const source = draggedId.current || event.dataTransfer?.getData("text/plain") || "";
+          draggedId.current = "";
           setDragId("");
+          setDropHint(null);
+          if (source) void saveOrder(applyMove(structure, source, id, dropSpot(event.currentTarget, event.clientY)));
         }}
-        className={`flex items-center gap-1 rounded-md px-2 py-1 row-hover ${id === selectedId ? "bg-inset" : ""}`}
-        style={{ paddingLeft: depth ? "1.5rem" : undefined }}
+        className={`flex items-center gap-1 rounded-md px-2 py-1 row-hover ${id === selectedId ? "bg-inset" : ""} ${dragId === id ? "opacity-60" : ""} ${hint === "inside" ? "bg-inset ring-1 ring-accent" : ""} ${hint === "before" ? "border-t-2 border-accent" : ""} ${hint === "after" ? "border-b-2 border-accent" : ""}`}
+        style={{ paddingLeft: depth ? `${depth * 1.5}rem` : undefined }}
       >
         <span className="material-symbols-outlined text-muted cursor-grab" aria-hidden>drag_indicator</span>
         <button type="button" className="flex-1 text-left truncate" aria-current={id === selectedId ? "true" : undefined} onClick={() => setSelectedId(id)}>
           {template.section_name}
         </button>
-        <button type="button" className="icon-btn" aria-label={`Move ${template.section_name} up`} onClick={() => void saveOrder(applyShift(structure, id, -1))}>
-          <span className="material-symbols-outlined">arrow_upward</span>
-        </button>
-        <button type="button" className="icon-btn" aria-label={`Move ${template.section_name} down`} onClick={() => void saveOrder(applyShift(structure, id, 1))}>
-          <span className="material-symbols-outlined">arrow_downward</span>
-        </button>
-      </li>
+      </div>
     );
   }
 
@@ -215,7 +273,6 @@ export function LayoutEditorPage() {
           <span className="material-symbols-outlined">arrow_back</span>
         </Link>
         <h1 className="font-headline text-2xl font-semibold">{layout.name}</h1>
-        {layout.is_system && <span className="rounded-full border border-hairline px-2 py-0.5 text-xs text-muted">Built-in</span>}
       </div>
       {error && <p className="text-alert">{error}</p>}
       {notice && <p className="text-muted" role="status">{notice}</p>}
@@ -234,6 +291,7 @@ export function LayoutEditorPage() {
 
       <div className="grid gap-4 lg:grid-cols-[320px_1fr]">
         <aside className="bg-panel border border-hairline rounded-lg p-3 space-y-2" aria-label="Sections">
+          <p className="text-xs text-muted">Drag a section to reorder it among its siblings, or drop it on another section to nest it there. Documents already created keep their own structure.</p>
           <div className="flex flex-wrap gap-2">
             <button type="button" className="btn" onClick={() => setAdding({ parentId: null })}>
               <span className="material-symbols-outlined">add</span>
@@ -242,8 +300,8 @@ export function LayoutEditorPage() {
             <button
               type="button"
               className="btn"
-              disabled={!selected}
-              onClick={() => selected && setAdding({ parentId: selectedIsChild ? selected.parent_id : selected.template_id })}
+              disabled={!selected || sectionDepth(templates, selected.template_id) >= MAX_SECTION_DEPTH}
+              onClick={() => selected && setAdding({ parentId: selected.template_id })}
             >
               <span className="material-symbols-outlined">subdirectory_arrow_right</span>
               Add sub-section
@@ -252,18 +310,8 @@ export function LayoutEditorPage() {
           {structure.length === 0 ? (
             <p className="text-muted text-sm">This layout has no sections yet.</p>
           ) : (
-            <ul className="space-y-0.5">
-              {structure.map((node) => (
-                <li key={node.template_id}>
-                  <ul>
-                    {row(node.template_id, 0)}
-                    {node.children.map((childId) => row(childId, 1))}
-                  </ul>
-                </li>
-              ))}
-            </ul>
+            <OutlineNodes nodes={structure} depth={0} row={row} />
           )}
-          <p className="text-xs text-muted">Drag to reorder or use the arrows. Drop a sub-section on a section to move it there.</p>
         </aside>
 
         {selected && form ? (
@@ -279,23 +327,16 @@ export function LayoutEditorPage() {
               Section name
               <input className="field mt-1" aria-label="Section name" value={form.name} maxLength={150} onChange={(event) => setForm({ ...form, name: event.target.value })} />
             </label>
-            {selectedIsChild && (
-              <label className="block text-sm">
-                Parent section
-                <select
-                  className="field mt-1"
-                  aria-label="Parent section"
-                  value={selected.parent_id ?? ""}
-                  onChange={(event) => void saveOrder(applyReparent(structure, selected.template_id, event.target.value))}
-                >
-                  {structure.map((node) => (
-                    <option key={node.template_id} value={node.template_id}>
-                      {nameOf(node.template_id)}
-                    </option>
-                  ))}
-                </select>
-              </label>
-            )}
+            <div className="block text-sm">
+              Parent section
+              <SelectField
+                className="mt-1 w-full [&_button]:w-full [&_button]:max-w-none"
+                aria-label="Parent section"
+                value={selected.parent_id ?? ""}
+                options={parentOptions(structure, templates, selected.template_id)}
+                onChange={(value) => void saveOrder(applyReparent(structure, selected.template_id, value))}
+              />
+            </div>
             <label className="block text-sm">
               Guidance for the model
               <input className="field mt-1" aria-label="Hint" value={form.hint} maxLength={1000} onChange={(event) => setForm({ ...form, hint: event.target.value })} />
@@ -341,11 +382,12 @@ export function LayoutEditorPage() {
       {removing && (
         <ConfirmDialog
           title="Delete section"
-          message={`Delete ${removing.section_name}${removing.parent_id ? "" : " and its sub-sections"}? Existing documents lose that content.`}
+          message={`Delete ${removing.section_name}${descendantIds(toStructure(layout.templates), removing.template_id).length > 1 ? " and its sub-sections" : ""} from this layout? Documents already created keep their own structure.`}
           onClose={() => setRemoving(null)}
           onConfirm={async () => {
             await api(`/api/templates/${removing.template_id}`, { method: "DELETE" });
-            const remaining = layout.templates.filter((item) => item.template_id !== removing.template_id && item.parent_id !== removing.template_id);
+            const gone = new Set(descendantIds(toStructure(layout.templates), removing.template_id));
+            const remaining = layout.templates.filter((item) => !gone.has(item.template_id));
             setLayout({ ...layout, templates: remaining });
             setSelectedId(byOrder(remaining)[0]?.template_id ?? "");
             setRemoving(null);

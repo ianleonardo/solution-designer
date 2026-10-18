@@ -7,7 +7,7 @@ from pathlib import Path
 import bcrypt
 
 from app import db
-from app.config import CONTENT_AUTHORS, KB_EDITORS, data_dir
+from app.config import CONTENT_AUTHORS, KB_EDITORS, data_dir, kb_countries
 from app.errors import AppError
 from app.seed_layouts import SDD_LAYOUT_ID
 from app.services import documents, files, gcs, images, layouts, project_rag
@@ -64,14 +64,67 @@ def list_projects() -> list[dict]:
     return [project_row(row) for row in rows]
 
 
+def _rag_country(parsed) -> str:
+    """Best-effort country from a rag_inventory parsed_json blob."""
+    data = parsed
+    if isinstance(parsed, str):
+        try:
+            data = json.loads(parsed) if parsed else {}
+        except json.JSONDecodeError:
+            data = {}
+    if not isinstance(data, dict):
+        return "Unspecified"
+    raw = ""
+    for key, value in data.items():
+        if str(key).strip().lower() == "country":
+            raw = str(value or "").strip()
+            break
+    if not raw:
+        return "Unspecified"
+    lookup = {item.lower(): item for item in kb_countries()}
+    return lookup.get(raw.lower(), raw.upper())
+
+
+def _kb_counts_by_country() -> list[dict]:
+    """Per-country counts for capabilities, interfaces, tables, batches and reports."""
+    counts: dict[str, dict[str, int]] = {}
+
+    def bump(country: str, field: str, amount: int = 1) -> None:
+        key = country or "Unspecified"
+        row = counts.setdefault(
+            key,
+            {"country": key, "capabilities": 0, "interfaces": 0, "tables": 0, "batches": 0, "reports": 0},
+        )
+        row[field] += amount
+
+    for country in kb_countries():
+        bump(country, "capabilities", 0)
+
+    for row in db.fetchall("SELECT country, COUNT(*) AS c FROM interfaces GROUP BY country"):
+        bump(str(row["country"] or "Unspecified"), "interfaces", int(row["c"]))
+    for row in db.fetchall("SELECT country, COUNT(*) AS c FROM kb_tables GROUP BY country"):
+        bump(str(row["country"] or "Unspecified"), "tables", int(row["c"]))
+    for row in db.fetchall("SELECT country, COUNT(*) AS c FROM kb_reports GROUP BY country"):
+        bump(str(row["country"] or "Unspecified"), "reports", int(row["c"]))
+    for row in db.fetchall("SELECT country, COUNT(*) AS c FROM kb_batches GROUP BY country"):
+        bump(str(row["country"] or "Unspecified"), "batches", int(row["c"]))
+    for row in db.fetchall("SELECT country, COUNT(*) AS c FROM kb_capabilities GROUP BY country"):
+        bump(str(row["country"] or "Unspecified"), "capabilities", int(row["c"]))
+
+    catalog = list(kb_countries())
+    catalog_set = set(catalog)
+    ordered = [counts[c] for c in catalog if c in counts]
+    extras = sorted((counts[c] for c in counts if c not in catalog_set), key=lambda item: item["country"])
+    return ordered + extras
+
+
 def dashboard() -> dict:
     total = db.fetchone("SELECT count(*) AS c FROM projects")
-    generated = db.fetchone("SELECT count(*) AS c FROM project_documents WHERE generated_at IS NOT NULL")
     documents_total = db.fetchone("SELECT count(*) AS c FROM project_documents")
     return {
         "total_projects": total["c"] if total else 0,
         "total_documents": documents_total["c"] if documents_total else 0,
-        "documents_generated": generated["c"] if generated else 0,
+        "kb_by_country": _kb_counts_by_country(),
     }
 
 
@@ -238,6 +291,34 @@ def delete_baseline(user: dict, project_id: str, doc_id: str) -> None:
     gcs.upload_db()
 
 
+_BASELINE_MEDIA = {
+    "md": "text/markdown",
+    "markdown": "text/markdown",
+    "txt": "text/plain",
+    "pdf": "application/pdf",
+    "xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    "xls": "application/vnd.ms-excel",
+}
+
+
+def original_baseline_file(project_id: str, doc_id: str) -> tuple[Path, str, str]:
+    """Path, download name and media type of an uploaded project reference."""
+    _require_project(project_id)
+    row = db.fetchone(
+        "SELECT * FROM baseline_docs WHERE project_id = ? AND doc_id = ?",
+        [project_id, doc_id],
+    )
+    if row is None:
+        raise AppError(404, "Reference not found")
+    stored = Path(row["storage_path"])
+    object_name = f"uploads/baselines/{project_id}/{stored.name}"
+    if not stored.is_file() and not gcs.fetch_file(stored, object_name):
+        raise AppError(404, "The original file could not be found in storage.")
+    name = row["file_name"] or stored.name
+    file_type = (row["file_type"] or Path(name).suffix.lstrip(".")).lower()
+    return stored, name, _BASELINE_MEDIA.get(file_type, "application/octet-stream")
+
+
 def workspace(project_id: str) -> dict:
     project = _require_project(project_id)
     documents_payload = documents.list_documents(project_id, with_templates=True)
@@ -271,6 +352,14 @@ def add_rag(user: dict, filename: str, data: bytes, inventory_type: str | None =
         raise AppError(400, "Unknown inventory type")
     if inventory_type == "Guidelines":
         raise AppError(400, "Add guidelines from the Guidelines page (they need a title and description).")
+    if inventory_type == "Reports":
+        raise AppError(400, "Add reports from the Reports page (upload Excel by country and system).")
+    if inventory_type == "Batches":
+        raise AppError(400, "Add batches from the Batches page (upload Excel by country and system).")
+    if inventory_type == "Capabilities":
+        raise AppError(400, "Add capabilities from the Capabilities page (upload Excel by country and system).")
+    if inventory_type == "Tables":
+        raise AppError(400, "Add tables from the Tables page.")
     text = files.extract_text(filename, data, files.RAG_EXTENSIONS)
     folder = data_dir() / "uploads" / "rag"
     folder.mkdir(parents=True, exist_ok=True)

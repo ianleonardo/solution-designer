@@ -100,7 +100,6 @@ export function LayoutsPage() {
       render: (row) => (
         <button type="button" className="text-left font-medium hover:underline" onClick={() => navigate(`/settings/layouts/${row.layout_id}`)}>
           {row.name}
-          {row.is_system && <span className="ml-2 rounded-full border border-hairline px-2 py-0.5 text-xs text-muted">Built-in</span>}
         </button>
       ),
     },

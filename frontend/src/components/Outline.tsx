@@ -5,6 +5,12 @@ export type OutlineItem = {
   name: string;
   depth: number;
   missing: number;
+  /** When omitted, a main section can indent and a sub-section can outdent. */
+  canIndent?: boolean;
+  canOutdent?: boolean;
+  canAddChild?: boolean;
+  canMoveUp?: boolean;
+  canMoveDown?: boolean;
 };
 
 /** Structure actions of the outline. Passing them turns on the "Edit structure" switch. */
@@ -23,15 +29,11 @@ export function Outline({
   items,
   active,
   onSelect,
-  onFill,
-  fillingId,
   editor,
 }: {
   items: OutlineItem[];
   active: string;
   onSelect: (id: string) => void;
-  onFill?: (id: string) => void;
-  fillingId?: string;
   editor?: OutlineEditor;
 }) {
   const [editing, setEditing] = useState(false);
@@ -62,33 +64,22 @@ export function Outline({
               onSelect={onSelect}
             />
           ) : (
-            <div key={item.id} className="flex items-stretch gap-1" style={{ paddingLeft: `${item.depth * 12}px` }}>
-              <button
-                type="button"
-                onClick={() => onSelect(item.id)}
-                className={`min-w-0 flex-1 text-left rounded px-2 py-2 border ${active === item.id ? "border-hairline bg-inset" : "border-transparent hover:bg-inset"}`}
-              >
-                <span className="flex items-center justify-between gap-2">
-                  <span className="truncate text-sm">{item.name}</span>
-                  {item.missing > 0 && (
-                    <span className="shrink-0 rounded-full border border-alert px-1.5 text-[10px] text-alert" style={{ borderColor: "var(--cinnabar)" }}>
-                      Missing information
-                    </span>
-                  )}
-                </span>
-              </button>
-              {onFill && (
-                <button
-                  type="button"
-                  className="btn shrink-0 px-2"
-                  aria-label={`Auto fill ${item.name}`}
-                  disabled={fillingId === item.id}
-                  onClick={() => onFill(item.id)}
-                >
-                  <span className="material-symbols-outlined text-sm">auto_fix_high</span>
-                </button>
-              )}
-            </div>
+            <button
+              key={item.id}
+              type="button"
+              onClick={() => onSelect(item.id)}
+              style={{ paddingLeft: `${item.depth * 12}px` }}
+              className={`w-full text-left rounded px-2 py-2 border ${active === item.id ? "border-hairline bg-inset" : "border-transparent hover:bg-inset"}`}
+            >
+              <span className="flex items-center justify-between gap-2">
+                <span className="truncate text-sm">{item.name}</span>
+                {item.missing > 0 && (
+                  <span className="shrink-0 rounded-full border border-alert px-1.5 text-[10px] text-alert" style={{ borderColor: "var(--cinnabar)" }}>
+                    Missing information
+                  </span>
+                )}
+              </span>
+            </button>
           ),
         )}
         {editMode && editor && (
@@ -119,6 +110,11 @@ function EditRow({
 }) {
   const busy = editor.busy ?? false;
   const topLevel = item.depth === 0;
+  const canIndent = item.canIndent ?? topLevel;
+  const canOutdent = item.canOutdent ?? !topLevel;
+  const canAddChild = item.canAddChild ?? topLevel;
+  const canMoveUp = item.canMoveUp ?? !first;
+  const canMoveDown = item.canMoveDown ?? !last;
   return (
     <div className={`rounded border p-1 space-y-1 ${active ? "border-hairline bg-inset" : "border-transparent"}`} style={{ marginLeft: `${item.depth * 12}px` }}>
       <input
@@ -141,22 +137,23 @@ function EditRow({
         }}
       />
       <div className="flex flex-wrap gap-0.5">
-        <button type="button" className="icon-btn" aria-label={`Move up ${item.name}`} title="Move up" disabled={busy || first} onClick={() => editor.onMove(item.id, -1)}>
+        <button type="button" className="icon-btn" aria-label={`Move up ${item.name}`} title="Move up" disabled={busy || !canMoveUp} onClick={() => editor.onMove(item.id, -1)}>
           <span className="material-symbols-outlined text-base">arrow_upward</span>
         </button>
-        <button type="button" className="icon-btn" aria-label={`Move down ${item.name}`} title="Move down" disabled={busy || last} onClick={() => editor.onMove(item.id, 1)}>
+        <button type="button" className="icon-btn" aria-label={`Move down ${item.name}`} title="Move down" disabled={busy || !canMoveDown} onClick={() => editor.onMove(item.id, 1)}>
           <span className="material-symbols-outlined text-base">arrow_downward</span>
         </button>
-        {topLevel ? (
-          <button type="button" className="icon-btn" aria-label={`Indent ${item.name}`} title="Make it a sub-section of the section above" disabled={busy || first} onClick={() => editor.onIndent(item.id)}>
+        {canIndent && (
+          <button type="button" className="icon-btn" aria-label={`Indent ${item.name}`} title="Make it a sub-section of the section above" disabled={busy || (item.canIndent === undefined && first)} onClick={() => editor.onIndent(item.id)}>
             <span className="material-symbols-outlined text-base">format_indent_increase</span>
           </button>
-        ) : (
-          <button type="button" className="icon-btn" aria-label={`Outdent ${item.name}`} title="Make it a top-level section" disabled={busy} onClick={() => editor.onOutdent(item.id)}>
+        )}
+        {canOutdent && (
+          <button type="button" className="icon-btn" aria-label={`Outdent ${item.name}`} title="Move it up one level" disabled={busy} onClick={() => editor.onOutdent(item.id)}>
             <span className="material-symbols-outlined text-base">format_indent_decrease</span>
           </button>
         )}
-        {topLevel && (
+        {canAddChild && (
           <button type="button" className="icon-btn" aria-label={`Add sub-section to ${item.name}`} title="Add sub-section" disabled={busy} onClick={() => editor.onAdd(item.id)}>
             <span className="material-symbols-outlined text-base">add</span>
           </button>

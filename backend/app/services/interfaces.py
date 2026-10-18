@@ -1,31 +1,66 @@
-"""Integration interfaces per channel (SPL, DGE, PIB, WSM, EAI), loaded from Excel and checked against the systems catalogue."""
+"""Integration interfaces per channel, loaded from Excel or managed by hand, checked against the systems catalogue."""
 
 import io
 import uuid
 from datetime import datetime, timezone
 
 from app import db
-from app.config import KB_EDITORS
+from app.config import KB_EDITORS, kb_countries, kb_interface_channels
 from app.errors import AppError
 from app.services import gcs, systems
 
-CHANNELS = ("SPL", "DGE", "PIB", "WSM", "EAI")
-COUNTRIES = ("SG", "MY", "TH", "VN", "ID", "CN", "All")
 PROTOCOLS = ("API", "MQ", "Kafka", "gRPC", "FTP", "SMTP", "SMPP")
 HEADERS = ("Country", "Interface name", "Description", "Protocol", "Source", "Destination")
 MAX_ROWS = 5000
 MAX_BYTES = 20 * 1024 * 1024
+MAX_NAME = 200
+MAX_DESCRIPTION = 2000
 
 
 def _now() -> datetime:
     return datetime.now(timezone.utc)
 
 
+def _require_editor(user: dict) -> None:
+    if user["role_name"] not in KB_EDITORS:
+        raise AppError(403, "Forbidden")
+
+
 def _channel(value: str) -> str:
+    channels = kb_interface_channels()
     channel = (value or "").strip().upper()
-    if channel not in CHANNELS:
+    if channel not in channels:
         raise AppError(404, "Unknown interface channel")
     return channel
+
+
+def _canonical(value: str, allowed: tuple[str, ...]) -> str | None:
+    lookup = {item.lower(): item for item in allowed}
+    return lookup.get((value or "").strip().lower())
+
+
+def _country(value: str) -> str:
+    countries = kb_countries()
+    canonical = _canonical(value, countries)
+    if canonical is None:
+        raise AppError(400, f"Country must be one of: {', '.join(countries)}.")
+    return canonical
+
+
+def _protocol(value: str) -> str:
+    canonical = _canonical(value, PROTOCOLS)
+    if canonical is None:
+        raise AppError(400, f"Protocol must be one of: {', '.join(PROTOCOLS)}.")
+    return canonical
+
+
+def _system_code(value: str, label: str) -> str:
+    code = (value or "").strip().upper()
+    if not code:
+        raise AppError(400, f"{label} is required.")
+    if code not in systems.existing_codes():
+        raise AppError(400, f"{label} '{value}' is not a known system code.")
+    return code
 
 
 def text_for(row: dict) -> str:
@@ -48,6 +83,87 @@ def list_interfaces(channel: str) -> list[dict]:
     return rows
 
 
+def get_interface(channel: str, interface_id: str) -> dict:
+    row = db.fetchone(
+        """
+        SELECT interface_id, channel, country, interface_name, description, protocol, source, destination
+        FROM interfaces WHERE channel = ? AND interface_id = ?
+        """,
+        [_channel(channel), interface_id],
+    )
+    if row is None:
+        raise AppError(404, "Interface not found")
+    return row
+
+
+def create_interface(user: dict, channel: str, body: dict) -> dict:
+    _require_editor(user)
+    channel = _channel(channel)
+    country = _country(str(body.get("country") or ""))
+    name = (body.get("interface_name") or "").strip()
+    if not name:
+        raise AppError(400, "Interface name is required.")
+    if len(name) > MAX_NAME:
+        raise AppError(400, f"Interface name must be {MAX_NAME} characters or fewer.")
+    description = (body.get("description") or "").strip()
+    if len(description) > MAX_DESCRIPTION:
+        raise AppError(400, f"Description must be {MAX_DESCRIPTION} characters or fewer.")
+    protocol = _protocol(str(body.get("protocol") or ""))
+    source = _system_code(str(body.get("source") or ""), "Source")
+    destination = _system_code(str(body.get("destination") or ""), "Destination")
+    interface_id = str(uuid.uuid4())
+    db.exec_sql(
+        """
+        INSERT INTO interfaces (
+            interface_id, channel, country, interface_name, description, protocol, source, destination, created_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+        [interface_id, channel, country, name, description, protocol, source, destination, _now()],
+    )
+    from app.services import reindex
+
+    reindex.embed_missing_in_background()
+    gcs.upload_db()
+    return get_interface(channel, interface_id)
+
+
+def update_interface(user: dict, channel: str, interface_id: str, body: dict) -> dict:
+    _require_editor(user)
+    current = get_interface(channel, interface_id)
+    country = _country(str(body.get("country", current["country"]) or ""))
+    name = (body.get("interface_name", current["interface_name"]) or "").strip()
+    if not name:
+        raise AppError(400, "Interface name is required.")
+    if len(name) > MAX_NAME:
+        raise AppError(400, f"Interface name must be {MAX_NAME} characters or fewer.")
+    description = (body.get("description", current["description"]) or "").strip()
+    if len(description) > MAX_DESCRIPTION:
+        raise AppError(400, f"Description must be {MAX_DESCRIPTION} characters or fewer.")
+    protocol = _protocol(str(body.get("protocol", current["protocol"]) or ""))
+    source = _system_code(str(body.get("source", current["source"]) or ""), "Source")
+    destination = _system_code(str(body.get("destination", current["destination"]) or ""), "Destination")
+    db.exec_sql(
+        """
+        UPDATE interfaces
+        SET country = ?, interface_name = ?, description = ?, protocol = ?, source = ?, destination = ?
+        WHERE interface_id = ?
+        """,
+        [country, name, description, protocol, source, destination, interface_id],
+    )
+    from app.services import reindex
+
+    reindex.embed_missing_in_background()
+    gcs.upload_db()
+    return get_interface(channel, interface_id)
+
+
+def delete_interface(user: dict, channel: str, interface_id: str) -> None:
+    _require_editor(user)
+    get_interface(channel, interface_id)
+    db.exec_sql("DELETE FROM interfaces WHERE interface_id = ?", [interface_id])
+    gcs.upload_db()
+
+
 def _cell(value) -> str:
     if value is None:
         return ""
@@ -67,11 +183,6 @@ def _read_sheet(data: bytes) -> list[list[str]]:
         raise AppError(400, "Could not read the Excel file. Upload an .xlsx file.") from exc
 
 
-def _canonical(value: str, allowed: tuple[str, ...]) -> str | None:
-    lookup = {item.lower(): item for item in allowed}
-    return lookup.get(value.strip().lower())
-
-
 def parse_and_validate(data: bytes) -> list[dict]:
     rows = _read_sheet(data)
     if not rows:
@@ -82,6 +193,7 @@ def parse_and_validate(data: bytes) -> list[dict]:
         raise AppError(400, f"Missing column(s): {', '.join(missing)}. Expected: {', '.join(HEADERS)}.")
     index = {name: header.index(name.lower()) for name in HEADERS}
     known = systems.existing_codes()
+    countries = kb_countries()
     records: list[dict] = []
     errors: list[dict] = []
 
@@ -93,9 +205,9 @@ def parse_and_validate(data: bytes) -> list[dict]:
         if not any(values.values()):
             continue
         record = {"description": values["Description"]}
-        country = _canonical(values["Country"], COUNTRIES)
+        country = _canonical(values["Country"], countries)
         if country is None:
-            error(offset, "Country", f"'{values['Country']}' is not allowed. Use one of: {', '.join(COUNTRIES)}.")
+            error(offset, "Country", f"'{values['Country']}' is not allowed. Use one of: {', '.join(countries)}.")
         record["country"] = country or ""
         if not values["Interface name"]:
             error(offset, "Interface name", "Interface name is required.")
@@ -120,8 +232,7 @@ def parse_and_validate(data: bytes) -> list[dict]:
 
 
 def replace_from_excel(user: dict, channel: str, filename: str, data: bytes) -> list[dict]:
-    if user["role_name"] not in KB_EDITORS:
-        raise AppError(403, "Forbidden")
+    _require_editor(user)
     channel = _channel(channel)
     if not (filename or "").lower().endswith(".xlsx"):
         raise AppError(400, "Upload an Excel file (.xlsx).")
@@ -149,7 +260,6 @@ def replace_from_excel(user: dict, channel: str, filename: str, data: bytes) -> 
                 now,
             ],
         )
-    # Embedding thousands of rows takes a while, so it happens in the background; keyword search works meanwhile.
     from app.services import reindex
 
     reindex.embed_missing_in_background()

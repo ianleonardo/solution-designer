@@ -32,7 +32,7 @@ async def lifespan(app: FastAPI):
     cache.invalidate()
 
 
-app = FastAPI(title="SolutionCrafter", lifespan=lifespan)
+app = FastAPI(title="SpecForge", lifespan=lifespan)
 app.add_middleware(AuditMiddleware)
 app.add_middleware(
     CORSMiddleware,

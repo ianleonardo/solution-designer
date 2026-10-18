@@ -42,6 +42,27 @@ def starter_diagram(sequence: bool) -> str:
     return STARTER_SEQUENCE if sequence else DEFAULT_FLOWCHART
 
 
+def diagram_block(source: dict | None, sequence: bool) -> dict:
+    """One diagram. `sequence` only chooses the starter when the block has no Mermaid yet."""
+    mermaid = clean_mermaid((source or {}).get("mermaid")) or starter_diagram(bool(sequence))
+    return {"type": "diagram", "sequence": bool(sequence), "mermaid": mermaid}
+
+
+def diagram_groups(blocks: list | None) -> list[list[dict]]:
+    """Runs of diagram blocks, in the order they appear. Other blocks separate the runs."""
+    groups: list[list[dict]] = []
+    current: list[dict] = []
+    for block in blocks or []:
+        if isinstance(block, dict) and block.get("type") == "diagram":
+            current.append(block)
+        elif current:
+            groups.append(current)
+            current = []
+    if current:
+        groups.append(current)
+    return groups
+
+
 IMAGE_URL = re.compile(r"^/api/projects/[0-9a-fA-F-]{8,64}/images/[A-Za-z0-9._-]{1,200}$")
 
 
@@ -87,8 +108,7 @@ def blocks_from_schema(schema_blocks: list[dict]) -> list[dict]:
             rows = [list(row) for row in (block.get("rows") or [[""] * len(columns)])]
             blocks.append({"type": "table", "columns": columns, "rows": number_rows(columns, rows)})
         elif kind == "diagram":
-            sequence = bool(block.get("sequence"))
-            blocks.append({"type": "diagram", "sequence": sequence, "mermaid": starter_diagram(sequence)})
+            blocks.append(diagram_block(None, bool(block.get("sequence"))))
     return blocks
 
 
@@ -113,11 +133,30 @@ def _as_text(value) -> str:
 def _sanitize_blocks(incoming: list, schema_blocks: list[dict]) -> list[dict]:
     pools: dict[str, list] = {}
     for block in incoming or []:
-        if isinstance(block, dict) and block.get("type"):
+        if isinstance(block, dict) and block.get("type") and block.get("type") != "diagram":
             pools.setdefault(block["type"], []).append(block)
+    # A layout diagram is one slot. Further diagrams in that same run are ones the document added.
+    groups = diagram_groups(incoming)
+    group_index = 0
     result = []
-    for schema in schema_blocks:
+    index = 0
+    while index < len(schema_blocks):
+        schema = schema_blocks[index]
         kind = schema.get("type")
+        if kind == "diagram":
+            run = 1
+            while index + run < len(schema_blocks) and schema_blocks[index + run].get("type") == "diagram":
+                run += 1
+            group = groups[group_index] if group_index < len(groups) else []
+            if group:
+                group_index += 1
+            for offset in range(run):
+                source = group[offset] if offset < len(group) else None
+                result.append(diagram_block(source, bool(schema_blocks[index + offset].get("sequence"))))
+            for extra in group[run:]:
+                result.append(diagram_block(extra, bool(extra.get("sequence"))))
+            index += run
+            continue
         found = pools.get(kind, [])
         source = found.pop(0) if found else None
         if kind == "header":
@@ -137,11 +176,10 @@ def _sanitize_blocks(incoming: list, schema_blocks: list[dict]) -> list[dict]:
             if not rows:
                 rows = [[""] * len(columns)]
             result.append({"type": "table", "columns": columns, "rows": number_rows(columns, rows)})
-        elif kind == "diagram":
-            # Any Mermaid is accepted in a diagram block; the layout only decides what a new block starts with.
-            sequence = bool(schema.get("sequence"))
-            mermaid = clean_mermaid((source or {}).get("mermaid")) or starter_diagram(sequence)
-            result.append({"type": "diagram", "sequence": sequence, "mermaid": mermaid})
+        index += 1
+    for group in groups[group_index:]:
+        for extra in group:
+            result.append(diagram_block(extra, bool(extra.get("sequence"))))
     return result
 
 

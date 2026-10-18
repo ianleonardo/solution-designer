@@ -168,6 +168,38 @@ def test_a_flowchart_block_can_hold_a_sequence_diagram_and_the_other_way_round()
     assert in_sequence["sections"]["t"]["blocks"][0]["mermaid"] == chart
 
 
+def test_a_document_can_keep_more_diagrams_than_its_layout():
+    first = "flowchart LR\n  A --> B"
+    second = "sequenceDiagram\n  A->>B: hi"
+    third = "flowchart TB\n  C --> D"
+    content = {
+        "sections": {
+            "t": {
+                "blocks": [
+                    {"type": "prose", "markdown": "before"},
+                    {"type": "diagram", "sequence": False, "mermaid": first},
+                    {"type": "diagram", "sequence": True, "mermaid": second},
+                    {"type": "prose", "markdown": "after"},
+                    {"type": "diagram", "sequence": False, "mermaid": third},
+                ]
+            }
+        }
+    }
+    schema = [{"type": "prose"}, {"type": "diagram", "sequence": False}, {"type": "prose"}]
+    blocks = sanitize_content(content, [{"template_id": "t", "section_name": "T", "schema_json": {"blocks": schema}}])["sections"]["t"]["blocks"]
+    assert [block["type"] for block in blocks] == ["prose", "diagram", "diagram", "prose", "diagram"]
+    assert [block.get("mermaid") for block in blocks if block["type"] == "diagram"] == [first, second, third]
+    assert blocks[2]["sequence"] is True
+
+    # A section whose layout has no diagram still keeps diagrams added in the document.
+    added = sanitize_content(
+        {"sections": {"t": {"blocks": [{"type": "prose", "markdown": "text"}, {"type": "diagram", "mermaid": first}]}}},
+        [{"template_id": "t", "section_name": "T", "schema_json": {"blocks": [{"type": "prose"}]}}],
+    )["sections"]["t"]["blocks"]
+    assert [block["type"] for block in added] == ["prose", "diagram"]
+    assert added[1]["mermaid"] == first
+
+
 def test_generated_diagrams_keep_their_text_and_drop_code_fences():
     from app.services.generate import _apply
 
@@ -177,6 +209,22 @@ def test_generated_diagrams_keep_their_text_and_drop_code_fences():
     assert fenced[0]["mermaid"] == "classDiagram\n  A <|-- B"
     empty = _apply([{"type": "diagram", "sequence": True}], {"blocks": []}, 100)
     assert empty[0]["mermaid"] == STARTER_SEQUENCE
+    kept = _apply(
+        [{"type": "diagram", "sequence": False}, {"type": "prose"}],
+        {"blocks": [{"type": "diagram", "mermaid": "flowchart LR\n  A --> B"}, {"type": "prose", "markdown": "Next"}]},
+        100,
+        [
+            {"type": "diagram", "sequence": False, "mermaid": "flowchart LR\n  old"},
+            {"type": "diagram", "sequence": True, "mermaid": "sequenceDiagram\n  A->>B: kept"},
+            {"type": "prose", "markdown": "old"},
+        ],
+    )
+    assert [block["mermaid"] for block in kept if block["type"] == "diagram"] == [
+        "flowchart LR\n  A --> B",
+        "sequenceDiagram\n  A->>B: kept",
+    ]
+    assert kept[1]["sequence"] is True
+    assert [block["type"] for block in kept] == ["diagram", "diagram", "prose"]
 
 
 def test_sequence_text_is_read_strictly():

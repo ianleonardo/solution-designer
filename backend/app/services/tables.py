@@ -7,12 +7,10 @@ import uuid
 from datetime import datetime, timezone
 
 from app import db
-from app.config import KB_EDITORS
+from app.config import KB_EDITORS, kb_countries, kb_databases
 from app.errors import AppError
 from app.services import gcs, llm
 
-COUNTRIES = ("Singapore", "Malaysia", "Thailand", "Indonesia", "Vietnam")
-DATABASES = ("PIB", "MBK", "SMS", "NTN", "LCM")
 HEADERS = ("TABLE_NAME", "COLUMN_NAME", "DATA_TYPE", "IS_NULL", "PRIMARY_KEY", "FOREIGN_KEY")
 MAX_ROWS = 5000
 MAX_BYTES = 20 * 1024 * 1024
@@ -35,17 +33,28 @@ def _canonical(value: str, allowed: tuple[str, ...]) -> str | None:
 
 
 def _country(value: str) -> str:
-    canonical = _canonical(value, COUNTRIES)
+    countries = kb_countries()
+    canonical = _canonical(value, countries)
     if canonical is None:
-        raise AppError(400, f"Country must be one of: {', '.join(COUNTRIES)}.")
+        raise AppError(400, f"Country must be one of: {', '.join(countries)}.")
     return canonical
 
 
 def _database(value: str) -> str:
-    canonical = _canonical(value, DATABASES)
+    databases = kb_databases()
+    canonical = _canonical(value, databases)
     if canonical is None:
-        raise AppError(400, f"Database must be one of: {', '.join(DATABASES)}.")
+        raise AppError(400, f"Database must be one of: {', '.join(databases)}.")
     return canonical
+
+
+def _upper_name(value: str, label: str, required: bool = False) -> str:
+    cleaned = (value or "").strip().upper()
+    if required and not cleaned:
+        raise AppError(400, f"{label} is required.")
+    if len(cleaned) > MAX_NAME:
+        raise AppError(400, f"{label} must be {MAX_NAME} characters or fewer.")
+    return cleaned
 
 
 def _schema(value: str | None, database: str) -> str:
@@ -263,13 +272,13 @@ def create_table(user: dict, body: dict) -> dict:
     country = _country(str(body.get("country") or ""))
     database = _database(str(body.get("database_name") or body.get("database") or ""))
     schema = _schema(body.get("schema_name") if "schema_name" in body else body.get("schema"), database)
-    table_name = _clean_text(str(body.get("table_name") or ""), "Table name", MAX_NAME, required=True)
+    table_name = _upper_name(str(body.get("table_name") or ""), "Table name", required=True)
     description = _clean_text(str(body.get("description") or ""), "Description", MAX_DESCRIPTION)
 
     existing = db.fetchone(
         """
         SELECT table_id FROM kb_tables
-        WHERE country = ? AND database_name = ? AND lower(schema_name) = lower(?) AND lower(table_name) = lower(?)
+        WHERE country = ? AND database_name = ? AND lower(schema_name) = lower(?) AND table_name = ?
         """,
         [country, database, schema, table_name],
     )
@@ -297,12 +306,7 @@ def create_table(user: dict, body: dict) -> dict:
 def update_table(user: dict, table_id: str, body: dict) -> dict:
     _require_editor(user)
     current = _require_table(table_id)
-    table_name = _clean_text(
-        str(body.get("table_name", current["table_name"]) or ""),
-        "Table name",
-        MAX_NAME,
-        required=True,
-    )
+    table_name = _upper_name(str(body.get("table_name", current["table_name"]) or ""), "Table name", required=True)
     description = _clean_text(
         str(body.get("description", current["description"]) or ""),
         "Description",
@@ -312,7 +316,7 @@ def update_table(user: dict, table_id: str, body: dict) -> dict:
         """
         SELECT table_id FROM kb_tables
         WHERE country = ? AND database_name = ? AND lower(schema_name) = lower(?)
-          AND lower(table_name) = lower(?) AND table_id <> ?
+          AND table_name = ? AND table_id <> ?
         """,
         [current["country"], current["database_name"], current["schema_name"], table_name, table_id],
     )
@@ -341,15 +345,15 @@ def delete_table(user: dict, table_id: str) -> None:
 def add_column(user: dict, table_id: str, body: dict) -> dict:
     _require_editor(user)
     table = _require_table(table_id)
-    column_name = _clean_text(str(body.get("column_name") or ""), "Column name", MAX_NAME, required=True)
-    data_type = _clean_text(str(body.get("data_type") or ""), "Data type", MAX_NAME, required=True)
+    column_name = _upper_name(str(body.get("column_name") or ""), "Column name", required=True)
+    data_type = _upper_name(str(body.get("data_type") or ""), "Data type", required=True)
     is_null = _clean_is_null(body.get("is_null"))
     primary_key = _clean_text(str(body.get("primary_key") or ""), "Primary key", MAX_NAME)
     foreign_key = _clean_text(str(body.get("foreign_key") or ""), "Foreign key", MAX_NAME)
     description = _clean_text(str(body.get("description") or ""), "Description", MAX_DESCRIPTION)
 
     conflict = db.fetchone(
-        "SELECT column_id FROM kb_table_columns WHERE table_id = ? AND lower(column_name) = lower(?)",
+        "SELECT column_id FROM kb_table_columns WHERE table_id = ? AND column_name = ?",
         [table_id, column_name],
     )
     if conflict is not None:
@@ -394,25 +398,15 @@ def update_column(user: dict, table_id: str, column_id: str, body: dict) -> dict
     )
     if current is None:
         raise AppError(404, "Column not found")
-    column_name = _clean_text(
-        str(body.get("column_name", current["column_name"]) or ""),
-        "Column name",
-        MAX_NAME,
-        required=True,
-    )
-    data_type = _clean_text(
-        str(body.get("data_type", current["data_type"]) or ""),
-        "Data type",
-        MAX_NAME,
-        required=True,
-    )
+    column_name = _upper_name(str(body.get("column_name", current["column_name"]) or ""), "Column name", required=True)
+    data_type = _upper_name(str(body.get("data_type", current["data_type"]) or ""), "Data type", required=True)
     is_null = _clean_is_null(body.get("is_null", current["is_null"]))
     primary_key = _clean_text(str(body.get("primary_key", current["primary_key"]) or ""), "Primary key", MAX_NAME)
     foreign_key = _clean_text(str(body.get("foreign_key", current["foreign_key"]) or ""), "Foreign key", MAX_NAME)
     description = _clean_text(str(body.get("description", current["description"]) or ""), "Description", MAX_DESCRIPTION)
 
     conflict = db.fetchone(
-        "SELECT column_id FROM kb_table_columns WHERE table_id = ? AND lower(column_name) = lower(?) AND column_id <> ?",
+        "SELECT column_id FROM kb_table_columns WHERE table_id = ? AND column_name = ? AND column_id <> ?",
         [table_id, column_name, column_id],
     )
     if conflict is not None:
@@ -514,9 +508,9 @@ def parse_and_validate(data: bytes) -> list[dict]:
         values = {name: row[index[name]] if index[name] < len(row) else "" for name in HEADERS}
         if not any(values.values()):
             continue
-        table_name = values["TABLE_NAME"].strip()
-        column_name = values["COLUMN_NAME"].strip()
-        data_type = values["DATA_TYPE"].strip()
+        table_name = values["TABLE_NAME"].strip().upper()
+        column_name = values["COLUMN_NAME"].strip().upper()
+        data_type = values["DATA_TYPE"].strip().upper()
         if not table_name:
             error(offset, "TABLE_NAME", "TABLE_NAME is required.")
         if not column_name:
@@ -524,7 +518,7 @@ def parse_and_validate(data: bytes) -> list[dict]:
         if not data_type:
             error(offset, "DATA_TYPE", "DATA_TYPE is required.")
         if table_name and column_name:
-            pair = (table_name.upper(), column_name.upper())
+            pair = (table_name, column_name)
             if pair in seen_pairs:
                 error(
                     offset,
@@ -688,4 +682,73 @@ def upload_from_excel(
         "uploaded_tables": len(grouped),
         "uploaded_columns": len(records),
         "missing_columns": missing_columns,
+    }
+
+
+def compare_tables(database_raw: str, schema_raw: str) -> dict:
+    """Compare tables across countries for the same database and schema."""
+    database = _database(database_raw)
+    schema = (schema_raw or "").strip() or database
+    countries = list(kb_countries())
+    by_country: dict[str, dict[str, dict]] = {}
+    for country in countries:
+        rows = db.fetchall(
+            """
+            SELECT * FROM kb_tables
+            WHERE country = ? AND database_name = ? AND lower(schema_name) = lower(?)
+            ORDER BY table_name
+            """,
+            [country, database, schema],
+        )
+        tables: dict[str, dict] = {}
+        for row in rows:
+            cols = db.fetchall(
+                "SELECT column_name, data_type FROM kb_table_columns WHERE table_id = ? ORDER BY column_name",
+                [row["table_id"]],
+            )
+            tables[row["table_name"]] = {
+                "table_name": row["table_name"],
+                "description": row["description"],
+                "columns": {col["column_name"]: col["data_type"] for col in cols},
+            }
+        if tables:
+            by_country[country] = tables
+
+    present_countries = list(by_country.keys())
+    all_table_names = sorted({name for tables in by_country.values() for name in tables})
+    missing_tables: list[dict] = []
+    column_diffs: list[dict] = []
+
+    for table_name in all_table_names:
+        have = [c for c in present_countries if table_name in by_country[c]]
+        lack = [c for c in present_countries if table_name not in by_country[c]]
+        if lack:
+            missing_tables.append({"table_name": table_name, "present_in": have, "missing_in": lack})
+        if len(have) < 2:
+            continue
+        # Column / data-type differences among countries that have the table
+        all_cols = sorted({col for c in have for col in by_country[c][table_name]["columns"]})
+        for col_name in all_cols:
+            types_by_country = {
+                c: by_country[c][table_name]["columns"].get(col_name) for c in have
+            }
+            present_cols = {c: t for c, t in types_by_country.items() if t is not None}
+            missing_cols = [c for c, t in types_by_country.items() if t is None]
+            distinct_types = set(present_cols.values())
+            if missing_cols or len(distinct_types) > 1:
+                column_diffs.append(
+                    {
+                        "table_name": table_name,
+                        "column_name": col_name,
+                        "data_types": present_cols,
+                        "missing_in": missing_cols,
+                    }
+                )
+
+    return {
+        "database": database,
+        "schema": schema,
+        "countries": present_countries,
+        "missing_tables": missing_tables,
+        "column_diffs": column_diffs,
     }

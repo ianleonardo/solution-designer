@@ -1,9 +1,9 @@
-import { useState } from "react";
-import { NavLink, useLocation } from "react-router-dom";
+import { useEffect, useState, type ReactNode } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
 import { KNOWLEDGE_KINDS } from "../knowledge";
 
 type NavLeaf = { to: string; label: string; icon: string };
-type NavGroup = { label: string; icon: string; prefix: string; children: { to: string; label: string }[] };
+type NavGroup = { id: string; label: string; icon: string; prefix: string; children: { to: string; label: string }[] };
 type NavEntry = NavLeaf | NavGroup;
 
 function isGroup(entry: NavEntry): entry is NavGroup {
@@ -15,6 +15,7 @@ export function navItems(role: string): NavEntry[] {
     { to: "/", label: "Dashboard", icon: "dashboard" },
     { to: "/projects", label: "Project Documents", icon: "folder_open" },
     {
+      id: "knowledge",
       label: "Knowledge Base",
       icon: "hub",
       prefix: "/knowledge",
@@ -23,6 +24,7 @@ export function navItems(role: string): NavEntry[] {
   ];
   if (role === "Admin") {
     items.push({
+      id: "settings",
       label: "Settings",
       icon: "settings",
       prefix: "/settings",
@@ -37,21 +39,61 @@ export function navItems(role: string): NavEntry[] {
   return items;
 }
 
-const linkClass = ({ isActive }: { isActive: boolean }) =>
-  `flex items-center gap-2.5 rounded-lg px-3 py-1.5 transition-colors ${isActive ? "bg-cobalt text-on-cobalt" : "text-muted hover:bg-inset hover:text-ink"}`;
+function navButtonClass(active: boolean) {
+  return `flex w-full items-center gap-2.5 rounded-lg px-3 py-1.5 text-left transition-colors ${
+    active ? "bg-cobalt text-on-cobalt" : "text-muted hover:bg-inset hover:text-ink"
+  }`;
+}
 
-function Group({ group, onNavigate }: { group: NavGroup; onNavigate?: () => void }) {
+function NavItem({
+  to,
+  end,
+  onNavigate,
+  children,
+}: {
+  to: string;
+  end?: boolean;
+  onNavigate?: () => void;
+  children: ReactNode;
+}) {
+  const location = useLocation();
+  const navigate = useNavigate();
+  const active = end ? location.pathname === to : location.pathname === to || location.pathname.startsWith(`${to}/`);
+  return (
+    <button
+      type="button"
+      className={navButtonClass(active)}
+      aria-current={active ? "page" : undefined}
+      onClick={() => {
+        navigate(to);
+        onNavigate?.();
+      }}
+    >
+      {children}
+    </button>
+  );
+}
+
+function Group({
+  group,
+  expanded,
+  onToggle,
+  onNavigate,
+}: {
+  group: NavGroup;
+  expanded: boolean;
+  onToggle: () => void;
+  onNavigate?: () => void;
+}) {
   const location = useLocation();
   const inside = location.pathname.startsWith(group.prefix);
-  const [open, setOpen] = useState(inside);
-  const expanded = open || inside;
   return (
     <div>
       <button
         type="button"
         aria-expanded={expanded}
         className={`flex w-full items-center gap-2.5 rounded-lg px-3 py-1.5 text-left transition-colors ${inside ? "text-ink" : "text-muted hover:bg-inset hover:text-ink"}`}
-        onClick={() => setOpen(!expanded)}
+        onClick={onToggle}
       >
         <span className="material-symbols-outlined">{group.icon}</span>
         <span className="flex-1">{group.label}</span>
@@ -60,9 +102,9 @@ function Group({ group, onNavigate }: { group: NavGroup; onNavigate?: () => void
       {expanded && (
         <div className="mt-0.5 ml-5 space-y-0.5 border-l border-hairline pl-2">
           {group.children.map((child) => (
-            <NavLink key={child.to} to={child.to} onClick={onNavigate} className={linkClass}>
+            <NavItem key={child.to} to={child.to} end onNavigate={onNavigate}>
               <span>{child.label}</span>
-            </NavLink>
+            </NavItem>
           ))}
         </div>
       )}
@@ -70,17 +112,38 @@ function Group({ group, onNavigate }: { group: NavGroup; onNavigate?: () => void
   );
 }
 
+function groupIdForPath(pathname: string, role: string): string | null {
+  for (const entry of navItems(role)) {
+    if (isGroup(entry) && pathname.startsWith(entry.prefix)) return entry.id;
+  }
+  return null;
+}
+
 export function SideNav({ role, onNavigate }: { role: string; onNavigate?: () => void }) {
+  const location = useLocation();
+  const routeGroup = groupIdForPath(location.pathname, role);
+  const [openId, setOpenId] = useState<string | null>(routeGroup);
+
+  useEffect(() => {
+    if (routeGroup) setOpenId(routeGroup);
+  }, [routeGroup]);
+
   return (
     <nav className="flex flex-col gap-0.5 p-3" aria-label="Primary">
       {navItems(role).map((entry) =>
         isGroup(entry) ? (
-          <Group key={entry.prefix} group={entry} onNavigate={onNavigate} />
+          <Group
+            key={entry.id}
+            group={entry}
+            expanded={openId === entry.id}
+            onNavigate={onNavigate}
+            onToggle={() => setOpenId((current) => (current === entry.id ? null : entry.id))}
+          />
         ) : (
-          <NavLink key={entry.to} to={entry.to} end={entry.to === "/"} onClick={onNavigate} className={linkClass}>
+          <NavItem key={entry.to} to={entry.to} end={entry.to === "/"} onNavigate={onNavigate}>
             <span className="material-symbols-outlined">{entry.icon}</span>
             <span>{entry.label}</span>
-          </NavLink>
+          </NavItem>
         ),
       )}
     </nav>

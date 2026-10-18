@@ -1,5 +1,5 @@
 {
-  "name": "solutioncrafter",
+  "name": "specforge",
   "private": true,
   "workspaces": [
     "frontend"

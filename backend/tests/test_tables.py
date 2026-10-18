@@ -17,7 +17,7 @@ def _excel(rows, header=HEADER) -> bytes:
     return buffer.getvalue()
 
 
-def _upload(client, token, country="Singapore", database="PIB", schema="", rows=None, name="tables.xlsx"):
+def _upload(client, token, country="SG", database="PIB", schema="", rows=None, name="tables.xlsx"):
     data = _excel(rows or [])
     files = {"file": (name, data, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")}
     form = {"country": country, "database": database, "schema": schema}
@@ -29,7 +29,7 @@ def test_upload_defaults_schema_to_database_defaults_is_null_and_infers_descript
     res = _upload(
         client,
         analyst,
-        country="Singapore",
+        country="SG",
         database="PIB",
         schema="",
         rows=[
@@ -45,7 +45,7 @@ def test_upload_defaults_schema_to_database_defaults_is_null_and_infers_descript
     assert len(body["tables"]) == 1
 
     table = body["tables"][0]
-    assert table["country"] == "Singapore"
+    assert table["country"] == "SG"
     assert table["database_name"] == "PIB"
     assert table["schema_name"] == "PIB"
     assert table["table_name"] == "CUSTOMER_ACCOUNT"
@@ -66,7 +66,7 @@ def test_upload_upserts_existing_columns_and_detects_missing_db_columns(client):
     first = _upload(
         client,
         admin,
-        country="Malaysia",
+        country="MY",
         database="MBK",
         schema="CORE",
         rows=[
@@ -82,7 +82,7 @@ def test_upload_upserts_existing_columns_and_detects_missing_db_columns(client):
     second = _upload(
         client,
         admin,
-        country="Malaysia",
+        country="MY",
         database="MBK",
         schema="CORE",
         rows=[
@@ -150,7 +150,7 @@ def test_manual_crud_and_role_permissions_for_tables_and_columns(client):
     assert (
         client.post(
             "/api/tables",
-            json={"country": "Thailand", "database_name": "SMS", "table_name": "OTP_LOG"},
+            json={"country": "TH", "database_name": "SMS", "table_name": "OTP_LOG"},
             headers=auth(viewer),
         ).status_code
         == 403
@@ -159,7 +159,7 @@ def test_manual_crud_and_role_permissions_for_tables_and_columns(client):
     # Analyst creates table (schema defaults to SMS)
     created = client.post(
         "/api/tables",
-        json={"country": "Thailand", "database_name": "SMS", "table_name": "OTP_LOG", "description": "OTP audit"},
+        json={"country": "TH", "database_name": "SMS", "table_name": "OTP_LOG", "description": "OTP audit"},
         headers=auth(analyst),
     )
     assert created.status_code == 200, created.text
@@ -171,7 +171,7 @@ def test_manual_crud_and_role_permissions_for_tables_and_columns(client):
     assert (
         client.post(
             "/api/tables",
-            json={"country": "Thailand", "database_name": "SMS", "table_name": "otp_log"},
+            json={"country": "TH", "database_name": "SMS", "table_name": "otp_log"},
             headers=auth(analyst),
         ).status_code
         == 400
@@ -225,3 +225,61 @@ def test_manual_crud_and_role_permissions_for_tables_and_columns(client):
     assert client.delete(f"/api/tables/{table_id}/columns/{col['column_id']}", headers=auth(analyst)).status_code == 200
     assert client.delete(f"/api/tables/{table_id}", headers=auth(analyst)).status_code == 200
     assert client.get("/api/tables", headers=auth(viewer)).json() == []
+
+
+def test_catalogs_endpoint_and_table_compare(client):
+    analyst = login(client, "Analyst")
+    catalogs = client.get("/api/catalogs", headers=auth(analyst))
+    assert catalogs.status_code == 200
+    body = catalogs.json()
+    assert body["countries"] == ["SG", "MY", "TH", "VN", "ID"]
+    assert "PIB" in body["databases"]
+    assert "SPL" in body["interface_channels"]
+
+    # Uppercase normalization on create
+    created = client.post(
+        "/api/tables",
+        json={"country": "sg", "database_name": "pib", "table_name": "acct_master", "description": "Accounts"},
+        headers=auth(analyst),
+    )
+    assert created.status_code == 200, created.text
+    assert created.json()["country"] == "SG"
+    assert created.json()["table_name"] == "ACCT_MASTER"
+    table_id = created.json()["table_id"]
+    col = client.post(
+        f"/api/tables/{table_id}/columns",
+        json={"column_name": "acct_id", "data_type": "varchar(36)"},
+        headers=auth(analyst),
+    )
+    assert col.status_code == 200
+    assert col.json()["column_name"] == "ACCT_ID"
+    assert col.json()["data_type"] == "VARCHAR(36)"
+
+    # Seed MY with a subset for compare
+    my_table = client.post(
+        "/api/tables",
+        json={"country": "MY", "database_name": "PIB", "schema_name": "PIB", "table_name": "ACCT_MASTER"},
+        headers=auth(analyst),
+    ).json()
+    client.post(
+        f"/api/tables/{my_table['table_id']}/columns",
+        json={"column_name": "ACCT_ID", "data_type": "NUMBER"},
+        headers=auth(analyst),
+    )
+    client.post(
+        "/api/tables",
+        json={"country": "SG", "database_name": "PIB", "schema_name": "PIB", "table_name": "ONLY_SG"},
+        headers=auth(analyst),
+    )
+
+    compare = client.get("/api/tables/compare?database=PIB&schema=PIB", headers=auth(analyst))
+    assert compare.status_code == 200, compare.text
+    report = compare.json()
+    assert report["database"] == "PIB"
+    assert "SG" in report["countries"] and "MY" in report["countries"]
+    missing_names = {item["table_name"]: item for item in report["missing_tables"]}
+    assert "ONLY_SG" in missing_names
+    assert "MY" in missing_names["ONLY_SG"]["missing_in"]
+    diffs = [item for item in report["column_diffs"] if item["table_name"] == "ACCT_MASTER" and item["column_name"] == "ACCT_ID"]
+    assert len(diffs) == 1
+    assert set(diffs[0]["data_types"].values()) == {"VARCHAR(36)", "NUMBER"}

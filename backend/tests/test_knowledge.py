@@ -20,16 +20,19 @@ def test_upload_is_forced_to_the_selected_type(client):
     assert len(rows) == 2
     assert {row["inventory_type"] for row in rows} == {"Screens"}
     assert all(row["rag_id"].startswith("SC-") for row in rows)
-    batches = _upload(client, admin, "Batches", filename="jobs.md")
-    assert {row["inventory_type"] for row in batches.json()} == {"Batches"}
-    assert all(row["rag_id"].startswith("BA-") for row in batches.json())
+    capabilities = _upload(client, admin, "Capabilities", filename="caps.md")
+    assert capabilities.status_code == 400
+    assert "capabilities" in capabilities.json()["detail"].lower()
+    blocked = _upload(client, admin, "Batches", filename="jobs.md")
+    assert blocked.status_code == 400
+    assert "batches" in blocked.json()["detail"].lower()
 
 
 def test_heading_classification_still_works_without_a_type(client):
     admin = login(client, "Admin")
-    body = b"# Batch jobs\n| Name | Purpose |\n| --- | --- |\n| EOD | End of day |\n"
+    body = b"# Screens\n| Name | Purpose |\n| --- | --- |\n| Login | Authenticate |\n"
     created = _upload(client, admin, None, body=body)
-    assert created.json()[0]["inventory_type"] == "Batches"
+    assert created.json()[0]["inventory_type"] == "Screens"
 
 
 def test_unknown_inventory_type_is_rejected(client):

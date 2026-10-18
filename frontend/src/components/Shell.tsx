@@ -25,8 +25,8 @@ export function Shell() {
               <span className="material-symbols-outlined">hub</span>
             </span>
             <span className="font-wordmark text-xl font-bold leading-8 tracking-tight whitespace-nowrap sm:text-[32px]" data-testid="wordmark">
-              <span>Solution</span>
-              <span className="text-accent">Crafter</span>
+              <span>Spec</span>
+              <span className="text-accent">Forge</span>
             </span>
           </Link>
         </div>
@@ -35,7 +35,7 @@ export function Shell() {
             <span className="material-symbols-outlined">{themeIcon(next)}</span>
           </button>
           <span className="font-label text-[10px] uppercase text-muted whitespace-nowrap">
-            {user.login_id} - {user.role_name}
+            {user.username} - {user.role_name}
           </span>
           <button
             type="button"

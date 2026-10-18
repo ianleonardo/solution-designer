@@ -1,5 +1,5 @@
-from fastapi import APIRouter, Depends, File, UploadFile
-from fastapi.responses import Response
+from fastapi import APIRouter, Depends, File, Query, UploadFile
+from fastapi.responses import FileResponse, Response
 
 from app.deps import current_user
 from app.services import images, projects
@@ -70,6 +70,21 @@ async def upload_reference(
 ):
     data = await file.read()
     return projects.add_baseline(user, project_id, file.filename or "reference.md", data)
+
+
+@router.get("/projects/{project_id}/references/{doc_id}/download")
+@router.get("/projects/{project_id}/baselines/{doc_id}/download", include_in_schema=False)
+def download_reference(
+    project_id: str,
+    doc_id: str,
+    inline: bool = Query(False),
+    user: dict = Depends(current_user),
+):
+    del user
+    path, name, media_type = projects.original_baseline_file(project_id, doc_id)
+    if inline:
+        return FileResponse(path, media_type=media_type, content_disposition_type="inline", filename=name)
+    return FileResponse(path, media_type=media_type, filename=name)
 
 
 @router.delete("/projects/{project_id}/references/{doc_id}")

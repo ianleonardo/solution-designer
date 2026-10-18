@@ -28,15 +28,30 @@ def test_layout_edits_do_not_reach_an_existing_document(client):
     victim = next(item for item in layout["templates"] if item["template_id"] == "key-non-functional-requirements")
     assert client.delete(f"/api/templates/{victim['template_id']}", headers=admin).status_code == 200
     renamed = next(item for item in layout["templates"] if item["parent_id"] is not None)
-    client.put(f"/api/templates/{renamed['template_id']}", json={"section_name": "Renamed in layout", "system_prompt": "changed"}, headers=admin)
+    client.put(
+        f"/api/templates/{renamed['template_id']}",
+        json={"section_name": "Renamed in layout", "system_prompt": "changed", "blocks": [{"type": "prose"}]},
+        headers=admin,
+    )
     created = client.post("/api/layouts/sdd/templates", json={"section_name": "Brand new"}, headers=admin)
     assert created.status_code == 200
+    fresh_layout = client.get("/api/layouts/sdd", headers=admin).json()["templates"]
+    tops = [item for item in fresh_layout if item["parent_id"] is None]
+    tree = [
+        {"template_id": item["template_id"], "children": [c["template_id"] for c in fresh_layout if c["parent_id"] == item["template_id"]]}
+        for item in tops
+    ]
+    tree[0], tree[1] = tree[1], tree[0]
+    assert client.put("/api/layouts/sdd/order", json={"sections": tree}, headers=admin).status_code == 200
 
     after = client.get(f"/api/projects/{project_id}/documents/{before['document_id']}", headers=auth(writer)).json()
     assert [item["template_id"] for item in after["templates"]] == ids_before
+    assert [item["sequence_order"] for item in after["templates"]] == [item["sequence_order"] for item in before["templates"]]
     assert after["content_json"] == before["content_json"]
     kept = next(item for item in after["templates"] if item["template_id"] == renamed["template_id"])
-    assert kept["section_name"] == renamed["section_name"] and kept["system_prompt"] == renamed["system_prompt"]
+    original = next(item for item in before["templates"] if item["template_id"] == renamed["template_id"])
+    assert kept["section_name"] == original["section_name"] and kept["system_prompt"] == original["system_prompt"]
+    assert kept["blocks"] == original["blocks"]
     assert "key-non-functional-requirements" in after["content_json"]["sections"]
 
     # A document created later gets the layout as it is then.
@@ -120,11 +135,21 @@ def test_add_rename_and_delete_sections(client):
     assert len(deleted.json()["templates"]) == count
 
 
-def test_sub_sections_cannot_be_nested_and_the_last_section_stays(client):
+def test_sections_nest_until_five_levels_and_the_last_section_stays(client):
     writer, base, _ = _setup(client)
     child = next(item for item in _templates(client, writer, base) if item["parent_id"])
     nested = client.post(f"{base}/sections", json={"section_name": "Deep", "parent_id": child["template_id"]}, headers=auth(writer))
-    assert nested.status_code == 400
+    assert nested.status_code == 200, nested.text
+    current = nested.json()["templates"]
+    current = next(item for item in current if item["section_name"] == "Deep")["template_id"]
+    for name in ("Fourth", "Fifth", "Sixth"):
+        deeper = client.post(f"{base}/sections", json={"section_name": name, "parent_id": current}, headers=auth(writer))
+        if name == "Sixth":
+            assert deeper.status_code == 400
+            assert "at most 5 levels" in deeper.json()["detail"]
+        else:
+            assert deeper.status_code == 200, deeper.text
+            current = next(item for item in deeper.json()["templates"] if item["section_name"] == name)["template_id"]
     missing_parent = client.post(f"{base}/sections", json={"section_name": "Deep", "parent_id": "nope"}, headers=auth(writer))
     assert missing_parent.status_code == 404
     for item in [item for item in _templates(client, writer, base) if item["parent_id"] is None][:-1]:
@@ -145,8 +170,11 @@ def test_deleting_a_section_removes_its_sub_sections_and_content(client):
     templates = _templates(client, writer, base)
     parent = next(item for item in templates if item["parent_id"] is None and any(c["parent_id"] == item["template_id"] for c in templates))
     children = [item["template_id"] for item in templates if item["parent_id"] == parent["template_id"]]
+    grand = client.post(f"{base}/sections", json={"section_name": "Nested note", "parent_id": children[0]}, headers=auth(writer))
+    assert grand.status_code == 200, grand.text
+    grand_id = next(item["template_id"] for item in grand.json()["templates"] if item["section_name"] == "Nested note")
     result = client.delete(f"{base}/sections/{parent['template_id']}", headers=auth(writer)).json()
-    gone = {parent["template_id"], *children}
+    gone = {parent["template_id"], *children, grand_id}
     assert gone.isdisjoint({item["template_id"] for item in result["templates"]})
     assert gone.isdisjoint(result["content_json"]["sections"])
 

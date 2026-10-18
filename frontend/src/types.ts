@@ -136,10 +136,19 @@ export type Guideline = {
   warning?: string;
 };
 
+export type KbCountryStats = {
+  country: string;
+  capabilities: number;
+  interfaces: number;
+  tables: number;
+  batches: number;
+  reports: number;
+};
+
 export type Dashboard = {
   total_projects: number;
   total_documents: number;
-  documents_generated: number;
+  kb_by_country: KbCountryStats[];
 };
 
 export type LlmProvider = {
@@ -151,6 +160,7 @@ export type LlmProvider = {
   embedding_base_url: string;
   api_key_configured: boolean;
   embedding_api_key_configured: boolean;
+  verify_ssl?: boolean;
   updated_at: string;
 };
 
@@ -167,11 +177,14 @@ export type SystemRecord = {
   description: string;
   upstreams: string;
   downstreams: string;
+  has_batch: boolean;
+  has_report: boolean;
+  has_capability: boolean;
   created_at: string;
   last_modified: string;
 };
 
-export type InterfaceChannel = "SPL" | "DGE" | "PIB" | "WSM" | "EAI";
+export type InterfaceChannel = string;
 
 export type InterfaceRecord = {
   interface_id: string;
@@ -182,6 +195,12 @@ export type InterfaceRecord = {
   protocol: string;
   source: string;
   destination: string;
+};
+
+export type Catalogs = {
+  countries: string[];
+  databases: string[];
+  interface_channels: string[];
 };
 
 export type ReindexStatus = {
@@ -211,9 +230,6 @@ export type AuditEntry = {
   ip_address: string | null;
 };
 
-export type TableCountry = "Singapore" | "Malaysia" | "Thailand" | "Indonesia" | "Vietnam";
-export type TableDatabase = "PIB" | "MBK" | "SMS" | "NTN" | "LCM";
-
 export type KbColumnRecord = {
   column_id: string;
   table_id: string;
@@ -229,8 +245,8 @@ export type KbColumnRecord = {
 
 export type KbTableRecord = {
   table_id: string;
-  country: TableCountry;
-  database_name: TableDatabase;
+  country: string;
+  database_name: string;
   schema_name: string;
   table_name: string;
   description: string;
@@ -238,6 +254,103 @@ export type KbTableRecord = {
   created_at: string;
   last_modified: string;
   columns?: KbColumnRecord[];
+};
+
+export type TableCompareResult = {
+  database: string;
+  schema: string;
+  countries: string[];
+  missing_tables: { table_name: string; present_in: string[]; missing_in: string[] }[];
+  column_diffs: {
+    table_name: string;
+    column_name: string;
+    data_types: Record<string, string>;
+    missing_in: string[];
+  }[];
+};
+
+export type KbReportRecord = {
+  report_id: string;
+  country: string;
+  system_code: string;
+  report_name: string;
+  frequency: string;
+  frequency_other: string;
+  description: string;
+  layout: string;
+  created_at: string;
+  last_modified: string;
+};
+
+export type KbBatchRecord = {
+  batch_id: string;
+  country: string;
+  system_code: string;
+  batch_name: string;
+  batch_type: string;
+  frequency: string;
+  frequency_other: string;
+  to_from_systems: string;
+  description: string;
+  batch_filename: string;
+  file_layout: string;
+  created_at: string;
+  last_modified: string;
+};
+
+export type KbCapabilityLinkInterface = {
+  interface_id: string;
+  channel: string;
+  country: string;
+  interface_name: string;
+  description: string;
+  protocol: string;
+  source: string;
+  destination: string;
+};
+
+export type KbCapabilityLinkTable = {
+  table_id: string;
+  country: string;
+  database_name: string;
+  schema_name: string;
+  table_name: string;
+  description: string;
+};
+
+export type KbCapabilityLinkBatch = {
+  batch_id: string;
+  country: string;
+  system_code: string;
+  batch_name: string;
+  batch_type: string;
+  description: string;
+};
+
+export type KbCapabilityLinkReport = {
+  report_id: string;
+  country: string;
+  system_code: string;
+  report_name: string;
+  description: string;
+};
+
+export type KbCapabilityRecord = {
+  capability_id: string;
+  country: string;
+  system_code: string;
+  l1_capability: string;
+  l2_capability: string;
+  l3_capability: string;
+  description: string;
+  processing_rules: string;
+  country_behavior?: string;
+  created_at: string;
+  last_modified: string;
+  interfaces?: KbCapabilityLinkInterface[];
+  tables?: KbCapabilityLinkTable[];
+  batches?: KbCapabilityLinkBatch[];
+  reports?: KbCapabilityLinkReport[];
 };
 
 export type MissingColumnItem = {

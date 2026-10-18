@@ -165,6 +165,9 @@ def _migrate() -> None:
             description VARCHAR NOT NULL DEFAULT '',
             upstreams VARCHAR NOT NULL DEFAULT '',
             downstreams VARCHAR NOT NULL DEFAULT '',
+            has_batch BOOLEAN NOT NULL DEFAULT FALSE,
+            has_report BOOLEAN NOT NULL DEFAULT FALSE,
+            has_capability BOOLEAN NOT NULL DEFAULT FALSE,
             created_at TIMESTAMP NOT NULL,
             last_modified TIMESTAMP NOT NULL,
             embedding FLOAT[]
@@ -252,6 +255,7 @@ def _migrate() -> None:
             embedding_base_url VARCHAR NOT NULL DEFAULT '',
             api_key_enc VARCHAR NOT NULL DEFAULT '',
             embedding_api_key_enc VARCHAR NOT NULL DEFAULT '',
+            verify_ssl BOOLEAN NOT NULL DEFAULT TRUE,
             updated_at TIMESTAMP NOT NULL
         )
         """,
@@ -282,6 +286,86 @@ def _migrate() -> None:
             created_at TIMESTAMP NOT NULL,
             last_modified TIMESTAMP NOT NULL,
             UNIQUE (table_id, column_name)
+        )
+        """,
+        """
+        CREATE TABLE IF NOT EXISTS kb_reports (
+            report_id VARCHAR PRIMARY KEY,
+            country VARCHAR NOT NULL,
+            system_code VARCHAR NOT NULL,
+            report_name VARCHAR NOT NULL,
+            frequency VARCHAR NOT NULL DEFAULT '',
+            frequency_other VARCHAR NOT NULL DEFAULT '',
+            description VARCHAR NOT NULL DEFAULT '',
+            layout VARCHAR NOT NULL DEFAULT '',
+            created_at TIMESTAMP NOT NULL,
+            last_modified TIMESTAMP NOT NULL,
+            embedding FLOAT[],
+            UNIQUE (country, system_code, report_name)
+        )
+        """,
+        """
+        CREATE TABLE IF NOT EXISTS kb_batches (
+            batch_id VARCHAR PRIMARY KEY,
+            country VARCHAR NOT NULL,
+            system_code VARCHAR NOT NULL,
+            batch_name VARCHAR NOT NULL,
+            batch_type VARCHAR NOT NULL,
+            frequency VARCHAR NOT NULL DEFAULT '',
+            frequency_other VARCHAR NOT NULL DEFAULT '',
+            to_from_systems VARCHAR NOT NULL DEFAULT '',
+            description VARCHAR NOT NULL DEFAULT '',
+            batch_filename VARCHAR NOT NULL DEFAULT '',
+            file_layout VARCHAR NOT NULL DEFAULT '',
+            created_at TIMESTAMP NOT NULL,
+            last_modified TIMESTAMP NOT NULL,
+            embedding FLOAT[],
+            UNIQUE (country, system_code, batch_name)
+        )
+        """,
+        """
+        CREATE TABLE IF NOT EXISTS kb_capabilities (
+            capability_id VARCHAR PRIMARY KEY,
+            country VARCHAR NOT NULL,
+            system_code VARCHAR NOT NULL,
+            l1_capability VARCHAR NOT NULL,
+            l2_capability VARCHAR NOT NULL,
+            l3_capability VARCHAR NOT NULL,
+            description VARCHAR NOT NULL DEFAULT '',
+            processing_rules VARCHAR NOT NULL DEFAULT '',
+            country_behavior VARCHAR NOT NULL DEFAULT '',
+            created_at TIMESTAMP NOT NULL,
+            last_modified TIMESTAMP NOT NULL,
+            embedding FLOAT[],
+            UNIQUE (country, system_code, l1_capability, l2_capability, l3_capability)
+        )
+        """,
+        """
+        CREATE TABLE IF NOT EXISTS kb_capability_interfaces (
+            capability_id VARCHAR NOT NULL,
+            interface_id VARCHAR NOT NULL,
+            PRIMARY KEY (capability_id, interface_id)
+        )
+        """,
+        """
+        CREATE TABLE IF NOT EXISTS kb_capability_tables (
+            capability_id VARCHAR NOT NULL,
+            table_id VARCHAR NOT NULL,
+            PRIMARY KEY (capability_id, table_id)
+        )
+        """,
+        """
+        CREATE TABLE IF NOT EXISTS kb_capability_batches (
+            capability_id VARCHAR NOT NULL,
+            batch_id VARCHAR NOT NULL,
+            PRIMARY KEY (capability_id, batch_id)
+        )
+        """,
+        """
+        CREATE TABLE IF NOT EXISTS kb_capability_reports (
+            capability_id VARCHAR NOT NULL,
+            report_id VARCHAR NOT NULL,
+            PRIMARY KEY (capability_id, report_id)
         )
         """,
         """
@@ -352,23 +436,82 @@ def _ensure_columns() -> None:
         }
         if "embedding" not in present:
             _conn.execute(f"ALTER TABLE {table} ADD COLUMN embedding FLOAT[]")
+    system_columns = {
+        row[0]
+        for row in _conn.execute(
+            "SELECT column_name FROM information_schema.columns WHERE table_name = 'systems'"
+        ).fetchall()
+    }
+    if "has_batch" not in system_columns:
+        _conn.execute("ALTER TABLE systems ADD COLUMN has_batch BOOLEAN DEFAULT FALSE")
+        _conn.execute("UPDATE systems SET has_batch = FALSE WHERE has_batch IS NULL")
+    if "has_report" not in system_columns:
+        _conn.execute("ALTER TABLE systems ADD COLUMN has_report BOOLEAN DEFAULT FALSE")
+        _conn.execute("UPDATE systems SET has_report = FALSE WHERE has_report IS NULL")
+    if "has_capability" not in system_columns:
+        _conn.execute("ALTER TABLE systems ADD COLUMN has_capability BOOLEAN DEFAULT FALSE")
+        _conn.execute("UPDATE systems SET has_capability = FALSE WHERE has_capability IS NULL")
+    batch_columns = {
+        row[0]
+        for row in _conn.execute(
+            "SELECT column_name FROM information_schema.columns WHERE table_name = 'kb_batches'"
+        ).fetchall()
+    }
+    if "to_from_systems" not in batch_columns:
+        _conn.execute("ALTER TABLE kb_batches ADD COLUMN to_from_systems VARCHAR DEFAULT ''")
+        _conn.execute("UPDATE kb_batches SET to_from_systems = '' WHERE to_from_systems IS NULL")
+    for table in ("kb_batches", "kb_reports"):
+        present = {
+            row[0]
+            for row in _conn.execute(
+                f"SELECT column_name FROM information_schema.columns WHERE table_name = '{table}'"
+            ).fetchall()
+        }
+        if "frequency" not in present:
+            _conn.execute(f"ALTER TABLE {table} ADD COLUMN frequency VARCHAR DEFAULT ''")
+            _conn.execute(f"UPDATE {table} SET frequency = '' WHERE frequency IS NULL")
+        if "frequency_other" not in present:
+            _conn.execute(f"ALTER TABLE {table} ADD COLUMN frequency_other VARCHAR DEFAULT ''")
+            _conn.execute(f"UPDATE {table} SET frequency_other = '' WHERE frequency_other IS NULL")
     if "indexed_embedding_signature" not in columns:
         _conn.execute("ALTER TABLE app_settings ADD COLUMN indexed_embedding_signature VARCHAR DEFAULT ''")
         _conn.execute("UPDATE app_settings SET indexed_embedding_signature = '' WHERE indexed_embedding_signature IS NULL")
     if "active_provider" not in columns:
         _conn.execute("ALTER TABLE app_settings ADD COLUMN active_provider VARCHAR DEFAULT 'spirare'")
         _conn.execute("UPDATE app_settings SET active_provider = 'spirare' WHERE active_provider IS NULL")
+    provider_columns = {
+        row[0]
+        for row in _conn.execute(
+            "SELECT column_name FROM information_schema.columns WHERE table_name = 'llm_providers'"
+        ).fetchall()
+    }
+    if "verify_ssl" not in provider_columns:
+        _conn.execute("ALTER TABLE llm_providers ADD COLUMN verify_ssl BOOLEAN DEFAULT TRUE")
+        _conn.execute("UPDATE llm_providers SET verify_ssl = TRUE WHERE verify_ssl IS NULL")
+    capability_columns = {
+        row[0]
+        for row in _conn.execute(
+            "SELECT column_name FROM information_schema.columns WHERE table_name = 'kb_capabilities'"
+        ).fetchall()
+    }
+    if "country_behavior" not in capability_columns:
+        _conn.execute("ALTER TABLE kb_capabilities ADD COLUMN country_behavior VARCHAR DEFAULT ''")
+        _conn.execute("UPDATE kb_capabilities SET country_behavior = '' WHERE country_behavior IS NULL")
 
 
 def _seed_llm_providers() -> None:
-    settings = fetchone("SELECT active_model, api_base_url FROM app_settings WHERE settings_id = 'default'") or {}
-    base_url = settings.get("api_base_url") or "https://api.openai.com/v1"
     defaults = [
         # provider, label, chat model, chat url, embedding model, embedding url
         ("gemini", "Gemini", "gemini-2.5-flash", "", "gemini-embedding-001", ""),
         ("anthropic", "Anthropic", "claude-sonnet-4-5", "https://api.anthropic.com", "", ""),
-        # Spirare keeps whatever model and URL the single-provider setup used before.
-        ("spirare", "Spirare", settings.get("active_model") or "gpt-4o-mini", base_url, "text-embedding-3-small", base_url),
+        (
+            "spirare",
+            "Spirare",
+            "default",
+            "https://is-egp.sg.uobnet.com/wip/v1/chat/completions",
+            "/data/genai/models/bge-m3",
+            "https://is-egp.sg.uobnet.com/embedding/v1/embeddings",
+        ),
     ]
     for provider, label, chat_model, chat_url, embedding_model, embedding_url in defaults:
         if fetchone("SELECT provider FROM llm_providers WHERE provider = ?", [provider]) is None:
@@ -380,6 +523,20 @@ def _seed_llm_providers() -> None:
                 """,
                 [provider, label, chat_model, chat_url, embedding_model, embedding_url, _now()],
             )
+    # Replace the old OpenAI placeholder on Spirare. A custom URL or model is left as saved.
+    exec_sql(
+        """
+        UPDATE llm_providers
+        SET chat_model = 'default',
+            chat_base_url = 'https://is-egp.sg.uobnet.com/wip/v1/chat/completions',
+            embedding_model = '/data/genai/models/bge-m3',
+            embedding_base_url = 'https://is-egp.sg.uobnet.com/embedding/v1/embeddings'
+        WHERE provider = 'spirare'
+          AND chat_base_url IN ('', 'https://api.openai.com/v1')
+          AND chat_model IN ('', 'gpt-4o-mini')
+          AND embedding_model IN ('', 'text-embedding-3-small')
+        """
+    )
 
 
 def _ensure_layout(layout_id: str, name: str, description: str) -> bool:
@@ -527,6 +684,22 @@ def _migrate_roles() -> None:
     exec_sql("UPDATE users SET role_name = 'Viewer' WHERE role_name = 'Read'")
 
 
+def _migrate_table_countries() -> None:
+    """kb_tables used full country names; catalogs now use ISO-style codes."""
+    mapping = {
+        "Singapore": "SG",
+        "Malaysia": "MY",
+        "Thailand": "TH",
+        "Indonesia": "ID",
+        "Vietnam": "VN",
+    }
+    for old, new in mapping.items():
+        exec_sql("UPDATE kb_tables SET country = ? WHERE country = ?", [new, old])
+        exec_sql("UPDATE kb_reports SET country = ? WHERE country = ?", [new, old])
+        exec_sql("UPDATE kb_batches SET country = ? WHERE country = ?", [new, old])
+        exec_sql("UPDATE kb_capabilities SET country = ? WHERE country = ?", [new, old])
+
+
 def _seed() -> None:
     if fetchone("SELECT user_id FROM users LIMIT 1") is None:
         for user in DEFAULT_USERS:
@@ -542,6 +715,7 @@ def _seed() -> None:
             )
     _migrate_roles()
     _migrate_seed_login_ids()
+    _migrate_table_countries()
     _ensure_layout(SDD_LAYOUT_ID, SDD_LAYOUT_NAME, "Solution design for a project, built from the SDD template.")
     if fetchone("SELECT template_id FROM layout_templates WHERE layout_id = ? LIMIT 1", [SDD_LAYOUT_ID]) is None:
         for template in parse_template(template_path()):

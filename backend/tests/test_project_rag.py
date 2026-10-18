@@ -64,6 +64,26 @@ def test_role_rules_for_references(client):
     assert client.get(f"/api/projects/{project_id}/references", headers=auth(login(client, "Read"))).status_code == 200
 
 
+def test_reference_download_and_inline_preview(client):
+    writer = login(client, "Write")
+    project_id = _project(client, writer)
+    uploaded = _upload(client, writer, project_id, "brd.md", "# Scope\n\nSettlement details.").json()
+    doc_id = uploaded["doc_id"]
+    viewer = login(client, "Read")
+    download = client.get(f"/api/projects/{project_id}/references/{doc_id}/download", headers=auth(viewer))
+    assert download.status_code == 200, download.text
+    assert download.content == b"# Scope\n\nSettlement details."
+    assert "attachment" in (download.headers.get("content-disposition") or "").lower()
+    inline = client.get(
+        f"/api/projects/{project_id}/references/{doc_id}/download",
+        params={"inline": True},
+        headers=auth(viewer),
+    )
+    assert inline.status_code == 200
+    assert "inline" in (inline.headers.get("content-disposition") or "").lower()
+    assert client.get(f"/api/projects/{project_id}/references/missing/download", headers=auth(viewer)).status_code == 404
+
+
 def test_generation_prompt_uses_project_references_and_inventory(client, monkeypatch):
     monkeypatch.setenv("LLM_API_KEY", "test-key")
     prompts = []
