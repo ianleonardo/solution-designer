@@ -4,9 +4,10 @@ import { useOptionalAuth } from "../auth";
 import type { SystemRecord } from "../types";
 import { ConfirmDialog } from "./ConfirmDialog";
 import { type Column, DataTable } from "./DataTable";
+import { KB_PAGE_SIZES } from "./TablePager";
 import { SystemDialog } from "./SystemDialog";
 
-export const SYSTEMS_PAGE_SIZE = 50;
+export const SYSTEMS_PAGE_SIZE = 25;
 
 export function SystemsPanel() {
   const auth = useOptionalAuth();
@@ -106,6 +107,7 @@ export function SystemsPanel() {
         columns={columns}
         rowKey={(row) => row.system_code}
         pageSize={SYSTEMS_PAGE_SIZE}
+        pageSizes={KB_PAGE_SIZES}
         emptyLabel="No systems found."
         searchText={(row) => `${row.system_code} ${row.system_name} ${row.description} ${row.upstreams} ${row.downstreams} ${row.has_batch ? "Yes" : "No"} ${row.has_report ? "Yes" : "No"}`}
         searchLabel="Search Systems"

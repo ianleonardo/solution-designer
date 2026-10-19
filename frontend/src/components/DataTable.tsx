@@ -26,6 +26,7 @@ export function DataTable<T>({
   columns,
   rowKey,
   pageSize,
+  pageSizes,
   emptyLabel = "No records.",
   searchText,
   searchLabel = "Search",
@@ -37,6 +38,8 @@ export function DataTable<T>({
   columns: Column<T>[];
   rowKey: (row: T) => string;
   pageSize: number;
+  /** When set, the reader can change how many rows are shown. `pageSize` is the initial choice. */
+  pageSizes?: readonly number[];
   emptyLabel?: string;
   /** When provided, a search box filters rows by this text. */
   searchText?: (row: T) => string;
@@ -50,6 +53,8 @@ export function DataTable<T>({
   const [query, setQuery] = useState("");
   const [sort, setSort] = useState<SortState>(null);
   const [page, setPage] = useState(1);
+  const [chosenSize, setChosenSize] = useState(pageSize);
+  const size = pageSizes?.length ? chosenSize : pageSize;
 
   const needle = query.trim().toLowerCase();
   const filtered = useMemo(
@@ -74,13 +79,13 @@ export function DataTable<T>({
     });
   }, [filtered, sort, columns]);
 
-  const pageCount = Math.max(1, Math.ceil(sorted.length / pageSize));
+  const pageCount = Math.max(1, Math.ceil(sorted.length / size));
   useEffect(() => {
     if (page > pageCount) setPage(pageCount);
   }, [page, pageCount]);
 
-  const start = (Math.min(page, pageCount) - 1) * pageSize;
-  const visible = sorted.slice(start, start + pageSize);
+  const start = (Math.min(page, pageCount) - 1) * size;
+  const visible = sorted.slice(start, start + size);
 
   function toggleSort(key: string) {
     setPage(1);
@@ -174,10 +179,30 @@ export function DataTable<T>({
           </tbody>
         </table>
       </div>
-      {sorted.length > pageSize && (
-        <div className="flex items-center justify-between text-muted" aria-label="Pagination">
+      {(pageSizes ? sorted.length > 0 : sorted.length > size) && (
+        <div className="flex flex-wrap items-center justify-between gap-3 text-sm text-muted" aria-label="Pagination">
+          {pageSizes && (
+            <label className="flex shrink-0 items-center gap-2 whitespace-nowrap">
+              <span>Rows per page</span>
+              <select
+                className="field"
+                aria-label="Rows per page"
+                value={size}
+                onChange={(event) => {
+                  setChosenSize(Number(event.target.value));
+                  setPage(1);
+                }}
+              >
+                {pageSizes.map((option) => (
+                  <option key={option} value={option}>
+                    {option}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
           <span>
-            {start + 1}-{Math.min(start + pageSize, sorted.length)} of {sorted.length}
+            {start + 1}-{Math.min(start + size, sorted.length)} of {sorted.length}
           </span>
           <div className="flex items-center gap-2">
             <button type="button" className="btn" disabled={page <= 1} onClick={() => setPage(page - 1)}>

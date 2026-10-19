@@ -5,9 +5,10 @@ import { useOptionalAuth } from "../auth";
 import type { Catalogs, InterfaceRecord, SystemRecord } from "../types";
 import { ConfirmDialog } from "./ConfirmDialog";
 import { type Column, DataTable } from "./DataTable";
+import { KB_PAGE_SIZES } from "./TablePager";
 import { SelectField } from "./SelectField";
 
-export const INTERFACES_PAGE_SIZE = 50;
+export const INTERFACES_PAGE_SIZE = 25;
 export const PROTOCOLS = ["API", "MQ", "Kafka", "gRPC", "FTP", "SMTP", "SMPP"];
 
 function InterfaceFormDialog({
@@ -338,6 +339,7 @@ export function InterfacesPanel() {
         columns={columns}
         rowKey={(row) => row.interface_id}
         pageSize={INTERFACES_PAGE_SIZE}
+        pageSizes={KB_PAGE_SIZES}
         emptyLabel={loading ? "Loading…" : `No ${channel} interfaces found.`}
         searchText={(row) => `${row.country} ${row.interface_name} ${row.description} ${row.protocol} ${row.source} ${row.destination}`}
         searchLabel={`Search ${channel} interfaces`}

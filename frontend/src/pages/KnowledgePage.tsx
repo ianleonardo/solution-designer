@@ -4,6 +4,7 @@ import { api, ApiError } from "../api";
 import { useOptionalAuth } from "../auth";
 import { ConfirmDialog } from "../components/ConfirmDialog";
 import { type Column, DataTable } from "../components/DataTable";
+import { KB_PAGE_SIZES } from "../components/TablePager";
 import { GuidelinesPanel } from "../components/GuidelinesPanel";
 import { InterfacesPanel } from "../components/InterfacesPanel";
 import { SystemsPanel } from "../components/SystemsPanel";
@@ -16,7 +17,7 @@ import { TablesPanel } from "../components/TablesPanel";
 import { KNOWLEDGE_KINDS } from "../knowledge";
 import type { Catalogs, RagItem } from "../types";
 
-export const KNOWLEDGE_PAGE_SIZE = 50;
+export const KNOWLEDGE_PAGE_SIZE = 25;
 
 function details(item: RagItem) {
   return Object.entries(item.parsed ?? {})
@@ -172,6 +173,7 @@ function InventoryPage() {
         columns={columns}
         rowKey={(row) => row.rag_id}
         pageSize={KNOWLEDGE_PAGE_SIZE}
+        pageSizes={KB_PAGE_SIZES}
         emptyLabel={`No ${kind.label.toLowerCase()} found.`}
         searchText={(row) => `${row.rag_id} ${row.system_name} ${row.source_name} ${details(row)} ${row.raw_content ?? ""}`}
         searchLabel={`Search ${kind.label}`}

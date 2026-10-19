@@ -50,7 +50,7 @@ test("shows a tab per Bitbucket project and loads that project's repositories", 
   fireEvent.click(screen.getByRole("tab", { name: "CORE" }));
   await waitFor(() => expect(screen.getByText("payment-api")).toBeTruthy());
   expect(screen.queryByText("notify-svc")).toBeNull();
-  expect(screen.getByLabelText("Pagination").textContent).toContain("1-50 of 51");
+  expect(screen.getByLabelText("Pagination").textContent).toContain("1-25 of 51");
   fireEvent.change(screen.getByLabelText("Search CORE repositories"), { target: { value: "payment-api" } });
   expect(screen.getByText("payment-api")).toBeTruthy();
   expect(screen.queryByText("extra-0")).toBeNull();

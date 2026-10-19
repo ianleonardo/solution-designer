@@ -5,11 +5,12 @@ import { useOptionalAuth } from "../auth";
 import type { Guideline } from "../types";
 import { ConfirmDialog } from "./ConfirmDialog";
 import { type Column, DataTable } from "./DataTable";
+import { KB_PAGE_SIZES } from "./TablePager";
 import { GuidelineDialog } from "./GuidelineDialog";
 
 const markdown = new MarkdownIt({ html: false, linkify: true, breaks: true });
 
-export const GUIDELINES_PAGE_SIZE = 50;
+export const GUIDELINES_PAGE_SIZE = 25;
 
 function GuidelinePreview({ guideline, onClose }: { guideline: Guideline; onClose: () => void }) {
   const [url, setUrl] = useState("");
@@ -156,6 +157,7 @@ export function GuidelinesPanel() {
         columns={columns}
         rowKey={(row) => row.guideline_id}
         pageSize={GUIDELINES_PAGE_SIZE}
+        pageSizes={KB_PAGE_SIZES}
         emptyLabel="No guidelines found."
         searchText={(row) => `${row.guideline_id} ${row.title} ${row.description} ${row.file_name}`}
         searchLabel="Search Guidelines"

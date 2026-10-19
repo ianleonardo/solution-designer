@@ -59,6 +59,18 @@ describe("DataTable", () => {
     expect(screen.queryByLabelText("Pagination")).toBeNull();
   });
 
+  it("lets the reader choose 25, 50 or 100 rows", () => {
+    const many = Array.from({ length: 60 }, (_, index) => ({ id: String(index), name: `item ${index}`, size: index }));
+    render(<DataTable rows={many} columns={columns} rowKey={(row) => row.id} pageSize={25} pageSizes={[25, 50, 100]} />);
+    expect(names()).toHaveLength(25);
+    expect(screen.getByText("1-25 of 60")).toBeTruthy();
+    fireEvent.change(screen.getByLabelText("Rows per page"), { target: { value: "50" } });
+    expect(names()).toHaveLength(50);
+    expect(screen.getByText("1-50 of 60")).toBeTruthy();
+    fireEvent.change(screen.getByLabelText("Rows per page"), { target: { value: "100" } });
+    expect(names()).toHaveLength(60);
+  });
+
   it("shows the empty label", () => {
     render(<DataTable rows={[]} columns={columns} rowKey={(row) => row.id} pageSize={10} emptyLabel="Nothing here" />);
     expect(screen.getByText("Nothing here")).toBeTruthy();

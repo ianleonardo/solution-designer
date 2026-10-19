@@ -19,6 +19,7 @@ import { ConfirmDialog } from "./ConfirmDialog";
 import { SortHeader, sortRows, toggleColumnSort, type ColumnSort } from "./SortHeader";
 import { ProcessingRulesEditor } from "./ProcessingRulesEditor";
 import { SelectField } from "./SelectField";
+import { PageSlice } from "./TablePager";
 
 function inferredDescription(l1: string, l2: string, l3: string) {
   const [area, group, feature] = [l1, l2, l3].map((part) => part.trim());
@@ -910,6 +911,9 @@ export function CapabilitiesPanel() {
                   {group.rows.length} {group.rows.length === 1 ? "capability" : "capabilities"}
                 </span>
               </div>
+              <PageSlice rows={sortRows(group.rows, sort, (row) => (sort ? row[sort.key as "l1_capability" | "l2_capability" | "l3_capability"] : ""))} resetKey={`${search}|${countryFilter}|${systemFilter}|${sort?.key ?? ""}|${sort?.dir ?? ""}`}>
+                {(visible, pager) => (
+                  <>
               <table className="w-full text-left border-collapse">
                 <thead>
                   <tr className="border-b border-hairline font-label text-[10px] uppercase text-muted">
@@ -930,7 +934,7 @@ export function CapabilitiesPanel() {
                   </tr>
                 </thead>
                 <tbody>
-                  {sortRows(group.rows, sort, (row) => (sort ? row[sort.key as "l1_capability" | "l2_capability" | "l3_capability"] : "")).map((row) => (
+                  {visible.map((row) => (
                     <tr
                       key={row.capability_id}
                       className="border-b border-hairline last:border-b-0 hover:bg-inset/50 cursor-pointer"
@@ -983,6 +987,10 @@ export function CapabilitiesPanel() {
                   ))}
                 </tbody>
               </table>
+              {pager}
+                  </>
+                )}
+              </PageSlice>
             </section>
           ))}
         </div>

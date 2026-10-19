@@ -5,9 +5,10 @@ import { useOptionalAuth } from "../auth";
 import type { Catalogs, KbBitbucketRepoRecord } from "../types";
 import { ConfirmDialog } from "./ConfirmDialog";
 import { type Column, DataTable } from "./DataTable";
+import { KB_PAGE_SIZES } from "./TablePager";
 import { ProcessingRulesEditor } from "./ProcessingRulesEditor";
 
-const PAGE_SIZE = 50;
+const PAGE_SIZE = 25;
 const DEFAULT_PROJECTS = ["CORE", "SPL", "DBE", "PIB", "PIBVN2", "PIBID", "SOF", "WSM", "NTN"];
 
 function RepoFormDialog({
@@ -314,6 +315,7 @@ export function BitbucketReposPanel() {
         columns={columns}
         rowKey={(row) => row.repo_id}
         pageSize={PAGE_SIZE}
+        pageSizes={KB_PAGE_SIZES}
         emptyLabel={loading ? "Loading…" : `No ${project} repositories found.`}
         searchLabel={`Search ${project} repositories`}
         searchPlaceholder={`Search ${project} repositories`}

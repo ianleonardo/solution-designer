@@ -7,6 +7,7 @@ import { ConfirmDialog } from "./ConfirmDialog";
 import { FrequencyField, frequencyText, selectedFrequencies } from "./FrequencyField";
 import { SelectField } from "./SelectField";
 import { SortHeader, sortRows, toggleColumnSort, type ColumnSort } from "./SortHeader";
+import { PageSlice } from "./TablePager";
 
 function UploadReportsDialog({
   countries,
@@ -454,6 +455,9 @@ export function ReportsPanel() {
                   {group.reports.length} {group.reports.length === 1 ? "report" : "reports"}
                 </span>
               </div>
+              <PageSlice rows={sortRows(group.reports, sort, (row) => (sort?.key === "frequency" ? frequencyText(row.frequency, row.frequency_other) : row.report_name))} resetKey={`${search}|${countryFilter}|${systemFilter}|${sort?.key ?? ""}|${sort?.dir ?? ""}`}>
+                {(visible, pager) => (
+                  <>
               <table className="w-full text-left border-collapse">
                 <thead>
                   <tr className="border-b border-hairline font-label text-[10px] uppercase text-muted">
@@ -468,7 +472,7 @@ export function ReportsPanel() {
                   </tr>
                 </thead>
                 <tbody>
-                  {sortRows(group.reports, sort, (row) => (sort?.key === "frequency" ? frequencyText(row.frequency, row.frequency_other) : row.report_name)).map((row) => (
+                  {visible.map((row) => (
                     <tr key={row.report_id} className="border-b border-hairline last:border-b-0 hover:bg-inset/50">
                       <td className="py-2.5 px-3 font-label text-xs font-medium">
                         <button type="button" className="text-left text-accent hover:underline" onClick={() => setInspecting(row)}>
@@ -497,6 +501,10 @@ export function ReportsPanel() {
                   ))}
                 </tbody>
               </table>
+              {pager}
+                  </>
+                )}
+              </PageSlice>
             </section>
           ))}
         </div>

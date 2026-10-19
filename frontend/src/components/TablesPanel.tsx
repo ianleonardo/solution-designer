@@ -13,6 +13,7 @@ import type {
 import { ConfirmDialog } from "./ConfirmDialog";
 import { SelectField } from "./SelectField";
 import { SortHeader, sortRows, toggleColumnSort, type ColumnSort } from "./SortHeader";
+import { PageSlice, TablePager, usePageWindow } from "./TablePager";
 
 const DEFAULT_COUNTRIES = ["SG", "MY", "TH", "VN", "ID"];
 const DEFAULT_DATABASES = ["PIB", "MBK", "SMS", "NTN", "WSM", "LCM"];
@@ -635,6 +636,8 @@ function TableDetailsDialog({
   }
 
   const columns = table?.columns ?? [];
+  const columnPage = usePageWindow(columns.length, tableId);
+  const visibleColumns = columns.slice(columnPage.start, columnPage.end);
 
   return (
     <div
@@ -705,7 +708,7 @@ function TableDetailsDialog({
                       </td>
                     </tr>
                   ) : (
-                    columns.map((col) => (
+                    visibleColumns.map((col) => (
                       <tr key={col.column_id} className="border-b border-hairline last:border-b-0">
                         <td className="py-2.5 px-3 font-label text-xs font-medium whitespace-nowrap">{col.column_name}</td>
                         <td className="py-2.5 px-3 font-label text-xs text-muted whitespace-nowrap">{col.data_type}</td>
@@ -744,6 +747,7 @@ function TableDetailsDialog({
               </table>
             </div>
           )}
+          {!loading && table && <TablePager paging={columnPage} />}
         </div>
       </div>
       {editingTable && table && (
@@ -1203,6 +1207,9 @@ export function TablesPanel() {
                   {group.tables.length} {group.tables.length === 1 ? "table" : "tables"}
                 </span>
               </div>
+              <PageSlice rows={sortRows(group.tables, sort, (row) => row.table_name)} resetKey={`${search}|${sort?.key ?? ""}|${sort?.dir ?? ""}`}>
+                {(visible, pager) => (
+                  <>
               <table className="w-full text-left border-collapse">
                 <thead>
                   <tr className="border-b border-hairline font-label text-[10px] uppercase text-muted">
@@ -1214,7 +1221,7 @@ export function TablesPanel() {
                   </tr>
                 </thead>
                 <tbody>
-                  {sortRows(group.tables, sort, (row) => row.table_name).map((row) => (
+                  {visible.map((row) => (
                     <tr key={row.table_id} className="border-b border-hairline last:border-b-0 hover:bg-inset/50">
                       <td className="py-2.5 px-3 font-label text-xs font-medium whitespace-nowrap">
                         <button
@@ -1259,6 +1266,10 @@ export function TablesPanel() {
                   ))}
                 </tbody>
               </table>
+              {pager}
+                  </>
+                )}
+              </PageSlice>
             </section>
           ))}
         </div>

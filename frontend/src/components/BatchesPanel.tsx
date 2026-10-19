@@ -7,6 +7,7 @@ import { ConfirmDialog } from "./ConfirmDialog";
 import { FrequencyField, frequencyText, selectedFrequencies } from "./FrequencyField";
 import { SelectField } from "./SelectField";
 import { SortHeader, sortRows, toggleColumnSort, type ColumnSort } from "./SortHeader";
+import { PageSlice } from "./TablePager";
 
 const BATCH_TYPE_OPTIONS = [
   { value: "incoming", label: "Incoming" },
@@ -491,6 +492,16 @@ export function BatchesPanel() {
                   {group.batches.length} {group.batches.length === 1 ? "batch" : "batches"}
                 </span>
               </div>
+              <PageSlice
+                rows={sortRows(group.batches, sort, (row) => {
+                  if (sort?.key === "batch_type") return row.batch_type;
+                  if (sort?.key === "frequency") return frequencyText(row.frequency, row.frequency_other);
+                  return row.batch_name;
+                })}
+                resetKey={`${search}|${countryFilter}|${systemFilter}|${sort?.key ?? ""}|${sort?.dir ?? ""}`}
+              >
+                {(visible, pager) => (
+                  <>
               <table className="w-full text-left border-collapse">
                 <thead>
                   <tr className="border-b border-hairline font-label text-[10px] uppercase text-muted">
@@ -509,11 +520,7 @@ export function BatchesPanel() {
                   </tr>
                 </thead>
                 <tbody>
-                  {sortRows(group.batches, sort, (row) => {
-                    if (sort?.key === "batch_type") return row.batch_type;
-                    if (sort?.key === "frequency") return frequencyText(row.frequency, row.frequency_other);
-                    return row.batch_name;
-                  }).map((row) => (
+                  {visible.map((row) => (
                     <tr key={row.batch_id} className="border-b border-hairline last:border-b-0 hover:bg-inset/50">
                       <td className="py-2.5 px-3 font-label text-xs font-medium">
                         <button type="button" className="text-left text-accent hover:underline" onClick={() => setInspecting(row)}>
@@ -548,6 +555,10 @@ export function BatchesPanel() {
                   ))}
                 </tbody>
               </table>
+              {pager}
+                  </>
+                )}
+              </PageSlice>
             </section>
           ))}
         </div>
