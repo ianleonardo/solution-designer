@@ -102,6 +102,30 @@ describe("AuditLogPage", () => {
     await waitFor(() => expect((screen.getByLabelText("Action") as HTMLSelectElement).value).toBe(""));
   });
 
+  it("purges the dates chosen in the dialog", async () => {
+    const fetchMock = setup([entry(1)]);
+    await screen.findByText("Create project: Project 1");
+    fireEvent.click(screen.getByRole("button", { name: "Purge logs" }));
+    const dialog = screen.getByRole("dialog", { name: "Purge audit log" });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Purge" }));
+    expect(within(dialog).getByText("Enter the from and to dates as DD/MM/YYYY.")).toBeTruthy();
+    fireEvent.change(within(dialog).getByLabelText("Purge from"), { target: { value: "14/10/2026" } });
+    fireEvent.change(within(dialog).getByLabelText("Purge to"), { target: { value: "01/10/2026" } });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Purge" }));
+    expect(within(dialog).getByText("The from date must be on or before the to date.")).toBeTruthy();
+    fireEvent.change(within(dialog).getByLabelText("Purge to"), { target: { value: "14/10/2026" } });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Purge" }));
+    await waitFor(() =>
+      expect(
+        fetchMock.mock.calls.some((call) => {
+          const [url, options] = call as [string, RequestInit | undefined];
+          return url === "/api/audit/purge" && options?.method === "POST" && String(options.body).includes('"since":"2026-10-14"') && String(options.body).includes('"until":"2026-10-14"');
+        }),
+      ).toBe(true),
+    );
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: "Purge audit log" })).toBeNull());
+  });
+
   it("says so when there is nothing to show", async () => {
     setup([]);
     expect(await screen.findByText("No audit entries.")).toBeTruthy();

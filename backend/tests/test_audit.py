@@ -152,6 +152,25 @@ def test_the_log_is_newest_first_and_can_be_filtered(client):
     assert {"create_project", "create_system", "login"} <= set(client.get("/api/audit/actions", headers=admin_token).json())
 
 
+def test_an_admin_can_purge_a_date_range(client):
+    writer = login(client, "Write")
+    client.post("/api/projects", json={"project_name": "Logged"}, headers=auth(writer))
+    admin = login(client, "Admin")
+    everything = _log(client)
+    today = everything[0]["occurred_at"][:10]
+    purged = client.post("/api/audit/purge", json={"since": today, "until": today}, headers=auth(admin))
+    assert purged.status_code == 200, purged.text
+    assert purged.json()["removed"] >= len(everything)
+    remaining = _log(client)
+    assert "purge_audit" in {entry["action"] for entry in remaining}
+    assert "create_project" not in {entry["action"] for entry in remaining}
+    purged_entry = next(entry for entry in remaining if entry["action"] == "purge_audit")
+    assert purged_entry["detail"]["request"] == {"since": today, "until": today}
+    assert client.post("/api/audit/purge", json={"since": today}, headers=auth(admin)).status_code == 400
+    assert client.post("/api/audit/purge", json={"since": "2026-10-14", "until": "2026-10-01"}, headers=auth(admin)).status_code == 400
+    assert client.post("/api/audit/purge", json={"since": today, "until": today}, headers=auth(writer)).status_code == 403
+
+
 def test_a_failing_log_never_breaks_the_request(client, monkeypatch):
     from app import db
 

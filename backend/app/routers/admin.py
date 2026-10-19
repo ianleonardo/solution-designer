@@ -120,6 +120,13 @@ def audit_actions(user: dict = Depends(require_admin)):
     return audit.known_actions()
 
 
+@router.post("/audit/purge")
+def purge_audit(body: dict, user: dict = Depends(require_admin)):
+    del user
+    removed = audit.purge_entries(str(body.get("since") or ""), str(body.get("until") or ""))
+    return {"removed": removed}
+
+
 @router.get("/reindex/status")
 def reindex_status(user: dict = Depends(require_admin)):
     del user

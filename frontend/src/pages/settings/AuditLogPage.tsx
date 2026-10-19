@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import { api, ApiError, formatDateTime } from "../../api";
 import { type Column, DataTable } from "../../components/DataTable";
 import type { AuditEntry } from "../../types";
@@ -39,6 +39,8 @@ export function AuditLogPage() {
   const [until, setUntil] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
+  const [purging, setPurging] = useState(false);
+  const [reload, setReload] = useState(0);
 
   useEffect(() => {
     const query = new URLSearchParams();
@@ -53,13 +55,13 @@ export function AuditLogPage() {
       })
       .catch((err: unknown) => setError(err instanceof ApiError ? err.message : "Could not load the audit log"))
       .finally(() => setLoading(false));
-  }, [action, since, until]);
+  }, [action, since, until, reload]);
 
   useEffect(() => {
     api<string[]>("/api/audit/actions")
       .then(setActions)
       .catch(() => setActions([]));
-  }, []);
+  }, [reload]);
 
   const columns: Column<AuditEntry>[] = [
     { key: "when", header: "When", sortValue: (row) => row.occurred_at, className: "whitespace-nowrap text-muted", render: (row) => formatDateTime(row.occurred_at) },
@@ -105,9 +107,14 @@ export function AuditLogPage() {
 
   return (
     <div className="p-6 max-w-[1400px] space-y-4">
-      <div>
-        <h1 className="font-headline text-2xl font-semibold">Audit Log</h1>
-        <p className="text-sm text-muted">Who changed what, and when. Newest first; the latest 2,000 matching entries are shown.</p>
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <h1 className="font-headline text-2xl font-semibold">Audit Log</h1>
+          <p className="text-sm text-muted">Who changed what, and when. Newest first; the latest 2,000 matching entries are shown.</p>
+        </div>
+        <button type="button" className="btn btn-danger shrink-0" onClick={() => setPurging(true)}>
+          Purge logs
+        </button>
       </div>
       <div className="flex flex-wrap items-end gap-3">
         <label className="text-sm">
@@ -183,6 +190,74 @@ export function AuditLogPage() {
         searchLabel="Search audit log"
         searchPlaceholder="Search audit log"
       />
+      {purging && <PurgeDialog onClose={() => setPurging(false)} onPurged={() => setReload((current) => current + 1)} />}
+    </div>
+  );
+}
+
+function PurgeDialog({ onClose, onPurged }: { onClose: () => void; onPurged: () => void }) {
+  const [fromText, setFromText] = useState("");
+  const [toText, setToText] = useState("");
+  const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    function onKey(event: KeyboardEvent) {
+      if (event.key === "Escape") onClose();
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
+
+  async function submit(event: FormEvent) {
+    event.preventDefault();
+    const since = isoFromDay(fromText);
+    const until = isoFromDay(toText);
+    if (!since || !until) {
+      setError("Enter the from and to dates as DD/MM/YYYY.");
+      return;
+    }
+    if (since > until) {
+      setError("The from date must be on or before the to date.");
+      return;
+    }
+    setBusy(true);
+    setError("");
+    try {
+      await api("/api/audit/purge", { method: "POST", body: JSON.stringify({ since, until }) });
+      onPurged();
+      onClose();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Could not purge the audit log");
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && !busy && onClose()}>
+      <form role="dialog" aria-modal="true" aria-label="Purge audit log" className="w-full max-w-md rounded-lg border border-hairline bg-panel p-6 shadow-xl" onSubmit={(event) => void submit(event)}>
+        <h2 className="font-headline text-xl font-semibold mb-2">Purge audit log</h2>
+        <p className="text-sm text-muted mb-4">Entries on these dates are deleted. This cannot be undone.</p>
+        <div className="flex gap-3 mb-4">
+          <label className="block flex-1 text-sm">
+            <span className="block font-label text-[10px] uppercase text-muted">From</span>
+            <input className="field mt-1 w-full" type="text" inputMode="numeric" placeholder="DD/MM/YYYY" aria-label="Purge from" maxLength={10} value={fromText} onChange={(event) => setFromText(event.target.value)} autoFocus disabled={busy} />
+          </label>
+          <label className="block flex-1 text-sm">
+            <span className="block font-label text-[10px] uppercase text-muted">To</span>
+            <input className="field mt-1 w-full" type="text" inputMode="numeric" placeholder="DD/MM/YYYY" aria-label="Purge to" maxLength={10} value={toText} onChange={(event) => setToText(event.target.value)} disabled={busy} />
+          </label>
+        </div>
+        {error && <p className="text-alert mb-3">{error}</p>}
+        <div className="flex justify-end gap-2">
+          <button type="button" className="btn" onClick={onClose} disabled={busy}>
+            Cancel
+          </button>
+          <button type="submit" className="btn btn-danger" disabled={busy}>
+            Purge
+          </button>
+        </div>
+      </form>
     </div>
   );
 }

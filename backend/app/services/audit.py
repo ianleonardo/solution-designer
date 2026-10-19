@@ -1,7 +1,7 @@
 """Audit log: who changed what, and when.
 
 Every request that changes something is recorded by `AuditMiddleware` (app/audit_middleware.py); sign-ins and failed
-sign-ins are recorded by the login route. Entries are append-only and are never edited or deleted by the app.
+sign-ins are recorded by the login route. An admin can delete a range of dates; nothing else edits the log.
 """
 
 import json
@@ -35,7 +35,7 @@ LABEL_KEYS = (
     "format",
 )
 # Words at the end of a route that name an action rather than a thing.
-ACTION_WORDS = {"order", "upload", "validate", "generate", "regenerate", "export", "sections-order", "login", "delete-batch"}
+ACTION_WORDS = {"order", "upload", "validate", "generate", "regenerate", "export", "sections-order", "login", "delete-batch", "purge"}
 SINGULAR = {
     "projects": "project",
     "documents": "document",
@@ -259,6 +259,22 @@ def list_entries(
     capped = max(1, min(int(limit), 10000))
     rows = db.fetchall(f"SELECT * FROM audit_log {where} ORDER BY occurred_at DESC, audit_id LIMIT {capped}", params)
     return [_entry(row) for row in rows]
+
+
+def purge_entries(since: str, until: str) -> int:
+    """Delete entries on the dates from `since` through `until` (YYYY-MM-DD, UTC). Both dates are required."""
+    start = _day(since)
+    end = _day(until)
+    if start is None or end is None:
+        raise AppError(400, "Choose a from date and a to date.")
+    if start > end:
+        raise AppError(400, "The from date must be on or before the to date.")
+    params = [start, end + _ONE_DAY]
+    found = db.fetchone("SELECT COUNT(*) AS removed FROM audit_log WHERE occurred_at >= ? AND occurred_at < ?", params)
+    removed = int(found["removed"]) if found else 0
+    db.exec_sql("DELETE FROM audit_log WHERE occurred_at >= ? AND occurred_at < ?", params)
+    gcs.upload_db()
+    return removed
 
 
 def known_actions() -> list[str]:
