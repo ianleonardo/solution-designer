@@ -9,7 +9,7 @@ import sys
 from markdown_it import MarkdownIt
 
 from app.errors import AppError
-from app.services import diagrams, images
+from app.services import diagrams, images, mermaid_render
 
 logger = logging.getLogger(__name__)
 
@@ -113,14 +113,33 @@ def _pdf_css() -> str:
     return f"body{{font-size:{_px(16)};}}th,td{{font-size:{_px(14)};}}pre{{font-size:{_px(13)};}}"
 
 
+def _mermaid_sources(templates: list[dict], content: dict) -> list[str]:
+    sources: list[str] = []
+    sections = content.get("sections") or {}
+    for template in sorted(templates, key=lambda item: item["sequence_order"]):
+        section = sections.get(template["template_id"]) or {}
+        for block in section.get("blocks") or []:
+            if block.get("type") == "diagram" and block.get("mermaid"):
+                sources.append(str(block["mermaid"]))
+    return sources
+
+
 def _render_html(
     project_name: str, templates: list[dict], content: dict, placeholders: bool = False, pdf: bool = False
 ) -> tuple[str, list]:
-    """The page as HTML. Diagrams are drawn as inline SVG; with `placeholders` they are marked for the FPDF fallback.
+    """The page as HTML. Diagrams are Mermaid pictures; with `placeholders` they are marked for the FPDF fallback.
 
-    With `pdf` the text is set smaller, for the PDF only; the HTML page and preview keep their sizes.
+    With `pdf` the text is set smaller, and diagram labels are SVG text so they survive WeasyPrint.
+    The HTML page keeps Mermaid's HTML labels, matching the Markdown preview.
     """
     scenes: list = []
+    sources = _mermaid_sources(templates, content)
+    pictures = (
+        [None] * len(sources)
+        if placeholders
+        else mermaid_render.render_svgs(sources, html_labels=not pdf)
+    )
+    cursor = 0
     parts = [
         "<!DOCTYPE html><html><head><meta charset=\"utf-8\"><title>",
         html.escape(project_name),
@@ -131,7 +150,7 @@ def _render_html(
         "th,td{border:1px solid #c3c6d2;padding:6px 8px;vertical-align:top;font-size:14px;}",
         "th{background:#f0f4f8;text-align:left;}",
         "pre{background:#0e1626;color:#dbe1ff;padding:1rem;overflow:auto;}",
-        "figure.diagram{margin:1rem 0;text-align:center;}",
+        "figure.diagram{margin:0.75rem auto;text-align:center;}",
         "figure.diagram svg{max-width:100%;height:auto;}",
         _pdf_css() if pdf else "",
         "</style></head><body>",
@@ -171,6 +190,11 @@ def _render_html(
                     parts.append("</tr>")
                 parts.append("</tbody></table>")
             elif block.get("type") == "diagram" and block.get("mermaid"):
+                picture = pictures[cursor] if cursor < len(pictures) else None
+                cursor += 1
+                if picture and not placeholders:
+                    parts.append(f'<figure class="diagram">{picture}</figure>')
+                    continue
                 scene = diagrams.scene_for_block(block)
                 if scene is None:
                     # Mermaid the app cannot draw is kept as text rather than dropped.
@@ -185,7 +209,7 @@ def _render_html(
 
 
 def render_pdf_document(project_name: str, templates: list[dict], content: dict) -> bytes:
-    """The PDF of a document: WeasyPrint draws the SVG diagrams; the FPDF fallback draws them from the same shapes."""
+    """The PDF of a document. WeasyPrint draws the Mermaid pictures; the FPDF fallback draws the plainer shapes."""
     page, _ = _render_html(project_name, templates, content, pdf=True)
     rendered = _render_pdf_weasyprint(page)
     if rendered is not None:

@@ -10,7 +10,7 @@ from app import db
 from app.config import CONTENT_AUTHORS, KB_EDITORS, data_dir, kb_countries
 from app.errors import AppError
 from app.seed_layouts import SDD_LAYOUT_ID
-from app.services import documents, files, gcs, images, layouts, project_rag
+from app.services import documents, files, gcs, images, ldap_auth, layouts, project_rag
 from app.services.files import PREFIX
 
 
@@ -29,13 +29,28 @@ def public_user(row: dict) -> dict:
         "username": row["username"],
         "login_id": row["email"],
         "role_name": row["role_name"],
+        "auth_provider": (row.get("auth_provider") or "local"),
         "created_at": row["created_at"],
     }
 
 
+def _password_matches(hashed: str, password: str) -> bool:
+    if not password or not hashed or not str(hashed).startswith("$2"):
+        return False
+    try:
+        return bcrypt.checkpw(password.encode(), hashed.encode())
+    except ValueError:
+        return False
+
+
 def authenticate(login_id: str, password: str) -> dict:
     row = db.fetchone("SELECT * FROM users WHERE lower(email) = ?", [login_id.strip().lower()])
-    if row is None or not bcrypt.checkpw(password.encode(), row["password_hash"].encode()):
+    if row is None:
+        raise AppError(401, "Invalid login ID or password")
+    if (row.get("auth_provider") or "local") == "ldap":
+        ldap_auth.authenticate(row["email"], password)
+        return public_user(row)
+    if not _password_matches(row["password_hash"], password):
         raise AppError(401, "Invalid login ID or password")
     return public_user(row)
 
@@ -439,28 +454,46 @@ def list_users(user: dict) -> list[dict]:
 
 ROLES = {"Admin", "Analyst", "Viewer"}
 LOGIN_ID_PATTERN = re.compile(r"^[A-Za-z0-9]{3,64}$")
+UNUSABLE_PASSWORD = "!"
 
 
-def create_user(actor: dict, login_id: str, password: str, role_name: str, username: str) -> dict:
+def _provider(value: str) -> str:
+    provider = (value or "local").strip().lower()
+    if provider == "local":
+        return "local"
+    if provider == "ldap":
+        return "ldap"
+    raise AppError(400, "Sign-in must be local or Active Directory (LDAP).")
+
+
+def create_user(actor: dict, login_id: str, password: str, role_name: str, username: str, auth_provider: str = "local") -> dict:
     """The Login ID is a plain ID, not an email (stored in the legacy `email` column)."""
     _ensure(actor, {"Admin"})
     if role_name not in ROLES:
         raise AppError(400, "Unknown role")
-    if len(password) < 8:
-        raise AppError(400, "Password must be at least 8 characters")
+    provider = _provider(auth_provider)
     cleaned = login_id.strip()
     if not LOGIN_ID_PATTERN.fullmatch(cleaned):
         raise AppError(400, "Login ID must be 3-64 letters or numbers, with no spaces or special characters")
     if db.fetchone("SELECT user_id FROM users WHERE lower(email) = ?", [cleaned.lower()]):
         raise AppError(400, "A user with that Login ID already exists")
+    if provider == "ldap":
+        if password.strip():
+            raise AppError(400, "Active Directory users sign in through LDAP. Do not set a password.")
+        if not ldap_auth.configured():
+            raise AppError(400, "LDAP is not configured. Set LDAP_URL in the environment.")
+        hashed = UNUSABLE_PASSWORD
+    else:
+        if len(password) < 8:
+            raise AppError(400, "Password must be at least 8 characters")
+        hashed = bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode()
     user_id = str(uuid.uuid4())
-    hashed = bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode()
     db.exec_sql(
         """
-        INSERT INTO users (user_id, username, email, password_hash, role_name, created_at)
-        VALUES (?, ?, ?, ?, ?, ?)
+        INSERT INTO users (user_id, username, email, password_hash, role_name, auth_provider, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
         """,
-        [user_id, username.strip() or cleaned, cleaned, hashed, role_name, _now()],
+        [user_id, username.strip() or cleaned, cleaned, hashed, role_name, provider, _now()],
     )
     gcs.upload_db()
     row = db.fetchone("SELECT * FROM users WHERE user_id = ?", [user_id])
@@ -472,8 +505,11 @@ def _admin_count() -> int:
     return row["c"] if row else 0
 
 
-def update_user(actor: dict, user_id: str, username: str, role_name: str, password: str = "") -> dict:
-    """The display name, role, and password can change. The Login ID is fixed. A blank password is left as it is."""
+def update_user(actor: dict, user_id: str, username: str, role_name: str, password: str = "", auth_provider: str | None = None) -> dict:
+    """The display name, role, sign-in method, and password can change. The Login ID is fixed.
+
+    A blank password is left as it is for a local user. An Active Directory user has no stored password.
+    """
     _ensure(actor, {"Admin"})
     row = db.fetchone("SELECT * FROM users WHERE user_id = ?", [user_id])
     if row is None:
@@ -485,19 +521,35 @@ def update_user(actor: dict, user_id: str, username: str, role_name: str, passwo
         raise AppError(400, "Name is required")
     if len(cleaned) > 100:
         raise AppError(400, "Name must be 100 characters or fewer")
-    new_password = password.strip()
-    if new_password and len(new_password) < 8:
-        raise AppError(400, "Password must be at least 8 characters")
     if row["role_name"] == "Admin" and role_name != "Admin" and _admin_count() <= 1:
         raise AppError(400, "The last admin cannot be demoted")
-    if new_password:
+    current_provider = (row.get("auth_provider") or "local").strip().lower()
+    provider = _provider(auth_provider) if auth_provider is not None else current_provider
+    new_password = password.strip()
+    if provider == "ldap":
+        if new_password:
+            raise AppError(400, "Active Directory users sign in through LDAP. Do not set a password.")
+        if not ldap_auth.configured():
+            raise AppError(400, "LDAP is not configured. Set LDAP_URL in the environment.")
+        db.exec_sql(
+            "UPDATE users SET username = ?, role_name = ?, auth_provider = ?, password_hash = ? WHERE user_id = ?",
+            [cleaned, role_name, provider, UNUSABLE_PASSWORD, user_id],
+        )
+    elif current_provider == "ldap" and not new_password:
+        raise AppError(400, "Set a password when changing this user to a local sign-in.")
+    elif new_password:
+        if len(new_password) < 8:
+            raise AppError(400, "Password must be at least 8 characters")
         hashed = bcrypt.hashpw(new_password.encode(), bcrypt.gensalt()).decode()
         db.exec_sql(
-            "UPDATE users SET username = ?, role_name = ?, password_hash = ? WHERE user_id = ?",
-            [cleaned, role_name, hashed, user_id],
+            "UPDATE users SET username = ?, role_name = ?, auth_provider = ?, password_hash = ? WHERE user_id = ?",
+            [cleaned, role_name, provider, hashed, user_id],
         )
     else:
-        db.exec_sql("UPDATE users SET username = ?, role_name = ? WHERE user_id = ?", [cleaned, role_name, user_id])
+        db.exec_sql(
+            "UPDATE users SET username = ?, role_name = ?, auth_provider = ? WHERE user_id = ?",
+            [cleaned, role_name, provider, user_id],
+        )
     gcs.upload_db()
     return public_user(db.fetchone("SELECT * FROM users WHERE user_id = ?", [user_id]))
 

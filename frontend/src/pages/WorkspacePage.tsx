@@ -508,7 +508,7 @@ export function WorkspacePage() {
                 </div>
               );
             })}
-            {section && !documentLocked && section.blocks.every((item) => item.type !== "diagram") && (
+            {section && !documentLocked && (activeTemplate?.blocks ?? []).some((item) => item.type === "diagram") && section.blocks.every((item) => item.type !== "diagram") && (
               <button type="button" className="btn" onClick={() => insertDiagram(section.blocks.length - 1)}>
                 <span className="material-symbols-outlined text-sm" aria-hidden="true">add</span>
                 Add diagram

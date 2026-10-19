@@ -82,6 +82,31 @@ describe("UsersPage", () => {
     expect(JSON.parse(String((patch?.[1] as RequestInit).body))).toEqual({ username: "Maya K", role_name: "Viewer", password: "NewPassword1" });
   });
 
+  it("creates an Active Directory user without a password", async () => {
+    const fetchMock = setup((_url, init) =>
+      init?.method === "POST" ? json({ user_id: "u3", username: "Ada", login_id: "ada", role_name: "Analyst", auth_provider: "ldap", created_at: "2026-10-13T12:00:00" }) : undefined,
+    );
+    await waitFor(() => expect(screen.getByText("maya")).toBeTruthy());
+    fireEvent.click(screen.getByRole("button", { name: "Add user" }));
+    fireEvent.change(screen.getByLabelText("Login ID"), { target: { value: "ada" } });
+    fireEvent.change(screen.getByLabelText("Name"), { target: { value: "Ada" } });
+    fireEvent.click(screen.getByLabelText("Sign-in"));
+    fireEvent.click(screen.getByRole("option", { name: "Active Directory (LDAP)" }));
+    const password = screen.getByLabelText("Password") as HTMLInputElement;
+    expect(password.disabled).toBe(true);
+    expect(screen.getByText(/No password is stored here/)).toBeTruthy();
+    fireEvent.click(screen.getAllByRole("button", { name: "Add user" })[1]);
+    await waitFor(() => expect(screen.getByText("Ada")).toBeTruthy());
+    const post = fetchMock.mock.calls.find((call) => (call[1] as RequestInit | undefined)?.method === "POST");
+    expect(JSON.parse(String((post?.[1] as RequestInit).body))).toEqual({
+      login_id: "ada",
+      username: "Ada",
+      role_name: "Analyst",
+      auth_provider: "ldap",
+    });
+    expect(screen.getByText("Active Directory")).toBeTruthy();
+  });
+
   it("confirms before deleting a user", async () => {
     const fetchMock = setup((_url, init) => (init?.method === "DELETE" ? json({ ok: true }) : undefined));
     await waitFor(() => expect(screen.getByText("maya")).toBeTruthy());

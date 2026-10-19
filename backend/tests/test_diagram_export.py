@@ -1,8 +1,9 @@
 import json
 import re
 
+import pytest
 from app.flow import mermaid_to_flow
-from app.services import diagrams, export
+from app.services import diagrams, export, mermaid_render
 from tests.conftest import auth, login
 
 TEMPLATES = [{"template_id": "s", "parent_id": None, "section_name": "Flows", "sequence_order": 100}]
@@ -38,6 +39,15 @@ def _class_block(mermaid=CLASS):
     return {"type": "diagram", "sequence": False, "mermaid": mermaid, "flow": None}
 
 
+_draw_with_mermaid = mermaid_render.render_svgs
+
+
+@pytest.fixture(autouse=True)
+def builtin_drawings(monkeypatch):
+    """These tests check the plainer drawings. The Mermaid picture is covered on its own."""
+    monkeypatch.setattr(export.mermaid_render, "render_svgs", lambda sources, html_labels=True: [None] * len(sources))
+
+
 def test_html_export_draws_diagrams_as_svg_not_source_text():
     page = export.render_html("T", TEMPLATES, _content(_flowchart_block(), _sequence_block(), _class_block()))
     assert page.count("<svg ") == 3
@@ -67,7 +77,9 @@ def test_the_scene_is_drawn_from_the_mermaid_text_whatever_else_the_block_holds(
     texts = [item["text"] for item in scene.items if item["kind"] == "text"]
     assert texts == ["Drawn one", "Drawn two"]
     assert scene.height > scene.width * 0.5 and scene.width > 0
-    assert diagrams.scene_for_block({"type": "diagram", "mermaid": "erDiagram\n  A ||--o{ B : has"}) is None
+    er = diagrams.scene_for_block({"type": "diagram", "mermaid": "erDiagram\n  A ||--o{ B : has"})
+    assert er is not None
+    assert "A" in [item["text"] for item in er.items if item["kind"] == "text"]
 
 
 def test_html_export_draws_class_diagrams():
@@ -99,8 +111,83 @@ def test_class_diagram_skips_direction_and_notes_instead_of_falling_back_to_sour
     assert "<svg " in page and "classDiagram" not in page and "direction LR" not in page
 
 
+PIE = 'pie title Volume by channel\n    "API" : 55\n    "Batch" : 30\n    "File" : 15'
+STATE = "stateDiagram-v2\n    [*] --> Received\n    Received --> Validated : valid\n    Received --> Rejected : invalid\n    Validated --> Settled\n    Settled --> [*]\n    Rejected --> [*]"
+ER = (
+    "erDiagram\n"
+    "    CUSTOMER ||--o{ ACCOUNT : holds\n"
+    "    ACCOUNT ||--o{ PAYMENT : makes\n"
+    "    CUSTOMER {\n"
+    "        string id\n"
+    "        string name\n"
+    "    }\n"
+    "    PAYMENT {\n"
+    "        string id\n"
+    "        decimal amount\n"
+    "    }"
+)
+GANTT = (
+    "gantt\n"
+    "    title Delivery plan\n"
+    "    dateFormat YYYY-MM-DD\n"
+    "    section Build\n"
+    "    Design      :a1, 2026-01-05, 10d\n"
+    "    Development :after a1, 20d\n"
+    "    section Release\n"
+    "    UAT         :10d\n"
+    "    Go live     :milestone, 2026-03-01, 0d"
+)
+
+
+def test_html_export_draws_pie_state_er_and_gantt():
+    page = export.render_html("T", TEMPLATES, _content(
+        {"type": "diagram", "sequence": False, "mermaid": PIE},
+        {"type": "diagram", "sequence": False, "mermaid": STATE},
+        {"type": "diagram", "sequence": False, "mermaid": ER},
+        {"type": "diagram", "sequence": False, "mermaid": GANTT},
+    ))
+    assert page.count("<svg ") == 4
+    assert "<pre>" not in page
+    for label in (
+        "Volume by channel",
+        "API (55)",
+        "Batch (30)",
+        "Received",
+        "Validated",
+        "valid",
+        "Start",
+        "End",
+        "CUSTOMER",
+        "1 holds 0..*",
+        "string id",
+        "Delivery plan",
+        "Design",
+        "Development",
+        "Go live",
+    ):
+        assert f">{label}</text>" in page, label
+    assert "stateDiagram-v2" not in page and "erDiagram" not in page and "dateFormat" not in page
+
+
+def test_pdf_export_includes_the_extra_diagrams():
+    content = _content(
+        {"type": "diagram", "mermaid": PIE},
+        {"type": "diagram", "mermaid": STATE},
+        {"type": "diagram", "mermaid": ER},
+        {"type": "diagram", "mermaid": GANTT},
+    )
+    pdf = export.render_pdf_document("T", TEMPLATES, content)
+    assert pdf.startswith(b"%PDF") and len(pdf) > 1000
+
+
 def test_scene_stays_inside_its_canvas():
-    for block in (_flowchart_block(), _sequence_block(), _class_block(), _flowchart_block("flowchart TB\n A --> A\n A --> B")):
+    extra = [
+        {"type": "diagram", "mermaid": PIE},
+        {"type": "diagram", "mermaid": STATE},
+        {"type": "diagram", "mermaid": ER},
+        {"type": "diagram", "mermaid": GANTT},
+    ]
+    for block in (_flowchart_block(), _sequence_block(), _class_block(), _flowchart_block("flowchart TB\n A --> A\n A --> B"), *extra):
         scene = diagrams.scene_for_block(block)
         for item in scene.items:
             xs = [item[k] for k in ("x", "x1", "x2") if k in item] + [p[0] for p in item.get("points", [])]
@@ -149,7 +236,64 @@ def test_fallback_pdf_places_diagrams_between_text(monkeypatch):
     assert all(width > 0 for _, width in seen)
 
 
+def test_html_export_embeds_the_mermaid_picture(monkeypatch):
+    picture = '<svg id="exportDiagram0" xmlns="http://www.w3.org/2000/svg"><text>Start</text></svg>'
+    monkeypatch.setattr(export.mermaid_render, "render_svgs", lambda sources, html_labels=True: [picture] * len(sources))
+    page = export.render_html("T", TEMPLATES, _content(_flowchart_block()))
+    assert 'id="exportDiagram0"' in page and "<pre>" not in page and "flowchart LR" not in page
+
+
+def test_html_keeps_mermaid_labels_and_pdf_asks_for_svg_text(monkeypatch):
+    seen = []
+
+    def spy(sources, html_labels=True):
+        seen.append(html_labels)
+        return ['<svg xmlns="http://www.w3.org/2000/svg"><text>Start</text></svg>'] * len(sources)
+
+    monkeypatch.setattr(export.mermaid_render, "render_svgs", spy)
+    html_page = export.render_html("T", TEMPLATES, _content(_flowchart_block()))
+    pdf_page, _ = export._render_html("T", TEMPLATES, _content(_flowchart_block()), pdf=True)
+    assert seen == [True, False]
+    assert "<text>Start</text>" in html_page and "<text>Start</text>" in pdf_page
+
+
+def test_a_diagram_mermaid_cannot_draw_falls_back_to_the_plainer_picture(monkeypatch):
+    monkeypatch.setattr(export.mermaid_render, "render_svgs", lambda sources, html_labels=True: [None] * len(sources))
+    page = export.render_html("T", TEMPLATES, _content(_flowchart_block()))
+    assert "<svg " in page and ">Start</text>" in page and "flowchart LR" not in page
+
+
+def test_mermaid_pictures_are_half_the_natural_size():
+    cleaned = mermaid_render._picture(
+        {"svg": '<svg id="exportDiagram0" width="100%" style="max-width: 400px;" viewBox="-10 0 400 200"></svg>'}
+    )
+    assert cleaned is not None
+    assert 'width="200"' in cleaned and 'height="100"' in cleaned and "max-width: 200px" in cleaned
+    assert 'width="100%"' not in cleaned
+
+
+def test_a_script_in_a_diagram_picture_is_removed():
+    cleaned = mermaid_render._picture(
+        {"svg": '<svg xmlns="http://www.w3.org/2000/svg"><script>alert(1)</script><text onclick="x">Hi</text></svg>'}
+    )
+    assert cleaned is not None and "<script" not in cleaned and "onclick" not in cleaned and ">Hi</text>" in cleaned
+
+
+def test_chrome_draws_the_same_mermaid_picture_as_markdown(monkeypatch):
+    monkeypatch.setattr(export.mermaid_render, "render_svgs", _draw_with_mermaid)
+    page = export.render_html("T", TEMPLATES, _content(_flowchart_block(), {"type": "diagram", "mermaid": PIE}))
+    if "exportDiagram0" not in page:
+        pytest.skip("Chrome is not available to draw Mermaid")
+    assert "exportDiagram1" in page and "Start" in page and "API" in page
+    assert "flowchart LR" not in page and "<pre>" not in page
+
+
 def test_json_round_trip_of_a_scene_is_plain_data():
     scene = diagrams.scene_for_block(_flowchart_block())
     assert json.loads(json.dumps(scene.items, default=list))
-    assert re.search(r'viewBox="0 0 [\d.]+ [\d.]+"', diagrams.to_svg(scene))
+    svg = diagrams.to_svg(scene)
+    assert re.search(r'viewBox="0 0 [\d.]+ [\d.]+"', svg)
+    shown = re.search(r'width="([\d.]+)" height="([\d.]+)"', svg)
+    assert shown is not None
+    assert float(shown.group(1)) <= scene.width * diagrams.EXPORT_SCALE + 0.1
+    assert float(shown.group(2)) <= min(scene.height * diagrams.EXPORT_SCALE, diagrams.MAX_DISPLAY_HEIGHT) + 0.1

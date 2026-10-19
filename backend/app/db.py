@@ -464,6 +464,15 @@ def _ensure_columns() -> None:
     if "has_capability" not in system_columns:
         _conn.execute("ALTER TABLE systems ADD COLUMN has_capability BOOLEAN DEFAULT FALSE")
         _conn.execute("UPDATE systems SET has_capability = FALSE WHERE has_capability IS NULL")
+    user_columns = {
+        row[0]
+        for row in _conn.execute(
+            "SELECT column_name FROM information_schema.columns WHERE table_name = 'users'"
+        ).fetchall()
+    }
+    if "auth_provider" not in user_columns:
+        _conn.execute("ALTER TABLE users ADD COLUMN auth_provider VARCHAR DEFAULT 'local'")
+        _conn.execute("UPDATE users SET auth_provider = 'local' WHERE auth_provider IS NULL")
     batch_columns = {
         row[0]
         for row in _conn.execute(
@@ -559,9 +568,9 @@ def _seed_llm_providers() -> None:
             "spirare",
             "Spirare",
             "default",
-            "https://is-egp.sg.uobnet.com/wip/v1/chat/completions",
+            "https://s-egp.sg.uobnet.com/nlp/v1/chat/completions",
             "/data/genai/models/bge-m3",
-            "https://is-egp.sg.uobnet.com/embedding/v1/embeddings",
+            "https://s-egp.sg.uobnet.com/embedding/v1/embeddings",
         ),
     ]
     for provider, label, chat_model, chat_url, embedding_model, embedding_url in defaults:

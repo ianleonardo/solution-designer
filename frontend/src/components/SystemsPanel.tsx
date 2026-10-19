@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { api, ApiError } from "../api";
+import { api, ApiError, type RowError } from "../api";
 import { useOptionalAuth } from "../auth";
 import type { SystemRecord } from "../types";
 import { ConfirmDialog } from "./ConfirmDialog";
@@ -15,6 +15,8 @@ export function SystemsPanel() {
   const [dialog, setDialog] = useState<{ system?: SystemRecord } | null>(null);
   const [deleting, setDeleting] = useState<SystemRecord | null>(null);
   const [error, setError] = useState("");
+  const [problems, setProblems] = useState<RowError[]>([]);
+  const [uploading, setUploading] = useState(false);
 
   useEffect(() => {
     api<SystemRecord[]>("/api/systems")
@@ -25,6 +27,23 @@ export function SystemsPanel() {
   function saved(record: SystemRecord) {
     setItems((current) => [...current.filter((item) => item.system_code !== record.system_code), record].sort((a, b) => a.system_code.localeCompare(b.system_code)));
     setDialog(null);
+  }
+
+  async function upload(file: File) {
+    setUploading(true);
+    setError("");
+    setProblems([]);
+    try {
+      const body = new FormData();
+      body.append("file", file);
+      const saved = await api<SystemRecord[]>("/api/systems/upload", { method: "POST", body });
+      setItems(saved);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Upload failed");
+      if (err instanceof ApiError) setProblems(err.errors);
+    } finally {
+      setUploading(false);
+    }
   }
 
   async function remove() {
@@ -68,9 +87,20 @@ export function SystemsPanel() {
     <div className="p-6 max-w-[1400px] space-y-4">
       <div>
         <h1 className="font-headline text-2xl font-semibold">Systems</h1>
-        <p className="text-muted mt-0.5">The systems catalogue. Interfaces refer to these system codes, and so do each system's upstreams and downstreams.</p>
+        <p className="text-muted mt-0.5">
+          The systems catalogue. Interfaces refer to these system codes, and so do each system's upstreams and downstreams. Upload an Excel (.xlsx) with columns SYSTEM_CODE, SYSTEM_NAME and DESCRIPTION. Description can be left blank.
+        </p>
       </div>
       {error && <p className="text-alert">{error}</p>}
+      {problems.length > 0 && (
+        <ul className="max-h-56 overflow-auto rounded-lg border border-hairline p-3 text-alert space-y-1" aria-label="Upload problems">
+          {problems.map((problem, index) => (
+            <li key={index}>
+              Row {problem.row}, {problem.field}: {problem.message}
+            </li>
+          ))}
+        </ul>
+      )}
       <DataTable
         rows={items}
         columns={columns}
@@ -82,10 +112,30 @@ export function SystemsPanel() {
         searchPlaceholder="Search systems"
         toolbar={
           canEdit ? (
-            <button type="button" className="btn btn-primary" onClick={() => setDialog({})}>
-              <span className="material-symbols-outlined text-base">add</span>
-              Add
-            </button>
+            <div className="flex items-center gap-2">
+              <button type="button" className="btn btn-primary" onClick={() => setDialog({})}>
+                <span className="material-symbols-outlined text-base">add</span>
+                Add
+              </button>
+              <label className={`btn cursor-pointer ${uploading ? "opacity-50" : ""}`}>
+                <span className="material-symbols-outlined text-base" aria-hidden="true">
+                  upload
+                </span>
+                {uploading ? "Uploading…" : "Upload Excel"}
+                <input
+                  className="hidden"
+                  type="file"
+                  aria-label="Upload systems Excel"
+                  accept=".xlsx"
+                  disabled={uploading}
+                  onChange={(event) => {
+                    const file = event.target.files?.[0];
+                    event.target.value = "";
+                    if (file) void upload(file);
+                  }}
+                />
+              </label>
+            </div>
           ) : undefined
         }
       />

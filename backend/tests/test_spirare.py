@@ -1,5 +1,13 @@
 from app.services.llm_adapters.base import ProviderConfig
-from app.services.llm_adapters.spirare import CHAT_URL, EMBEDDING_URL, SpirareAdapter
+from app.services.llm_adapters.spirare import (
+    CHAT_URL,
+    CONTEXT_LIMIT,
+    EMBEDDING_URL,
+    OUTPUT_TOKENS,
+    SpirareAdapter,
+    _estimate_tokens,
+    fit_chat,
+)
 
 
 def _adapter(**overrides) -> SpirareAdapter:
@@ -78,3 +86,43 @@ def test_spirare_appends_paths_to_a_base_url(monkeypatch):
     adapter.complete("s", "u", 0)
     assert seen["url"] == "https://example.test/wip/v1/chat/completions"
     assert seen["verify"] is True
+
+
+def test_spirare_keeps_prompt_and_output_inside_the_context_window():
+    system, user, max_tokens = fit_chat("You are a helpful assistant.", "Where was it played?")
+    assert user == "Where was it played?"
+    assert max_tokens == OUTPUT_TOKENS
+
+    question = "\n\nQUESTION:\nWhich system owns payments?"
+    long_user = ("context " * 40000) + question
+    system, user, max_tokens = fit_chat("system", long_user)
+    assert len(user) < len(long_user)
+    assert user.endswith("Which system owns payments?")
+    assert "omitted" in user
+    assert _estimate_tokens(system) + _estimate_tokens(user) + max_tokens + 32 <= CONTEXT_LIMIT
+    assert max_tokens >= 256
+
+
+def test_spirare_retries_when_the_server_still_reports_a_context_overflow(monkeypatch):
+    calls = []
+
+    class Response:
+        def __init__(self, status, text, body=None):
+            self.status_code = status
+            self.text = text
+            self._body = body or {}
+
+        def json(self):
+            return self._body
+
+    def fake_post(url, **kwargs):
+        calls.append(kwargs["json"])
+        if len(calls) == 1:
+            return Response(400, "maximum context length is 32768 but requested output and prompt token exceeded")
+        return Response(200, "", {"choices": [{"message": {"content": "short answer"}}]})
+
+    monkeypatch.setattr("httpx.post", fake_post)
+    assert _adapter().complete("system", "question", 0.2) == "short answer"
+    assert calls[0]["max_tokens"] == OUTPUT_TOKENS
+    assert calls[1]["max_tokens"] < calls[0]["max_tokens"]
+    assert len(calls[1]["messages"][1]["content"]) <= len(calls[0]["messages"][1]["content"])

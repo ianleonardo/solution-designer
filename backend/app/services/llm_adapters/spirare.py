@@ -2,8 +2,17 @@ import httpx
 
 from app.services.llm_adapters.base import LLMAdapter
 
-CHAT_URL = "https://is-egp.sg.uobnet.com/wip/v1/chat/completions"
-EMBEDDING_URL = "https://is-egp.sg.uobnet.com/embedding/v1/embeddings"
+CHAT_URL = "https://s-egp.sg.uobnet.com/nlp/v1/chat/completions"
+EMBEDDING_URL = "https://s-egp.sg.uobnet.com/embedding/v1/embeddings"
+
+# Spirare rejects a request when prompt tokens plus requested output tokens exceed this window.
+CONTEXT_LIMIT = 32768
+OUTPUT_TOKENS = 4096
+MIN_OUTPUT_TOKENS = 256
+# Over-estimate tokens (about 3 characters each) so a long prompt is cut before the server returns 400.
+CHARS_PER_TOKEN = 3
+_FRAMING_TOKENS = 32
+_OMITTED = "\n[Earlier context was omitted because it exceeded the model limit.]\n"
 
 
 def _endpoint(url: str, suffix: str) -> str:
@@ -14,6 +23,58 @@ def _endpoint(url: str, suffix: str) -> str:
     if cleaned.endswith(suffix):
         return cleaned
     return f"{cleaned}/{suffix}"
+
+
+def _estimate_tokens(text: str) -> int:
+    return (len(text) + CHARS_PER_TOKEN - 1) // CHARS_PER_TOKEN
+
+
+def _clip(text: str, max_chars: int) -> str:
+    if len(text) <= max_chars:
+        return text
+    if max_chars <= len(_OMITTED):
+        return text[:max_chars]
+    return text[: max_chars - len(_OMITTED)] + _OMITTED
+
+
+def _clip_user(user: str, max_chars: int) -> str:
+    """Keep the question at the end of a chat prompt and drop earlier context first."""
+    if len(user) <= max_chars:
+        return user
+    marker = "\n\nQUESTION:\n"
+    if marker in user and max_chars > len(_OMITTED) + 80:
+        head, question = user.rsplit(marker, 1)
+        tail = marker + question
+        room = max_chars - len(_OMITTED) - len(tail)
+        if room > 0:
+            return head[:room] + _OMITTED + tail
+        if len(tail) + len(_OMITTED) <= max_chars:
+            return _OMITTED + tail
+        return _clip(tail, max_chars)
+    return _clip(user, max_chars)
+
+
+def fit_chat(system: str, user: str) -> tuple[str, str, int]:
+    """Return a system prompt, user prompt and max_tokens that fit in the Spirare context window."""
+    output = OUTPUT_TOKENS
+    if _estimate_tokens(system) + _estimate_tokens(user) + output + _FRAMING_TOKENS <= CONTEXT_LIMIT:
+        return system, user, output
+    room = CONTEXT_LIMIT - _FRAMING_TOKENS - _estimate_tokens(system) - _estimate_tokens(user)
+    if room >= MIN_OUTPUT_TOKENS:
+        return system, user, min(output, room)
+    output = MIN_OUTPUT_TOKENS
+    user_budget = CONTEXT_LIMIT - _FRAMING_TOKENS - output - _estimate_tokens(system)
+    if user_budget < 64:
+        system_tokens = max(128, CONTEXT_LIMIT - _FRAMING_TOKENS - output - 512)
+        system = _clip(system, system_tokens * CHARS_PER_TOKEN)
+        user_budget = CONTEXT_LIMIT - _FRAMING_TOKENS - output - _estimate_tokens(system)
+    user = _clip_user(user, max(0, user_budget) * CHARS_PER_TOKEN)
+    return system, user, output
+
+
+def _context_overflow(detail: str) -> bool:
+    text = detail.lower()
+    return "context length" in text or "maximum context" in text or "prompt token" in text
 
 
 class SpirareAdapter(LLMAdapter):
@@ -33,6 +94,7 @@ class SpirareAdapter(LLMAdapter):
             json=payload,
             timeout=120,
             verify=self.config.verify_ssl,
+            trust_env=False,
         )
         if response.status_code >= 400:
             detail = " ".join(response.text.split())
@@ -43,20 +105,28 @@ class SpirareAdapter(LLMAdapter):
 
     def complete(self, system: str, user: str, temperature: float) -> str:
         url = _endpoint(self.config.chat_base_url, "chat/completions")
-        body = self._post(
-            url,
-            {
-                "model": self.config.chat_model,
-                "temperature": temperature,
-                "messages": [
-                    {"role": "system", "content": system},
-                    {"role": "user", "content": user},
-                ],
-            },
-            self.config.api_key,
-        )
+        system, user, max_tokens = fit_chat(system, user)
+        try:
+            body = self._post(url, self._chat_payload(system, user, temperature, max_tokens), self.config.api_key)
+        except RuntimeError as exc:
+            if not _context_overflow(str(exc)):
+                raise
+            # The character estimate can still be short of the server's tokenizer. Shrink once and retry.
+            system, user, max_tokens = fit_chat(system[: len(system) // 2], user[: len(user) // 2])
+            body = self._post(url, self._chat_payload(system, user, temperature, min(max_tokens, MIN_OUTPUT_TOKENS)), self.config.api_key)
         message = ((body.get("choices") or [{}])[0].get("message") or {})
         return str(message.get("content") or "")
+
+    def _chat_payload(self, system: str, user: str, temperature: float, max_tokens: int) -> dict:
+        return {
+            "model": self.config.chat_model,
+            "temperature": temperature,
+            "max_tokens": max_tokens,
+            "messages": [
+                {"role": "system", "content": system},
+                {"role": "user", "content": user},
+            ],
+        }
 
     def embed(self, text: str) -> list[float] | None:
         if not self.embedding_configured():

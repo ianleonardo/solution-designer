@@ -1,9 +1,10 @@
 """Draws a diagram block as a picture for the HTML and PDF exports.
 
 Mermaid needs a browser to draw, which an export does not have, so the diagram is drawn from the Mermaid text when
-it is simple enough to read (flowcharts, sequence diagrams and class diagrams of the common kind). The result is a
-`Scene`: a list of simple shapes that become an inline SVG for HTML (and WeasyPrint) or are drawn with FPDF when
-WeasyPrint is not available. Diagrams that cannot be read are left to the caller, which prints the Mermaid source.
+it is simple enough to read (flowcharts, sequence diagrams, class diagrams, state diagrams, entity relationships,
+Gantt charts and pie charts). The result is a `Scene`: a list of simple shapes that become an inline SVG for HTML
+(and WeasyPrint) or are drawn with FPDF when WeasyPrint is not available. Diagrams that cannot be read are left to
+the caller, which prints the Mermaid source.
 """
 
 import html
@@ -11,8 +12,9 @@ import math
 import re
 import textwrap
 from dataclasses import dataclass, field
+from datetime import datetime, timedelta
 
-from app.flow import mermaid_to_flow, mermaid_to_flowchart, normalize_flowchart
+from app.flow import _layout, mermaid_to_flow, mermaid_to_flowchart, normalize_flowchart
 
 INK = "#131b2e"
 LINE = "#1a4b8c"
@@ -454,10 +456,399 @@ def class_scene(diagram: dict) -> Scene | None:
     return _shift(scene, bounds.min_x, bounds.min_y, bounds.max_x, bounds.max_y)
 
 
+_PIE_COLORS = ("#1a4b8c", "#c47b2b", "#1f7a4d", "#8c3a6e", "#3d6b8c", "#8c1a1a", "#5c6b2f", "#6b4c9a")
+_PIE_SLICE = re.compile(r'^(?:"([^"]+)"|([^:]+?))\s*:\s*([0-9]+(?:\.[0-9]+)?)\s*$')
+_STATE_ARROW = re.compile(r"^(\[\*\]|[A-Za-z_][\w]*)\s+-->\s+(\[\*\]|[A-Za-z_][\w]*)(?:\s*:\s*(.*))?$")
+_STATE_ALIAS = re.compile(r'^state\s+"([^"]+)"\s+as\s+([A-Za-z_][\w]*)\s*$', re.I)
+_STATE_OPEN = re.compile(r'^state\s+(?:"([^"]+)"\s+as\s+)?([A-Za-z_][\w]*)\s*\{\s*$', re.I)
+_ER_REL = re.compile(
+    r"^([A-Za-z_][\w]*)\s+([|o}][|o{])(--|\.\.)([|o}][|o{])\s+([A-Za-z_][\w]*)(?:\s*:\s*(.*))?$"
+)
+_ER_CARD = {"||": "1", "o|": "0..1", "|o": "0..1", "}|": "1..*", "|{": "1..*", "}o": "0..*", "o{": "0..*"}
+_GANTT_STATUS = {"done", "active", "crit", "milestone"}
+
+
+def _diagram_lines(source: str) -> list[str]:
+    lines = [line.strip() for line in (source or "").replace("\r\n", "\n").replace("\r", "\n").splitlines()]
+    return [line for line in lines if line and not line.startswith("%%")]
+
+
+def _head(source: str) -> str:
+    lines = _diagram_lines(source)
+    return lines[0].lower() if lines else ""
+
+
+def is_pie(source: str) -> bool:
+    head = _head(source)
+    return head == "pie" or head.startswith("pie ")
+
+
+def is_state_diagram(source: str) -> bool:
+    head = _head(source)
+    return head == "statediagram" or head.startswith("statediagram-v2") or head.startswith("statediagram ")
+
+
+def is_er_diagram(source: str) -> bool:
+    head = _head(source)
+    return head == "erdiagram" or head.startswith("erdiagram ")
+
+
+def is_gantt(source: str) -> bool:
+    head = _head(source)
+    return head == "gantt" or head.startswith("gantt ")
+
+
+def _wedge(cx: float, cy: float, radius: float, start: float, end: float) -> list[tuple[float, float]]:
+    span = end - start
+    steps = max(2, int(abs(span) / (math.pi / 18)))
+    points = [(cx, cy)]
+    for step in range(steps + 1):
+        angle = start + span * step / steps
+        points.append((cx + radius * math.cos(angle), cy + radius * math.sin(angle)))
+    return points
+
+
+def pie_scene(source: str) -> Scene | None:
+    """A pie chart: slices around a circle and a legend with each share."""
+    if not is_pie(source):
+        return None
+    lines = _diagram_lines(source)
+    rest = lines[0][3:].strip()
+    title = ""
+    if rest.lower().startswith("showdata"):
+        rest = rest[8:].strip()
+    if rest.lower().startswith("title"):
+        title = rest[5:].strip().strip('"')
+    slices: list[tuple[str, float]] = []
+    for line in lines[1:]:
+        if line.lower().startswith("title ") and not title:
+            title = line[6:].strip().strip('"')
+            continue
+        if line.lower() in {"showdata", "showdata true"}:
+            continue
+        matched = _PIE_SLICE.match(line)
+        if not matched:
+            continue
+        label = (matched.group(1) or matched.group(2) or "").strip()
+        slices.append((label or "—", float(matched.group(3))))
+    total = sum(value for _, value in slices)
+    if total <= 0:
+        return None
+    scene, bounds = Scene(), _Bounds()
+    cx, cy, radius = 0.0, 0.0, 78.0
+    if title:
+        scene.items.append({"kind": "text", "x": cx, "y": -radius - 18, "text": title, "size": FONT, "anchor": "middle", "fill": INK})
+        bounds.box(-_text_width(title) / 2, -radius - 26, _text_width(title), 16)
+    angle = -math.pi / 2
+    legend_x = radius + 28
+    legend_top = -radius
+    for index, (label, value) in enumerate(slices):
+        sweep = 2 * math.pi * value / total
+        color = _PIE_COLORS[index % len(_PIE_COLORS)]
+        points = _wedge(cx, cy, radius, angle, angle + sweep)
+        scene.items.append({"kind": "poly", "points": points, "fill": color, "stroke": "#ffffff"})
+        for point in points:
+            bounds.add(*point)
+        angle += sweep
+        row_y = legend_top + index * 22
+        share = f"{label} ({value:g})"
+        scene.items.append({"kind": "rect", "x": legend_x, "y": row_y - 6, "w": 12, "h": 12, "r": 2, "fill": color, "stroke": color})
+        scene.items.append({"kind": "text", "x": legend_x + 18, "y": row_y, "text": share, "size": 11, "anchor": "start", "fill": INK})
+        bounds.box(legend_x, row_y - 8, 18 + _text_width(share), 16)
+    return _shift(scene, bounds.min_x, bounds.min_y, bounds.max_x, bounds.max_y)
+
+
+def state_scene(source: str) -> Scene | None:
+    """States and the arrows between them, including the start and end marks."""
+    if not is_state_diagram(source):
+        return None
+    lines = _diagram_lines(source)
+    labels: dict[str, str] = {}
+    order: list[str] = []
+    edges: list[tuple[str, str, str]] = []
+    direction = "TB"
+
+    def ensure(name: str, label: str | None = None) -> None:
+        if name not in labels:
+            labels[name] = label or name
+            order.append(name)
+        elif label:
+            labels[name] = label
+
+    for line in lines[1:]:
+        lowered = line.lower()
+        if lowered.startswith("direction "):
+            token = line.split()[-1].upper()
+            direction = "TB" if token in {"TB", "TD"} else "LR"
+            continue
+        if lowered.startswith(("note ", "style ", "classdef ", "class ", "hide ")):
+            continue
+        alias = _STATE_ALIAS.match(line)
+        if alias:
+            ensure(alias.group(2), alias.group(1))
+            continue
+        opened = _STATE_OPEN.match(line)
+        if opened:
+            ensure(opened.group(2), opened.group(1))
+            continue
+        if line in {"{", "}"}:
+            continue
+        arrow = _STATE_ARROW.match(line)
+        if not arrow:
+            continue
+        source_id, target_id, label = arrow.group(1), arrow.group(2), (arrow.group(3) or "").strip()
+        if source_id == "[*]":
+            source_id = "__start__"
+            ensure(source_id, "Start")
+        else:
+            ensure(source_id)
+        if target_id == "[*]":
+            target_id = "__end__"
+            ensure(target_id, "End")
+        else:
+            ensure(target_id)
+        edges.append((source_id, target_id, label))
+    if not order:
+        return None
+    positions = _layout(order, [(source_id, target_id) for source_id, target_id, _label in edges], direction)
+    nodes = []
+    for name in order:
+        shape = "round" if name in {"__start__", "__end__"} else "rect"
+        nodes.append({"id": name, "position": positions[name], "data": {"label": labels[name], "shape": shape}})
+    chart_edges = [
+        {"id": f"e{index}", "source": source_id, "target": target_id, "label": label}
+        for index, (source_id, target_id, label) in enumerate(edges, start=1)
+    ]
+    return flowchart_scene({"direction": direction, "nodes": nodes, "edges": chart_edges})
+
+
+def er_scene(source: str) -> Scene | None:
+    """Entities, their attributes, and the relationships between them."""
+    if not is_er_diagram(source):
+        return None
+    entities: dict[str, dict] = {}
+    relations: list[dict] = []
+
+    def ensure(name: str) -> dict:
+        if name not in entities:
+            entities[name] = {"name": name, "attrs": []}
+        return entities[name]
+
+    lines = _diagram_lines(source)
+    index = 1
+    while index < len(lines):
+        line = lines[index]
+        index += 1
+        if line.endswith("{") and not _ER_REL.match(line):
+            name = line[:-1].strip()
+            if not re.fullmatch(r"[A-Za-z_][\w]*", name):
+                continue
+            ensure(name)
+            while index < len(lines) and lines[index] != "}":
+                attr = lines[index].strip().strip('"')
+                if attr:
+                    ensure(name)["attrs"].append(attr)
+                index += 1
+            if index < len(lines) and lines[index] == "}":
+                index += 1
+            continue
+        rel = _ER_REL.match(line)
+        if not rel:
+            continue
+        left, left_card, line_kind, right_card, right, label = rel.groups()
+        ensure(left)
+        ensure(right)
+        text = " ".join(
+            bit for bit in (_ER_CARD.get(left_card, left_card), (label or "").strip(), _ER_CARD.get(right_card, right_card)) if bit
+        )
+        relations.append(
+            {
+                "source": left,
+                "target": right,
+                "arrow": "..>" if line_kind == ".." else "-->",
+                "label": text,
+                "left_card": "",
+                "right_card": "",
+            }
+        )
+    if not entities:
+        return None
+    classes = [{"name": item["name"], "members": item["attrs"]} for item in entities.values()]
+    return class_scene({"classes": classes, "relations": relations})
+
+
+def _gantt_date_format(fmt: str) -> str:
+    return fmt.replace("YYYY", "%Y").replace("YY", "%y").replace("MM", "%m").replace("DD", "%d").replace("HH", "%H").replace("mm", "%M").replace("ss", "%S")
+
+
+def _gantt_date(text: str, fmt: str) -> datetime | None:
+    try:
+        return datetime.strptime(text.strip(), fmt)
+    except ValueError:
+        return None
+
+
+def gantt_scene(source: str) -> Scene | None:
+    """Tasks as bars on a timeline, grouped by section."""
+    if not is_gantt(source):
+        return None
+    lines = _diagram_lines(source)
+    title = ""
+    date_fmt = "%Y-%m-%d"
+    sections: list[dict] = []
+    current = {"name": "", "tasks": []}
+    sections.append(current)
+    for line in lines[1:]:
+        lowered = line.lower()
+        if lowered.startswith("title "):
+            title = line[6:].strip()
+            continue
+        if lowered.startswith("dateformat "):
+            date_fmt = _gantt_date_format(line.split(None, 1)[1].strip())
+            continue
+        if lowered.startswith("section "):
+            current = {"name": line.split(None, 1)[1].strip(), "tasks": []}
+            sections.append(current)
+            continue
+        if lowered.startswith(("axisformat ", "excludes ", "includes ", "todaymarker ", "weekday ", "tickinterval ", "inclusiveenddates")):
+            continue
+        if ":" not in line:
+            continue
+        name, spec = line.split(":", 1)
+        name = " ".join(name.split())
+        if not name:
+            continue
+        tags: set[str] = set()
+        task_id = ""
+        after = ""
+        start_date = None
+        end_date = None
+        duration = None
+        for part in (piece.strip() for piece in spec.split(",")):
+            if not part:
+                continue
+            low = part.lower()
+            if low in _GANTT_STATUS:
+                tags.add(low)
+                continue
+            if low.startswith("after "):
+                after = part.split(None, 1)[1].strip()
+                continue
+            days = re.fullmatch(r"(\d+)\s*([dw])", low)
+            if days:
+                duration = int(days.group(1)) * (7 if days.group(2) == "w" else 1)
+                continue
+            parsed = _gantt_date(part, date_fmt)
+            if parsed is not None:
+                if start_date is None:
+                    start_date = parsed
+                else:
+                    end_date = parsed
+                continue
+            if not task_id and re.fullmatch(r"[A-Za-z_][\w]*", part):
+                task_id = part
+        current["tasks"].append(
+            {
+                "name": name,
+                "id": task_id,
+                "after": after,
+                "start_date": start_date,
+                "end_date": end_date,
+                "duration": duration,
+                "milestone": "milestone" in tags,
+                "crit": "crit" in tags,
+                "done": "done" in tags,
+            }
+        )
+    tasks = [task for section in sections for task in section["tasks"]]
+    if not tasks:
+        return None
+    known: dict[str, dict] = {}
+    cursor = None
+    origin = next((task["start_date"] for task in tasks if task["start_date"]), datetime(2026, 1, 1))
+    for task in tasks:
+        start = task["start_date"]
+        if start is None and task["after"] and task["after"] in known:
+            start = known[task["after"]]["end"]
+        if start is None:
+            start = cursor or origin
+        if task["end_date"] and task["end_date"] >= start:
+            end = task["end_date"]
+        else:
+            days = 0 if task["duration"] == 0 or task["milestone"] and task["duration"] in (None, 0) else task["duration"] if task["duration"] is not None else 1
+            end = start + timedelta(days=days)
+        task["start"] = start
+        task["end"] = end
+        if task["id"]:
+            known[task["id"]] = task
+        cursor = end
+    first = min(task["start"] for task in tasks)
+    last = max(task["end"] for task in tasks)
+    span = max((last - first).days, 1)
+    label_w = min(max(_text_width(task["name"]) for task in tasks) + 16, 180)
+    chart_w = 420
+    row_h = 26
+    scene, bounds = Scene(), _Bounds()
+    y = 0.0
+    if title:
+        scene.items.append({"kind": "text", "x": 0, "y": 8, "text": title, "size": FONT, "anchor": "start", "fill": INK})
+        bounds.box(0, 0, _text_width(title), 16)
+        y = 28
+    axis_y = y + 8
+    scene.items.append({"kind": "line", "x1": label_w, "y1": axis_y, "x2": label_w + chart_w, "y2": axis_y, "stroke": "#9aa5b8"})
+    for fraction, moment in ((0, first), (1, last)):
+        x = label_w + chart_w * fraction
+        stamp = moment.strftime("%d %b")
+        scene.items.append({"kind": "text", "x": x, "y": axis_y - 10, "text": stamp, "size": 10, "anchor": "middle" if fraction else "start", "fill": INK})
+        bounds.box(x - 24, axis_y - 16, 48, 14)
+    bounds.box(label_w, axis_y - 2, chart_w, 4)
+    y = axis_y + 16
+    for section in sections:
+        if not section["tasks"]:
+            continue
+        if section["name"]:
+            scene.items.append({"kind": "text", "x": 0, "y": y + 8, "text": section["name"], "size": 11, "anchor": "start", "fill": LINE})
+            bounds.box(0, y, _text_width(section["name"]), row_h)
+            y += row_h
+        for task in section["tasks"]:
+            scene.items.append({"kind": "text", "x": 0, "y": y + row_h / 2, "text": task["name"], "size": 11, "anchor": "start", "fill": INK})
+            start_x = label_w + chart_w * (task["start"] - first).days / span
+            end_x = label_w + chart_w * max((task["end"] - first).days, (task["start"] - first).days) / span
+            if task["milestone"] or task["end"] == task["start"]:
+                size = 8
+                diamond = [
+                    (start_x, y + row_h / 2 - size),
+                    (start_x + size, y + row_h / 2),
+                    (start_x, y + row_h / 2 + size),
+                    (start_x - size, y + row_h / 2),
+                ]
+                scene.items.append({"kind": "poly", "points": diamond, "fill": "#c47b2b", "stroke": "#c47b2b"})
+                for point in diamond:
+                    bounds.add(*point)
+            else:
+                fill = "#1f7a4d" if task["done"] else "#8c1a1a" if task["crit"] else "#1a4b8c"
+                width = max(end_x - start_x, 6)
+                scene.items.append(
+                    {"kind": "rect", "x": start_x, "y": y + 6, "w": width, "h": row_h - 12, "r": 3, "fill": fill, "stroke": fill}
+                )
+                bounds.box(start_x, y + 6, width, row_h - 12)
+            bounds.box(0, y, label_w, row_h)
+            y += row_h
+    return _shift(scene, bounds.min_x, bounds.min_y, bounds.max_x, bounds.max_y)
+
+
 def scene_for_block(block: dict) -> Scene | None:
     """A picture of a diagram block, or None when its Mermaid cannot be drawn here (the caller prints the source)."""
     mermaid = str(block.get("mermaid") or "")
     stripped = mermaid.lstrip()
+    if is_pie(stripped):
+        return pie_scene(mermaid)
+    if is_state_diagram(stripped):
+        return state_scene(mermaid)
+    if is_er_diagram(stripped):
+        return er_scene(mermaid)
+    if is_gantt(stripped):
+        return gantt_scene(mermaid)
     if stripped.startswith("sequenceDiagram"):
         flow = mermaid_to_flow(mermaid)
         return sequence_scene(flow) if flow else None
@@ -472,10 +863,25 @@ def _num(value: float) -> str:
     return f"{value:.1f}".rstrip("0").rstrip(".")
 
 
+# Larger than the reduced export size, and still capped so a diagram does not take the page over.
+EXPORT_SCALE = 0.9375
+MAX_DISPLAY_WIDTH = 900
+MAX_DISPLAY_HEIGHT = 525
+
+
+def display_scale(scene: Scene) -> float:
+    """How much to shrink a diagram on the HTML page and in the PDF. The picture itself is unchanged."""
+    if scene.width <= 0 or scene.height <= 0:
+        return EXPORT_SCALE
+    return min(EXPORT_SCALE, MAX_DISPLAY_WIDTH / scene.width, MAX_DISPLAY_HEIGHT / scene.height)
+
+
 def to_svg(scene: Scene, label: str = "Diagram") -> str:
+    scale = display_scale(scene)
+    width, height = scene.width * scale, scene.height * scale
     parts = [
         f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {_num(scene.width)} {_num(scene.height)}" '
-        f'width="{_num(scene.width)}" height="{_num(scene.height)}" role="img" aria-label="{html.escape(label, quote=True)}" '
+        f'width="{_num(width)}" height="{_num(height)}" role="img" aria-label="{html.escape(label, quote=True)}" '
         'style="max-width:100%;height:auto" font-family="Helvetica, Arial, sans-serif">'
     ]
     for item in scene.items:
@@ -516,7 +922,7 @@ def _latin(text: str) -> str:
 def draw_pdf(pdf, scene: Scene, max_width_mm: float) -> None:
     """Draw the scene at the cursor with FPDF, scaled down to fit the page width, on a new page when it does not fit."""
     px = 0.2646  # one CSS pixel in millimetres
-    scale = min(px, max_width_mm / scene.width)
+    scale = min(px * display_scale(scene), max_width_mm / scene.width) if scene.width else px
     height = scene.height * scale
     if pdf.get_y() + height > pdf.h - pdf.b_margin:
         pdf.add_page()

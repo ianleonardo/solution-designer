@@ -52,7 +52,8 @@ def test_the_pdf_text_is_set_at_75_percent_of_the_html_sizes(client, monkeypatch
 
     title, templates, content = _document_parts(client)
     html = export.render_html(title, templates, content)
-    assert "font-size:14px" in html and "10.5px" not in html and "font-size:12px" not in html
+    style = html.split("</style>", 1)[0]
+    assert "font-size:14px" in style and "10.5px" not in style and "font-size:12px" not in style
 
     captured = {}
     monkeypatch.setattr(export, "_render_pdf_weasyprint", lambda page: captured.setdefault("page", page).encode())

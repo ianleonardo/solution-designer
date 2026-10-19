@@ -1,3 +1,4 @@
+from app.errors import AppError
 from tests.conftest import auth, login
 
 
@@ -91,6 +92,66 @@ def test_last_admin_cannot_be_demoted_or_deleted(client):
     demoted = client.patch(f"/api/users/{admin_id}", json={"username": "Admin", "role_name": "Viewer"}, headers=auth(admin))
     assert demoted.status_code == 400
     assert client.delete(f"/api/users/{admin_id}", headers=auth(admin)).status_code == 400
+
+
+def test_active_directory_user_has_no_stored_password(client, monkeypatch):
+    monkeypatch.setenv("LDAP_URL", "ldap://directory.example:389")
+    seen = {}
+
+    def fake(login_id, password):
+        seen["login_id"] = login_id
+        seen["password"] = password
+        if password != "DirectorySecret1":
+            raise AppError(401, "Invalid login ID or password")
+
+    monkeypatch.setattr("app.services.ldap_auth.authenticate", fake)
+    admin = login(client, "Admin")
+    rejected = client.post(
+        "/api/users",
+        json={"login_id": "ada", "username": "Ada", "role_name": "Analyst", "auth_provider": "ldap", "password": "Password123!"},
+        headers=auth(admin),
+    )
+    assert rejected.status_code == 400
+    assert "password" in rejected.json()["detail"].lower()
+    created = client.post(
+        "/api/users",
+        json={"login_id": "ada", "username": "Ada", "role_name": "Analyst", "auth_provider": "ldap"},
+        headers=auth(admin),
+    )
+    assert created.status_code == 200, created.text
+    assert created.json()["auth_provider"] == "ldap"
+    assert "password" not in created.json()
+    user_id = created.json()["user_id"]
+    assert client.post("/api/auth/login", json={"login_id": "ADA", "password": "nope"}).status_code == 401
+    signed_in = client.post("/api/auth/login", json={"login_id": "ada", "password": "DirectorySecret1"})
+    assert signed_in.status_code == 200, signed_in.text
+    assert seen == {"login_id": "ada", "password": "DirectorySecret1"}
+    local_again = client.patch(
+        f"/api/users/{user_id}",
+        json={"username": "Ada", "role_name": "Analyst", "auth_provider": "local"},
+        headers=auth(admin),
+    )
+    assert local_again.status_code == 400
+    local_again = client.patch(
+        f"/api/users/{user_id}",
+        json={"username": "Ada", "role_name": "Analyst", "auth_provider": "local", "password": "LocalPass1"},
+        headers=auth(admin),
+    )
+    assert local_again.status_code == 200, local_again.text
+    assert local_again.json()["auth_provider"] == "local"
+    assert client.post("/api/auth/login", json={"login_id": "ada", "password": "LocalPass1"}).status_code == 200
+
+
+def test_ldap_user_requires_the_directory_to_be_configured(client, monkeypatch):
+    monkeypatch.delenv("LDAP_URL", raising=False)
+    admin = login(client, "Admin")
+    created = client.post(
+        "/api/users",
+        json={"login_id": "ada", "username": "Ada", "role_name": "Viewer", "auth_provider": "ldap"},
+        headers=auth(admin),
+    )
+    assert created.status_code == 400
+    assert "LDAP_URL" in created.json()["detail"]
 
 
 def test_non_admin_cannot_manage_users(client):

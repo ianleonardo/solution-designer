@@ -7,7 +7,7 @@ set "ROOT=%~dp0.."
 pushd "%ROOT%"
 set "ROOT=%CD%"
 popd
-set "PORT=5173"
+set "PORT=7777"
 
 if not exist "%ROOT%\node_modules" (
   echo Frontend dependencies not found. From the repository root, run: npm ci

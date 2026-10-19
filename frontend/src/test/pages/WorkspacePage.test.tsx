@@ -118,6 +118,7 @@ test("shows the first document, a read-only description, and no Draft badge, Bas
   expect(screen.queryByText("draft")).toBeNull();
   expect(screen.getByRole("button", { name: /References \(0\)/ })).toBeTruthy();
   expect(screen.getByRole("heading", { name: "Scope" })).toBeTruthy();
+  expect(screen.queryByRole("button", { name: "Add diagram" })).toBeNull();
 });
 
 test("opens the document from the route and switches tabs", async () => {
@@ -151,6 +152,17 @@ test("adds another diagram under the current one and can remove it", async () =>
   expect(screen.getAllByLabelText("Mermaid source")).toHaveLength(1);
   expect(screen.queryByRole("button", { name: "Remove diagram" })).toBeNull();
   await waitFor(() => expect(calls.filter((call) => call.method === "PUT")).toHaveLength(2), { timeout: 3000 });
+});
+
+test("does not offer Add diagram on a section whose layout has no diagram", async () => {
+  const prose = document("d1", "sdd", "Solution Design Document", "scope", "Scope", [{ type: "prose", markdown: "Notes" }]);
+  prose.templates[0].blocks = [{ type: "prose" }];
+  prepareWorkspace = (data) => {
+    data.documents[0] = prose;
+  };
+  setup("Analyst");
+  await screen.findByRole("heading", { name: "Scope" });
+  expect(screen.queryByRole("button", { name: "Add diagram" })).toBeNull();
 });
 
 test("editing a header saves to that document's endpoint", async () => {

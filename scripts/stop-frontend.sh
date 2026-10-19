@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
-# Stop the frontend listening on port 5173. Run from anywhere: ./scripts/stop-frontend.sh
+# Stop the frontend listening on port 7777. Run from anywhere: ./scripts/stop-frontend.sh
 
 set -euo pipefail
 
-PORT=5173
+PORT=7777
 NAME="Frontend"
 
 listener_pids() {

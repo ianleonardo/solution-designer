@@ -51,6 +51,20 @@ test("lists systems with their upstreams and downstreams, sortable by code", asy
   expect(codes()).toEqual(["DGE", "SPL"]);
 });
 
+test("uploads an Excel file of systems", async () => {
+  const fetchMock = mockFetch([system("SPL")], (_url, init) =>
+    init?.method === "POST" ? json([system("SPL", { system_name: "From file" }), system("PIB")]) : undefined,
+  );
+  render(<SystemsPanel />);
+  await waitFor(() => expect(screen.getByText("SPL name")).toBeTruthy());
+  const file = new File(["xlsx"], "systems.xlsx", { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+  fireEvent.change(screen.getByLabelText("Upload systems Excel"), { target: { files: [file] } });
+  await waitFor(() => expect(screen.getByText("From file")).toBeTruthy());
+  const post = fetchMock.mock.calls.find((call) => (call[1] as RequestInit | undefined)?.method === "POST")!;
+  expect(post[0]).toBe("/api/systems/upload");
+  expect(((post[1] as RequestInit).body as FormData).get("file")).toBeTruthy();
+});
+
 test("adds a system and shows it in the table", async () => {
   const fetchMock = mockFetch([], (_url, init) => (init?.method === "POST" ? json(system("SPL", { upstreams: "" })) : undefined));
   render(<SystemsPanel />);

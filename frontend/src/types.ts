@@ -102,6 +102,8 @@ export type User = {
   username: string;
   login_id: string;
   role_name: Role;
+  /** local stores a password here. ldap checks Active Directory and stores none. */
+  auth_provider?: "local" | "ldap";
   created_at: string;
 };
 

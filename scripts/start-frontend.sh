@@ -5,7 +5,7 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-PORT=5173
+PORT=7777
 
 if [[ ! -d "$ROOT/node_modules" ]]; then
   echo "Frontend dependencies not found. From the repository root, run: npm ci" >&2

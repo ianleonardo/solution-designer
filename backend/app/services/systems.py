@@ -1,5 +1,6 @@
 """The systems catalogue: a code, a name, a description and the codes of the systems upstream and downstream of it."""
 
+import io
 from datetime import datetime, timezone
 
 from app import db
@@ -10,6 +11,9 @@ from app.services import gcs, llm
 MAX_CODE = 50
 MAX_NAME = 200
 MAX_DESCRIPTION = 2000
+MAX_UPLOAD_ROWS = 500
+MAX_UPLOAD_BYTES = 20 * 1024 * 1024
+UPLOAD_HEADERS = ("SYSTEM_CODE", "SYSTEM_NAME", "DESCRIPTION")
 
 
 def _now() -> datetime:
@@ -197,3 +201,118 @@ def delete_system(user: dict, code: str) -> None:
         raise AppError(409, f"{code} is used by interfaces in: {', '.join(row['channel'] for row in used)}. Upload a new file without it first.")
     db.exec_sql("DELETE FROM systems WHERE system_code = ?", [code])
     gcs.upload_db()
+
+
+def _cell(value) -> str:
+    if value is None:
+        return ""
+    if isinstance(value, float) and value.is_integer():
+        value = int(value)
+    return str(value).strip()
+
+
+def _read_sheet(data: bytes) -> list[list[str]]:
+    from openpyxl import load_workbook
+
+    try:
+        workbook = load_workbook(io.BytesIO(data), read_only=True, data_only=True)
+        for sheet in workbook.worksheets:
+            rows = [[_cell(value) for value in row] for row in sheet.iter_rows(values_only=True)]
+            if rows and any(cell.strip().upper() == "SYSTEM_CODE" for cell in rows[0]):
+                return rows
+        sheet = workbook.worksheets[0]
+        return [[_cell(value) for value in row] for row in sheet.iter_rows(values_only=True)]
+    except Exception as exc:
+        raise AppError(400, "Could not read the Excel file. Upload an .xlsx file.") from exc
+
+
+def parse_systems_excel(data: bytes) -> list[dict]:
+    """SYSTEM_CODE and SYSTEM_NAME are required. DESCRIPTION may be omitted or left blank."""
+    rows = _read_sheet(data)
+    if not rows:
+        raise AppError(400, "The Excel file is empty.")
+    header = [value.strip().upper() for value in rows[0]]
+    missing = [name for name in ("SYSTEM_CODE", "SYSTEM_NAME") if name not in header]
+    if missing:
+        raise AppError(400, f"Missing column(s): {', '.join(missing)}. Expected: {', '.join(UPLOAD_HEADERS)}.")
+    index = {name: header.index(name) if name in header else None for name in UPLOAD_HEADERS}
+    records: list[dict] = []
+    errors: list[dict] = []
+    seen: dict[str, int] = {}
+
+    def error(row_number: int, field: str, message: str) -> None:
+        errors.append({"row": row_number, "field": field, "message": message})
+
+    for offset, row in enumerate(rows[1:], start=2):
+        values = {name: row[index[name]] if index[name] is not None and index[name] < len(row) else "" for name in UPLOAD_HEADERS}
+        if not any(values.values()):
+            continue
+        code = values["SYSTEM_CODE"].strip().upper()
+        name = values["SYSTEM_NAME"].strip()
+        description = values["DESCRIPTION"].strip()
+        if not code:
+            error(offset, "SYSTEM_CODE", "SYSTEM_CODE is required.")
+        elif "," in code or " " in code:
+            error(offset, "SYSTEM_CODE", "SYSTEM_CODE cannot contain spaces or commas.")
+        elif len(code) > MAX_CODE:
+            error(offset, "SYSTEM_CODE", f"SYSTEM_CODE must be {MAX_CODE} characters or fewer.")
+        if not name:
+            error(offset, "SYSTEM_NAME", "SYSTEM_NAME is required.")
+        elif len(name) > MAX_NAME:
+            error(offset, "SYSTEM_NAME", f"SYSTEM_NAME must be {MAX_NAME} characters or fewer.")
+        if len(description) > MAX_DESCRIPTION:
+            error(offset, "DESCRIPTION", f"DESCRIPTION must be {MAX_DESCRIPTION} characters or fewer.")
+        if code and code in seen:
+            error(offset, "SYSTEM_CODE", f"Duplicate system code (first seen on row {seen[code]}).")
+        elif code:
+            seen[code] = offset
+        records.append({"system_code": code, "system_name": name, "description": description})
+
+    if len(records) > MAX_UPLOAD_ROWS:
+        raise AppError(400, f"At most {MAX_UPLOAD_ROWS} rows can be uploaded at once.")
+    if errors:
+        raise AppError(400, f"{len(errors)} problem(s) found. Nothing was imported.", errors)
+    if not records:
+        raise AppError(400, "The Excel file has no data rows.")
+    return records
+
+
+def upload_from_excel(user: dict, filename: str, data: bytes) -> list[dict]:
+    """Insert new systems and update the name of systems that already exist.
+
+    A blank description is stored for a new system and left unchanged for one that already exists.
+    Upstreams, downstreams and the batch/report flags are not taken from the file.
+    """
+    _require_editor(user)
+    if not (filename or "").lower().endswith(".xlsx"):
+        raise AppError(400, "Upload an Excel file (.xlsx).")
+    if len(data) > MAX_UPLOAD_BYTES:
+        raise AppError(400, "The file is larger than 20 MB.")
+    records = parse_systems_excel(data)
+    known = existing_codes()
+    now = _now()
+    for rec in records:
+        current = db.fetchone("SELECT * FROM systems WHERE system_code = ?", [rec["system_code"]]) if rec["system_code"] in known else None
+        if current is None:
+            db.exec_sql(
+                """
+                INSERT INTO systems (
+                    system_code, system_name, description, upstreams, downstreams, has_batch, has_report, has_capability,
+                    created_at, last_modified
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                [rec["system_code"], rec["system_name"], rec["description"], "", "", False, False, False, now, now],
+            )
+        else:
+            description = rec["description"] if rec["description"] else (current["description"] or "")
+            db.exec_sql(
+                """
+                UPDATE systems
+                SET system_name = ?, description = ?, last_modified = ?
+                WHERE system_code = ?
+                """,
+                [rec["system_name"], description, now, rec["system_code"]],
+            )
+        _embed(_row(rec["system_code"]))
+    gcs.upload_db()
+    return list_systems()

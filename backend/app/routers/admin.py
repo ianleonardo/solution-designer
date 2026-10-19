@@ -144,17 +144,20 @@ def create_user(body: dict, user: dict = Depends(require_admin)):
         str(body.get("password") or ""),
         str(body.get("role_name") or ""),
         str(body.get("username") or ""),
+        str(body.get("auth_provider") or "local"),
     )
 
 
 @router.patch("/users/{user_id}")
 def update_user(user_id: str, body: dict, user: dict = Depends(require_admin)):
+    raw_provider = body.get("auth_provider")
     return projects.update_user(
         user,
         user_id,
         str(body.get("username") or ""),
         str(body.get("role_name") or ""),
         str(body.get("password") or ""),
+        None if raw_provider is None else str(raw_provider),
     )
 
 
@@ -241,6 +244,12 @@ def update_system(system_code: str, body: dict, user: dict = Depends(require_kb_
 def delete_system(system_code: str, user: dict = Depends(require_kb_editor)):
     systems.delete_system(user, system_code)
     return {"ok": True}
+
+
+@router.post("/systems/upload")
+async def upload_systems(file: UploadFile = File(...), user: dict = Depends(require_kb_editor)):
+    data = await file.read()
+    return systems.upload_from_excel(user, file.filename or "systems.xlsx", data)
 
 
 @router.get("/catalogs")

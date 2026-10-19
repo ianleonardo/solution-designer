@@ -173,7 +173,7 @@ npm ci
 npm run dev
 ```
 
-Open <http://localhost:5173>. Vite proxies `/api` to `127.0.0.1:8000`.
+Open <http://localhost:7777>. Vite proxies `/api` to `127.0.0.1:8000`.
 
 ### 4. Log in
 

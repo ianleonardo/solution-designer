@@ -1,3 +1,6 @@
+import io
+
+from openpyxl import Workbook
 from tests.conftest import auth, login
 
 
@@ -93,3 +96,63 @@ def test_has_batch_and_has_report_flags(client):
     assert edited.json()["has_capability"] is False
     listed = client.get("/api/systems", headers=auth(admin)).json()
     assert listed[0]["has_report"] is True
+
+
+def _workbook(rows: list[list], headers=("SYSTEM_CODE", "SYSTEM_NAME", "DESCRIPTION")) -> bytes:
+    book = Workbook()
+    sheet = book.active
+    sheet.append(list(headers))
+    for row in rows:
+        sheet.append(row)
+    buffer = io.BytesIO()
+    book.save(buffer)
+    return buffer.getvalue()
+
+
+def test_excel_upload_adds_and_updates_systems(client):
+    admin = login(client, "Admin")
+    _create(client, admin, "SPL", description="Keep me", upstreams="", downstreams="")
+    _create(client, admin, "DGE", upstreams="SPL")
+    data = _workbook(
+        [
+            ["spl", "SPL Core", ""],
+            ["pib", "PIB", "Payments"],
+            ["", "", ""],
+        ]
+    )
+    uploaded = client.post(
+        "/api/systems/upload",
+        files={"file": ("systems.xlsx", data, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")},
+        headers=auth(admin),
+    )
+    assert uploaded.status_code == 200, uploaded.text
+    by_code = {item["system_code"]: item for item in uploaded.json()}
+    assert by_code["SPL"]["system_name"] == "SPL Core"
+    assert by_code["SPL"]["description"] == "Keep me"
+    assert by_code["PIB"]["description"] == "Payments"
+    assert by_code["PIB"]["upstreams"] == "" and by_code["PIB"]["has_batch"] is False
+    assert by_code["DGE"]["upstreams"] == "SPL"
+
+    missing = client.post(
+        "/api/systems/upload",
+        files={"file": ("systems.xlsx", _workbook([["NTN", "NTN"]], headers=("SYSTEM_CODE", "SYSTEM_NAME")), "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")},
+        headers=auth(admin),
+    )
+    assert missing.status_code == 200, missing.text
+    assert any(item["system_code"] == "NTN" and item["description"] == "" for item in missing.json())
+
+    rejected = client.post(
+        "/api/systems/upload",
+        files={"file": ("systems.xlsx", _workbook([["BAD CODE", "Bad", ""], ["OK", "", ""]]), "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")},
+        headers=auth(admin),
+    )
+    assert rejected.status_code == 400
+    assert rejected.json()["errors"]
+    assert all(item["system_code"] != "OK" for item in client.get("/api/systems", headers=auth(admin)).json())
+
+    viewer = auth(login(client, "Viewer"))
+    assert client.post(
+        "/api/systems/upload",
+        files={"file": ("systems.xlsx", data, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")},
+        headers=viewer,
+    ).status_code == 403
