@@ -4,12 +4,100 @@ import { api, ApiError, type RowError } from "../api";
 import { useOptionalAuth } from "../auth";
 import type { Catalogs, InterfaceRecord, SystemRecord } from "../types";
 import { ConfirmDialog } from "./ConfirmDialog";
+import { FileDrop } from "./FileDrop";
 import { type Column, DataTable } from "./DataTable";
 import { KB_PAGE_SIZES } from "./TablePager";
 import { SelectField } from "./SelectField";
 
 export const INTERFACES_PAGE_SIZE = 25;
 export const PROTOCOLS = ["API", "MQ", "Kafka", "gRPC", "FTP", "SMTP", "SMPP"];
+
+function countryCodes(value: string) {
+  return value
+    .split(",")
+    .map((part) => part.trim())
+    .filter(Boolean);
+}
+
+function applicableFor(country: string) {
+  const codes = countryCodes(country);
+  return codes.length ? codes.join(", ") : "All countries";
+}
+
+function appliesToCountry(country: string, filter: string) {
+  if (!filter) return true;
+  const codes = countryCodes(country);
+  if (codes.length === 0) return true;
+  return codes.includes(filter);
+}
+
+function CountryChecks({
+  countries,
+  allCountries,
+  selected,
+  disabled,
+  onAll,
+  onToggle,
+}: {
+  countries: string[];
+  allCountries: boolean;
+  selected: string[];
+  disabled?: boolean;
+  onAll: (checked: boolean) => void;
+  onToggle: (code: string) => void;
+}) {
+  return (
+    <fieldset className="space-y-2" disabled={disabled}>
+      <legend className="font-label text-[10px] uppercase text-muted">Applicable for</legend>
+      <div className="flex flex-wrap gap-x-4 gap-y-2">
+        <label className="inline-flex items-center gap-2 text-sm">
+          <input type="checkbox" aria-label="All countries" checked={allCountries} onChange={(event) => onAll(event.target.checked)} />
+          All countries
+        </label>
+        {countries.map((code) => (
+          <label key={code} className="inline-flex items-center gap-2 text-sm">
+            <input type="checkbox" aria-label={code} checked={!allCountries && selected.includes(code)} onChange={() => onToggle(code)} />
+            {code}
+          </label>
+        ))}
+      </div>
+    </fieldset>
+  );
+}
+
+function SystemChecks({
+  label,
+  systems,
+  selected,
+  disabled,
+  onToggle,
+}: {
+  label: string;
+  systems: SystemRecord[];
+  selected: string[];
+  disabled?: boolean;
+  onToggle: (code: string) => void;
+}) {
+  return (
+    <fieldset className="space-y-2" disabled={disabled}>
+      <legend className="font-label text-[10px] uppercase text-muted">{label}</legend>
+      <div className="flex flex-wrap gap-x-4 gap-y-2">
+        {systems.length === 0 && <p className="text-sm text-muted">No systems.</p>}
+        {systems.map((item) => (
+          <label key={item.system_code} className="inline-flex items-center gap-2 text-sm">
+            <input
+              type="checkbox"
+              aria-label={`${label} ${item.system_code}`}
+              checked={selected.includes(item.system_code)}
+              onChange={() => onToggle(item.system_code)}
+            />
+            {item.system_code}
+          </label>
+        ))}
+      </div>
+    </fieldset>
+  );
+}
 
 function InterfaceFormDialog({
   channel,
@@ -27,26 +115,41 @@ function InterfaceFormDialog({
   onClose: () => void;
 }) {
   const editing = Boolean(record);
-  const [country, setCountry] = useState(record?.country ?? countries[0] ?? "SG");
+  const storedCodes = record ? countryCodes(record.country) : null;
+  const [allCountries, setAllCountries] = useState(storedCodes !== null && storedCodes.length === 0);
+  const [selectedCountries, setSelectedCountries] = useState<string[]>(
+    storedCodes && storedCodes.length ? storedCodes : storedCodes ? [] : [countries.includes("SG") ? "SG" : countries[0]].filter(Boolean),
+  );
   const [name, setName] = useState(record?.interface_name ?? "");
+  const [endpoint, setEndpoint] = useState(record?.endpoint ?? "");
   const [description, setDescription] = useState(record?.description ?? "");
   const [protocol, setProtocol] = useState(record?.protocol ?? "API");
-  const [source, setSource] = useState(record?.source ?? "");
-  const [destination, setDestination] = useState(record?.destination ?? "");
+  const [sources, setSources] = useState<string[]>(record ? countryCodes(record.source) : []);
+  const [destinations, setDestinations] = useState<string[]>(record ? countryCodes(record.destination) : []);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
 
+  function toggle(list: string[], code: string, setList: (next: string[]) => void) {
+    setList(list.includes(code) ? list.filter((item) => item !== code) : [...list, code]);
+  }
+
   async function submit(event: FormEvent) {
     event.preventDefault();
+    const country = allCountries ? "" : countries.filter((code) => selectedCountries.includes(code)).join(",");
+    if ((!allCountries && !country) || !name.trim() || sources.length === 0 || destinations.length === 0) {
+      setError("Choose All countries or at least one country, a name, and at least one source and destination.");
+      return;
+    }
     setBusy(true);
     setError("");
     const payload = {
       country,
       interface_name: name.trim(),
+      endpoint: endpoint.trim(),
       description: description.trim(),
       protocol,
-      source,
-      destination,
+      source: sources.join(", "),
+      destination: destinations.join(", "),
     };
     try {
       const saved = record
@@ -76,88 +179,152 @@ function InterfaceFormDialog({
         role="dialog"
         aria-modal="true"
         aria-label={title}
-        className="w-full max-w-lg rounded-lg border border-hairline bg-panel p-6 shadow-xl space-y-3"
+        className="w-full max-w-lg max-h-[90vh] overflow-y-auto rounded-lg border border-hairline bg-panel p-6 shadow-xl space-y-3"
         onSubmit={(event) => void submit(event)}
       >
         <h2 className="font-headline text-xl font-semibold">{title}</h2>
         <p className="text-xs text-muted">Channel: {channel}</p>
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          <label className="block">
-            <span className="font-label text-[10px] uppercase text-muted">Country</span>
-            <div className="mt-1">
-              <SelectField
-                aria-label="Country"
-                value={country}
-                disabled={busy}
-                className="w-full [&_button]:w-full [&_button]:max-w-none"
-                options={countries.map((item) => ({ value: item, label: item }))}
-                onChange={setCountry}
-              />
-            </div>
-          </label>
-          <label className="block">
-            <span className="font-label text-[10px] uppercase text-muted">Protocol</span>
-            <div className="mt-1">
-              <SelectField
-                aria-label="Protocol"
-                value={protocol}
-                disabled={busy}
-                className="w-full [&_button]:w-full [&_button]:max-w-none"
-                options={PROTOCOLS.map((item) => ({ value: item, label: item }))}
-                onChange={setProtocol}
-              />
-            </div>
-          </label>
-        </div>
+        <CountryChecks
+          countries={countries}
+          allCountries={allCountries}
+          selected={selectedCountries}
+          disabled={busy}
+          onAll={(checked) => {
+            setAllCountries(checked);
+            if (checked) setSelectedCountries([]);
+          }}
+          onToggle={(code) => {
+            setAllCountries(false);
+            toggle(selectedCountries, code, setSelectedCountries);
+          }}
+        />
         <label className="block">
           <span className="font-label text-[10px] uppercase text-muted">Interface name</span>
           <input className="field mt-1" aria-label="Interface name" value={name} required disabled={busy} onChange={(e) => setName(e.target.value)} />
         </label>
         <label className="block">
+          <span className="font-label text-[10px] uppercase text-muted">Endpoint</span>
+          <input className="field mt-1" aria-label="Endpoint" value={endpoint} disabled={busy} onChange={(e) => setEndpoint(e.target.value)} />
+        </label>
+        <label className="block">
+          <span className="font-label text-[10px] uppercase text-muted">Protocol</span>
+          <div className="mt-1">
+            <SelectField
+              aria-label="Protocol"
+              value={protocol}
+              disabled={busy}
+              className="w-full [&_button]:w-full [&_button]:max-w-none"
+              options={PROTOCOLS.map((item) => ({ value: item, label: item }))}
+              onChange={setProtocol}
+            />
+          </div>
+        </label>
+        <label className="block">
           <span className="font-label text-[10px] uppercase text-muted">Description</span>
           <textarea className="field mt-1 min-h-[70px]" aria-label="Description" value={description} disabled={busy} onChange={(e) => setDescription(e.target.value)} />
         </label>
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          <label className="block">
-            <span className="font-label text-[10px] uppercase text-muted">Source</span>
-            <div className="mt-1">
-              <SelectField
-                aria-label="Source"
-                value={source}
-                disabled={busy}
-                className="w-full [&_button]:w-full [&_button]:max-w-none"
-                options={[
-                  { value: "", label: "Select system" },
-                  ...systems.map((item) => ({ value: item.system_code, label: `${item.system_code} — ${item.system_name}` })),
-                ]}
-                onChange={setSource}
-              />
-            </div>
-          </label>
-          <label className="block">
-            <span className="font-label text-[10px] uppercase text-muted">Destination</span>
-            <div className="mt-1">
-              <SelectField
-                aria-label="Destination"
-                value={destination}
-                disabled={busy}
-                className="w-full [&_button]:w-full [&_button]:max-w-none"
-                options={[
-                  { value: "", label: "Select system" },
-                  ...systems.map((item) => ({ value: item.system_code, label: `${item.system_code} — ${item.system_name}` })),
-                ]}
-                onChange={setDestination}
-              />
-            </div>
-          </label>
-        </div>
+        <SystemChecks label="Source" systems={systems} selected={sources} disabled={busy} onToggle={(code) => toggle(sources, code, setSources)} />
+        <SystemChecks label="Destination" systems={systems} selected={destinations} disabled={busy} onToggle={(code) => toggle(destinations, code, setDestinations)} />
         {error && <p className="text-alert text-sm">{error}</p>}
         <div className="flex justify-end gap-2 pt-2">
           <button type="button" className="btn" disabled={busy} onClick={onClose}>
             Cancel
           </button>
-          <button type="submit" className="btn btn-primary" disabled={busy || !name.trim() || !source || !destination}>
+          <button type="submit" className="btn btn-primary" disabled={busy || !name.trim() || sources.length === 0 || destinations.length === 0}>
             {editing ? "Save" : "Add"}
+          </button>
+        </div>
+      </form>
+    </div>
+  );
+}
+
+function UploadInterfacesDialog({
+  channel,
+  countries,
+  onUploaded,
+  onClose,
+}: {
+  channel: string;
+  countries: string[];
+  onUploaded: (rows: InterfaceRecord[]) => void;
+  onClose: () => void;
+}) {
+  const [allCountries, setAllCountries] = useState(false);
+  const [selectedCountries, setSelectedCountries] = useState<string[]>([countries.includes("SG") ? "SG" : countries[0]].filter(Boolean));
+  const [file, setFile] = useState<File | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const [problems, setProblems] = useState<RowError[]>([]);
+
+  async function submit(event: FormEvent) {
+    event.preventDefault();
+    const country = allCountries ? "" : countries.filter((code) => selectedCountries.includes(code)).join(",");
+    if (!file || (!allCountries && !country)) {
+      setError(!file ? "Please select an Excel (.xlsx) file." : "Choose All countries or at least one country.");
+      return;
+    }
+    setBusy(true);
+    setError("");
+    setProblems([]);
+    try {
+      const body = new FormData();
+      body.append("country", country);
+      body.append("file", file);
+      const saved = await api<InterfaceRecord[]>(`/api/interfaces/${encodeURIComponent(channel)}/upload`, { method: "POST", body });
+      onUploaded(saved);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Upload failed");
+      if (err instanceof ApiError) setProblems(err.errors);
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && !busy && onClose()}>
+      <form role="dialog" aria-modal="true" aria-label="Upload interfaces" className="w-full max-w-lg rounded-lg border border-hairline bg-panel p-6 shadow-xl space-y-4" onSubmit={(event) => void submit(event)}>
+        <div>
+          <h2 className="font-headline text-xl font-semibold">Upload Interfaces</h2>
+          <p className="text-xs text-muted mt-1">
+            Excel (.xlsx) with columns: Interface name, Endpoint, Description, Protocol, Source, Destination. Source and Destination can list several system codes. This replaces the {channel} interfaces for the countries you choose.
+          </p>
+        </div>
+        <CountryChecks
+          countries={countries}
+          allCountries={allCountries}
+          selected={selectedCountries}
+          disabled={busy}
+          onAll={(checked) => {
+            setAllCountries(checked);
+            if (checked) setSelectedCountries([]);
+          }}
+          onToggle={(code) => {
+            setAllCountries(false);
+            setSelectedCountries((current) => (current.includes(code) ? current.filter((item) => item !== code) : [...current, code]));
+          }}
+        />
+        <div>
+          <span className="font-label text-[10px] uppercase text-muted">Excel file (.xlsx)</span>
+          <div className="mt-1">
+            <FileDrop accept=".xlsx" ariaLabel={`Upload ${channel} Excel`} file={file} disabled={busy} grow onFile={setFile} />
+          </div>
+        </div>
+        {error && <p className="text-alert text-sm">{error}</p>}
+        {problems.length > 0 && (
+          <ul className="max-h-40 overflow-auto rounded-lg border border-hairline p-3 text-alert text-xs space-y-1" aria-label="Upload problems">
+            {problems.map((problem, index) => (
+              <li key={index}>
+                Row {problem.row}, {problem.field}: {problem.message}
+              </li>
+            ))}
+          </ul>
+        )}
+        <div className="flex justify-end gap-2 pt-2">
+          <button type="button" className="btn" disabled={busy} onClick={onClose}>
+            Cancel
+          </button>
+          <button type="submit" className="btn btn-primary" disabled={busy || !file}>
+            {busy ? "Uploading…" : "Upload file"}
           </button>
         </div>
       </form>
@@ -178,7 +345,6 @@ export function InterfacesPanel() {
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState("");
-  const [problems, setProblems] = useState<RowError[]>([]);
   const [notice, setNotice] = useState("");
   const [form, setForm] = useState<{ record?: InterfaceRecord } | null>(null);
   const [deleting, setDeleting] = useState<InterfaceRecord | null>(null);
@@ -201,7 +367,6 @@ export function InterfacesPanel() {
     setLoading(true);
     setRows([]);
     setError("");
-    setProblems([]);
     setNotice("");
     api<InterfaceRecord[]>(`/api/interfaces/${channel}`)
       .then((data) => current && setRows(data))
@@ -212,25 +377,6 @@ export function InterfacesPanel() {
     };
   }, [channel]);
 
-  async function upload(file: File) {
-    setUploading(true);
-    setError("");
-    setProblems([]);
-    setNotice("");
-    try {
-      const body = new FormData();
-      body.append("file", file);
-      const saved = await api<InterfaceRecord[]>(`/api/interfaces/${channel}/upload`, { method: "POST", body });
-      setRows(saved);
-      setNotice(`${channel} now has ${saved.length} interface${saved.length === 1 ? "" : "s"}.`);
-    } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Upload failed");
-      if (err instanceof ApiError) setProblems(err.errors);
-    } finally {
-      setUploading(false);
-    }
-  }
-
   async function remove() {
     if (!deleting) return;
     await api(`/api/interfaces/${encodeURIComponent(channel)}/${encodeURIComponent(deleting.interface_id)}`, { method: "DELETE" });
@@ -240,7 +386,7 @@ export function InterfacesPanel() {
   }
 
   const filteredRows = useMemo(
-    () => (countryFilter ? rows.filter((row) => row.country === countryFilter) : rows),
+    () => (countryFilter ? rows.filter((row) => appliesToCountry(row.country, countryFilter)) : rows),
     [rows, countryFilter],
   );
 
@@ -251,10 +397,11 @@ export function InterfacesPanel() {
   }, [countries, countryFilter]);
 
   const columns: Column<InterfaceRecord>[] = [
-    { key: "country", header: "Country", sortValue: (row) => row.country, className: "whitespace-nowrap", render: (row) => row.country },
+    { key: "country", header: "Country", sortValue: (row) => applicableFor(row.country), className: "whitespace-nowrap", render: (row) => applicableFor(row.country) },
     { key: "name", header: "Interface Name", sortValue: (row) => row.interface_name, className: "font-medium", render: (row) => row.interface_name },
-    { key: "description", header: "Description", sortValue: (row) => row.description, className: "text-muted max-w-md", render: (row) => <span className="line-clamp-2">{row.description || "—"}</span> },
+    { key: "endpoint", header: "Endpoint", sortValue: (row) => row.endpoint, className: "font-label text-xs", render: (row) => row.endpoint || "—" },
     { key: "protocol", header: "Protocol", sortValue: (row) => row.protocol, className: "whitespace-nowrap", render: (row) => row.protocol },
+    { key: "description", header: "Description", sortValue: (row) => row.description, className: "text-muted max-w-md", render: (row) => <span className="line-clamp-2">{row.description || "—"}</span> },
     { key: "source", header: "Source", sortValue: (row) => row.source, className: "font-label text-xs whitespace-nowrap", render: (row) => row.source },
     { key: "destination", header: "Destination", sortValue: (row) => row.destination, className: "font-label text-xs whitespace-nowrap", render: (row) => row.destination },
     ...(canEdit
@@ -283,7 +430,7 @@ export function InterfacesPanel() {
       <div>
         <h1 className="font-headline text-2xl font-semibold">Interfaces</h1>
         <p className="text-muted mt-0.5">
-          Manage interfaces per channel. Add them manually or upload an Excel (.xlsx) with columns Country, Interface name, Description, Protocol, Source, Destination. A valid upload replaces that channel&apos;s interfaces.
+          Manage interfaces per channel. Add them manually or upload an Excel (.xlsx) with columns Interface name, Endpoint, Description, Protocol, Source, Destination. Source and Destination can list several systems. A valid upload replaces that channel&apos;s interfaces for the countries you choose.
         </p>
       </div>
       <div role="tablist" aria-label="Interface channels" className="flex gap-1 border-b border-hairline flex-wrap">
@@ -319,15 +466,6 @@ export function InterfacesPanel() {
         />
       </div>
       {error && <p className="text-alert">{error}</p>}
-      {problems.length > 0 && (
-        <ul className="max-h-56 overflow-auto rounded-lg border border-hairline p-3 text-alert space-y-1" aria-label="Upload problems">
-          {problems.map((problem, index) => (
-            <li key={index}>
-              Row {problem.row}, {problem.field}: {problem.message}
-            </li>
-          ))}
-        </ul>
-      )}
       {notice && (
         <p className="text-accent" role="status">
           {notice}
@@ -341,7 +479,7 @@ export function InterfacesPanel() {
         pageSize={INTERFACES_PAGE_SIZE}
         pageSizes={KB_PAGE_SIZES}
         emptyLabel={loading ? "Loading…" : `No ${channel} interfaces found.`}
-        searchText={(row) => `${row.country} ${row.interface_name} ${row.description} ${row.protocol} ${row.source} ${row.destination}`}
+        searchText={(row) => `${applicableFor(row.country)} ${row.interface_name} ${row.endpoint} ${row.description} ${row.protocol} ${row.source} ${row.destination}`}
         searchLabel={`Search ${channel} interfaces`}
         searchPlaceholder={`Search ${channel} interfaces`}
         toolbar={
@@ -351,26 +489,28 @@ export function InterfacesPanel() {
                 <span className="material-symbols-outlined text-base">add</span>
                 Add
               </button>
-              <label className={`btn btn-primary cursor-pointer ${uploading ? "opacity-50" : ""}`}>
-                <span className="material-symbols-outlined text-base">upload</span>
-                {uploading ? "Uploading…" : "Upload Excel"}
-                <input
-                  className="hidden"
-                  type="file"
-                  aria-label={`Upload ${channel} Excel`}
-                  accept=".xlsx"
-                  disabled={uploading}
-                  onChange={(event) => {
-                    const file = event.target.files?.[0];
-                    event.target.value = "";
-                    if (file) void upload(file);
-                  }}
-                />
-              </label>
+              <button type="button" className="btn btn-primary" onClick={() => setUploading(true)}>
+                <span className="material-symbols-outlined text-base" aria-hidden="true">
+                  upload
+                </span>
+                Upload
+              </button>
             </div>
           ) : undefined
         }
       />
+      {uploading && (
+        <UploadInterfacesDialog
+          channel={channel}
+          countries={countries}
+          onClose={() => setUploading(false)}
+          onUploaded={(saved) => {
+            setRows(saved);
+            setNotice(`${channel} now has ${saved.length} interface${saved.length === 1 ? "" : "s"}.`);
+            setUploading(false);
+          }}
+        />
+      )}
       {form && (
         <InterfaceFormDialog
           channel={channel}

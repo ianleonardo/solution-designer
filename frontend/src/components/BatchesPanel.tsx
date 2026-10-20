@@ -4,6 +4,7 @@ import { api, ApiError, type RowError } from "../api";
 import { useOptionalAuth } from "../auth";
 import type { Catalogs, KbBatchRecord, SystemRecord } from "../types";
 import { ConfirmDialog } from "./ConfirmDialog";
+import { FileDrop } from "./FileDrop";
 import { FrequencyField, frequencyText, selectedFrequencies } from "./FrequencyField";
 import { SelectField } from "./SelectField";
 import { SortHeader, sortRows, toggleColumnSort, type ColumnSort } from "./SortHeader";
@@ -98,10 +99,12 @@ function UploadBatchesDialog({
             </div>
           </label>
         </div>
-        <label className="block">
+        <div>
           <span className="font-label text-[10px] uppercase text-muted">Excel file (.xlsx)</span>
-          <input className="field mt-1" type="file" aria-label="Excel file" accept=".xlsx" disabled={busy} onChange={(e) => setFile(e.target.files?.[0] ?? null)} />
-        </label>
+          <div className="mt-1">
+            <FileDrop accept=".xlsx" ariaLabel="Excel file" file={file} disabled={busy} grow onFile={setFile} />
+          </div>
+        </div>
         {error && <p className="text-alert text-sm">{error}</p>}
         {problems.length > 0 && (
           <ul className="max-h-40 overflow-auto rounded-lg border border-hairline p-3 text-alert text-xs space-y-1" aria-label="Upload problems">

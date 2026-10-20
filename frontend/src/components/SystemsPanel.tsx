@@ -3,6 +3,7 @@ import { api, ApiError, type RowError } from "../api";
 import { useOptionalAuth } from "../auth";
 import type { SystemRecord } from "../types";
 import { ConfirmDialog } from "./ConfirmDialog";
+import { FileDrop } from "./FileDrop";
 import { type Column, DataTable } from "./DataTable";
 import { KB_PAGE_SIZES } from "./TablePager";
 import { SystemDialog } from "./SystemDialog";
@@ -59,8 +60,6 @@ export function SystemsPanel() {
     { key: "code", header: "System Code", sortValue: (row) => row.system_code, className: "font-label text-xs whitespace-nowrap", render: (row) => row.system_code },
     { key: "name", header: "System Name", sortValue: (row) => row.system_name, className: "font-medium", render: (row) => row.system_name },
     { key: "description", header: "Description", sortValue: (row) => row.description, className: "text-muted max-w-md", render: (row) => <span className="line-clamp-2">{row.description || "—"}</span> },
-    { key: "upstreams", header: "Upstreams", sortValue: (row) => row.upstreams, className: "text-muted", render: (row) => row.upstreams || "—" },
-    { key: "downstreams", header: "Downstreams", sortValue: (row) => row.downstreams, className: "text-muted", render: (row) => row.downstreams || "—" },
     { key: "has_batch", header: "Has batch", sortValue: (row) => (row.has_batch ? 1 : 0), className: "text-muted whitespace-nowrap", render: (row) => (row.has_batch ? "Yes" : "No") },
     { key: "has_report", header: "Has report", sortValue: (row) => (row.has_report ? 1 : 0), className: "text-muted whitespace-nowrap", render: (row) => (row.has_report ? "Yes" : "No") },
     ...(canEdit
@@ -89,7 +88,7 @@ export function SystemsPanel() {
       <div>
         <h1 className="font-headline text-2xl font-semibold">Systems</h1>
         <p className="text-muted mt-0.5">
-          The systems catalogue. Interfaces refer to these system codes, and so do each system's upstreams and downstreams. Upload an Excel (.xlsx) with columns SYSTEM_CODE, SYSTEM_NAME and DESCRIPTION. Description can be left blank.
+          The systems catalogue. Interfaces refer to these system codes. Upload an Excel (.xlsx) with columns SYSTEM_CODE, SYSTEM_NAME and DESCRIPTION. Description can be left blank.
         </p>
       </div>
       {error && <p className="text-alert">{error}</p>}
@@ -109,7 +108,7 @@ export function SystemsPanel() {
         pageSize={SYSTEMS_PAGE_SIZE}
         pageSizes={KB_PAGE_SIZES}
         emptyLabel="No systems found."
-        searchText={(row) => `${row.system_code} ${row.system_name} ${row.description} ${row.upstreams} ${row.downstreams} ${row.has_batch ? "Yes" : "No"} ${row.has_report ? "Yes" : "No"}`}
+        searchText={(row) => `${row.system_code} ${row.system_name} ${row.description} ${row.has_batch ? "Yes" : "No"} ${row.has_report ? "Yes" : "No"}`}
         searchLabel="Search Systems"
         searchPlaceholder="Search systems"
         toolbar={
@@ -119,24 +118,22 @@ export function SystemsPanel() {
                 <span className="material-symbols-outlined text-base">add</span>
                 Add
               </button>
-              <label className={`btn cursor-pointer ${uploading ? "opacity-50" : ""}`}>
-                <span className="material-symbols-outlined text-base" aria-hidden="true">
-                  upload
-                </span>
-                {uploading ? "Uploading…" : "Upload Excel"}
-                <input
-                  className="hidden"
-                  type="file"
-                  aria-label="Upload systems Excel"
-                  accept=".xlsx"
-                  disabled={uploading}
-                  onChange={(event) => {
-                    const file = event.target.files?.[0];
-                    event.target.value = "";
-                    if (file) void upload(file);
-                  }}
-                />
-              </label>
+              <FileDrop
+                primary
+                accept=".xlsx"
+                ariaLabel="Upload systems Excel"
+                disabled={uploading}
+                idleLabel="Drop file"
+                buttonLabel={
+                  <>
+                    <span className="material-symbols-outlined text-base" aria-hidden="true">
+                      upload
+                    </span>
+                    {uploading ? "Uploading…" : "Upload Excel"}
+                  </>
+                }
+                onFile={(file) => void upload(file)}
+              />
             </div>
           ) : undefined
         }

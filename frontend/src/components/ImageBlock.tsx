@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { api, ApiError, authHeaders } from "../api";
+import { FileDrop } from "./FileDrop";
 
 /** Loads a protected image with the session token and shows it through an object URL. */
 export function AuthImage({ url, alt }: { url: string; alt: string }) {
@@ -65,21 +66,14 @@ export function ImageBlock({
       {block.url ? <AuthImage url={block.url} alt={block.alt || block.caption} /> : <p className="text-muted text-sm">No image uploaded.</p>}
       {!readOnly && (
         <div className="flex flex-wrap items-center gap-2">
-          <label className="btn cursor-pointer">
-            {uploading ? "Uploading…" : block.url ? "Replace image" : "Upload image"}
-            <input
-              className="hidden"
-              type="file"
-              aria-label="Upload image"
-              accept="image/png,image/jpeg,image/gif,image/webp"
-              disabled={uploading}
-              onChange={(event) => {
-                const file = event.target.files?.[0];
-                if (file) void upload(file);
-                event.target.value = "";
-              }}
-            />
-          </label>
+          <FileDrop
+            accept="image/png,image/jpeg,image/gif,image/webp"
+            ariaLabel="Upload image"
+            disabled={uploading}
+            idleLabel="Drop image"
+            buttonLabel={uploading ? "Uploading…" : block.url ? "Replace image" : "Upload image"}
+            onFile={(file) => void upload(file)}
+          />
           {block.url && (
             <button type="button" className="btn" onClick={() => onChange({ ...block, url: "" })}>
               Remove image

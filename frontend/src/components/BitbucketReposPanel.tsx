@@ -4,6 +4,7 @@ import { api, ApiError, type RowError } from "../api";
 import { useOptionalAuth } from "../auth";
 import type { Catalogs, KbBitbucketRepoRecord } from "../types";
 import { ConfirmDialog } from "./ConfirmDialog";
+import { FileDrop } from "./FileDrop";
 import { type Column, DataTable } from "./DataTable";
 import { KB_PAGE_SIZES } from "./TablePager";
 import { ProcessingRulesEditor } from "./ProcessingRulesEditor";
@@ -330,24 +331,22 @@ export function BitbucketReposPanel() {
                 </span>
                 Add
               </button>
-              <label className={`btn btn-primary cursor-pointer ${uploading ? "opacity-50" : ""}`}>
-                <span className="material-symbols-outlined text-base" aria-hidden="true">
-                  upload
-                </span>
-                {uploading ? "Uploading…" : "Upload Excel"}
-                <input
-                  className="hidden"
-                  type="file"
-                  aria-label={`Upload ${project} Excel`}
-                  accept=".xlsx"
-                  disabled={uploading}
-                  onChange={(event) => {
-                    const file = event.target.files?.[0];
-                    event.target.value = "";
-                    if (file) void upload(file);
-                  }}
-                />
-              </label>
+              <FileDrop
+                primary
+                accept=".xlsx"
+                ariaLabel={`Upload ${project} Excel`}
+                disabled={uploading}
+                idleLabel="Drop file"
+                buttonLabel={
+                  <>
+                    <span className="material-symbols-outlined text-base" aria-hidden="true">
+                      upload
+                    </span>
+                    {uploading ? "Uploading…" : "Upload Excel"}
+                  </>
+                }
+                onFile={(file) => void upload(file)}
+              />
             </div>
           ) : undefined
         }

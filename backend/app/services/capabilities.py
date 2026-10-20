@@ -18,6 +18,9 @@ MAX_LEVEL = 200
 MAX_DESCRIPTION = 4000
 MAX_BEHAVIOR = 4000
 MAX_RULES = 100000
+MAX_DIAGRAMS = 30
+MAX_DIAGRAM_TITLE = 120
+MAX_DIAGRAM_TEXT = 20000
 
 
 def _now() -> datetime:
@@ -60,6 +63,54 @@ def _country(value: str) -> str:
             chosen.append(canonical)
     chosen.sort(key=lambda code: order[code])
     return ",".join(chosen)
+
+
+def _diagram_list(raw) -> list[dict]:
+    if not raw:
+        return []
+    if isinstance(raw, list):
+        data = raw
+    else:
+        try:
+            data = json.loads(raw)
+        except (TypeError, json.JSONDecodeError):
+            return []
+    return [item for item in data if isinstance(item, dict)] if isinstance(data, list) else []
+
+
+def _diagrams(value) -> str:
+    items = value
+    if isinstance(value, str):
+        text = value.strip()
+        if not text:
+            return "[]"
+        try:
+            items = json.loads(text)
+        except json.JSONDecodeError as exc:
+            raise AppError(400, "Sequence diagrams must be a list.") from exc
+    if items is None:
+        return "[]"
+    if not isinstance(items, list):
+        raise AppError(400, "Sequence diagrams must be a list.")
+    if len(items) > MAX_DIAGRAMS:
+        raise AppError(400, f"At most {MAX_DIAGRAMS} sequence diagrams.")
+    cleaned = []
+    for index, item in enumerate(items, start=1):
+        if not isinstance(item, dict):
+            raise AppError(400, "Each sequence diagram needs a title and Mermaid text.")
+        title = str(item.get("title") or "").strip() or f"Diagram {index}"
+        mermaid = str(item.get("mermaid") or "").strip()
+        if len(title) > MAX_DIAGRAM_TITLE:
+            raise AppError(400, f"Sequence diagram titles must be {MAX_DIAGRAM_TITLE} characters or fewer.")
+        if not mermaid:
+            raise AppError(400, f"Sequence diagram '{title}' is empty.")
+        if not mermaid.lower().startswith("sequencediagram"):
+            raise AppError(400, f"Sequence diagram '{title}' must start with sequenceDiagram.")
+        if len(mermaid) > MAX_DIAGRAM_TEXT:
+            raise AppError(400, f"Sequence diagram '{title}' is too long.")
+        diagram_id = str(item.get("id") or "").strip() or str(uuid.uuid4())
+        cleaned.append({"id": diagram_id, "title": title, "mermaid": mermaid})
+    return json.dumps(cleaned)
 
 
 def _behavior(value: str) -> str:
@@ -130,10 +181,12 @@ def text_for(row: dict) -> str:
     desc = f" {row['description']}" if row.get("description") else ""
     rules = (row.get("processing_rules") or "").strip()
     rules_bit = f" Processing rules: {rules[:1200]}" if rules else ""
+    titles = [item.get("title") for item in _diagram_list(row.get("sequence_diagrams")) if item.get("title")]
+    diagram_bit = f" Sequence diagrams: {', '.join(titles)}." if titles else ""
     return (
         f"Capability {row['l1_capability']} / {row['l2_capability']} / {row['l3_capability']} "
         f"(country {country_label(row.get('country') or '')}, system {row['system_code']})."
-        f"{desc}{(' Country specific behavior: ' + (row.get('country_behavior') or '').strip()) if (row.get('country_behavior') or '').strip() else ''}{rules_bit}"
+        f"{desc}{(' Country specific behavior: ' + (row.get('country_behavior') or '').strip()) if (row.get('country_behavior') or '').strip() else ''}{diagram_bit}{rules_bit}"
     )
 
 
@@ -244,6 +297,7 @@ def _payload(row: dict, *, with_links: bool = False) -> dict:
         "l2_capability": row["l2_capability"],
         "l3_capability": row["l3_capability"],
         "description": row["description"],
+        "sequence_diagrams": _diagram_list(row.get("sequence_diagrams")),
         "processing_rules": row.get("processing_rules") or "",
         "country_behavior": row.get("country_behavior") or "",
         "created_at": row["created_at"],
@@ -296,6 +350,7 @@ def create_capability(user: dict, body: dict) -> dict:
         str(body.get("description") or ""),
         str(body.get("processing_rules") or ""),
     )
+    diagrams = _diagrams(body.get("sequence_diagrams") or [])
     existing = db.fetchone(
         """
         SELECT capability_id FROM kb_capabilities
@@ -312,10 +367,10 @@ def create_capability(user: dict, body: dict) -> dict:
         """
         INSERT INTO kb_capabilities (
             capability_id, country, system_code, l1_capability, l2_capability, l3_capability,
-            description, processing_rules, country_behavior, created_at, last_modified
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            description, sequence_diagrams, processing_rules, country_behavior, created_at, last_modified
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
-        [capability_id, country, system_code, l1, l2, l3, description, rules, behavior, now, now],
+        [capability_id, country, system_code, l1, l2, l3, description, diagrams, rules, behavior, now, now],
     )
     _embed(capability_id)
     gcs.upload_db()
@@ -337,6 +392,9 @@ def update_capability(user: dict, capability_id: str, body: dict) -> dict:
         str(body.get("description", current["description"]) or ""),
         str(body.get("processing_rules", current.get("processing_rules") or "") or ""),
     )
+    diagrams = _diagrams(body["sequence_diagrams"]) if "sequence_diagrams" in body else (current.get("sequence_diagrams") or "[]")
+    if not isinstance(diagrams, str):
+        diagrams = _diagrams(diagrams)
     conflict = db.fetchone(
         """
         SELECT capability_id FROM kb_capabilities
@@ -352,10 +410,10 @@ def update_capability(user: dict, capability_id: str, body: dict) -> dict:
         """
         UPDATE kb_capabilities
         SET country = ?, system_code = ?, l1_capability = ?, l2_capability = ?, l3_capability = ?,
-            description = ?, processing_rules = ?, country_behavior = ?, last_modified = ?
+            description = ?, sequence_diagrams = ?, processing_rules = ?, country_behavior = ?, last_modified = ?
         WHERE capability_id = ?
         """,
-        [country, system_code, l1, l2, l3, description, rules, behavior, _now(), capability_id],
+        [country, system_code, l1, l2, l3, description, diagrams, rules, behavior, _now(), capability_id],
     )
     _embed(capability_id)
     gcs.upload_db()
@@ -387,15 +445,28 @@ def _require_capability(capability_id: str) -> dict:
     return row
 
 
+def _country_codes(value: str) -> set[str]:
+    return {
+        part.strip().lower()
+        for part in (value or "").split(",")
+        if part.strip() and part.strip().lower() not in {"all", "all countries"}
+    }
+
+
 def _require_same_country(capability: dict, row: dict | None, label: str) -> None:
     if row is None:
         raise AppError(404, f"{label} not found")
-    allowed = (capability.get("country") or "").strip()
+    allowed = _country_codes(capability.get("country") or "")
     if not allowed:
         return
-    codes = {part.strip().lower() for part in allowed.split(",") if part.strip()}
-    if (row.get("country") or "").strip().lower() not in codes:
-        raise AppError(400, f"{label} must be in the same country as the capability ({country_label(allowed)}).")
+    item = _country_codes(row.get("country") or "")
+    # An item for every country overlaps any capability. Otherwise one shared code is enough.
+    if not item or allowed & item:
+        return
+    raise AppError(
+        400,
+        f"{label} must be in the same country as the capability ({country_label(capability.get('country') or '')}).",
+    )
 
 
 def link_interface(user: dict, capability_id: str, interface_id: str) -> dict:

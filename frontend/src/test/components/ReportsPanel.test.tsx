@@ -7,6 +7,7 @@ const report = {
   report_id: "r1",
   country: "SG",
   system_code: "SPL",
+  report_code: "RPT-01",
   report_name: "Daily Balance",
   description: "End of day",
   layout: "A|B",
@@ -19,6 +20,7 @@ const other = {
   report_id: "r2",
   country: "MY",
   system_code: "DGE",
+  report_code: "RPT-02",
   report_name: "MY Summary",
   description: "Malaysia only",
 };
@@ -54,6 +56,7 @@ test("filters reports by country and search", async () => {
     </MemoryRouter>,
   );
   await waitFor(() => expect(screen.getByText("Daily Balance")).toBeTruthy());
+  expect(screen.getByText("RPT-01")).toBeTruthy();
   expect(screen.queryByText("MY Summary")).toBeNull();
 
   fireEvent.click(screen.getByLabelText("Filter by country"));
@@ -68,8 +71,8 @@ test("filters reports by country and search", async () => {
 });
 
 test("sorts reports by frequency", async () => {
-  const weekly = { ...report, report_id: "r3", report_name: "Weekly Close", frequency: "Weekly", frequency_other: "" };
-  const daily = { ...report, report_id: "r4", report_name: "Morning Snapshot", frequency: "Daily", frequency_other: "" };
+  const weekly = { ...report, report_id: "r3", report_code: "RPT-03", report_name: "Weekly Close", frequency: "Weekly", frequency_other: "" };
+  const daily = { ...report, report_id: "r4", report_code: "RPT-04", report_name: "Morning Snapshot", frequency: "Daily", frequency_other: "" };
   vi.stubGlobal("localStorage", { getItem: () => JSON.stringify({ role_name: "Analyst", username: "a" }) });
   vi.stubGlobal(
     "fetch",

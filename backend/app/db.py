@@ -7,6 +7,10 @@ import duckdb
 
 from app.config import DEFAULT_USERS, GLOBAL_PROMPT, LEGACY_GLOBAL_PROMPT, data_dir, template_path
 from app.seed_layouts import (
+    FMEA_LAYOUT_DESCRIPTION,
+    FMEA_LAYOUT_ID,
+    FMEA_LAYOUT_NAME,
+    FMEA_SECTIONS,
     INTERFACE_LAYOUT_DESCRIPTION,
     INTERFACE_LAYOUT_ID,
     INTERFACE_LAYOUT_NAME,
@@ -179,6 +183,7 @@ def _migrate() -> None:
             channel VARCHAR NOT NULL,
             country VARCHAR NOT NULL,
             interface_name VARCHAR NOT NULL,
+            endpoint VARCHAR NOT NULL DEFAULT '',
             description VARCHAR NOT NULL DEFAULT '',
             protocol VARCHAR NOT NULL,
             source VARCHAR NOT NULL,
@@ -293,6 +298,7 @@ def _migrate() -> None:
             report_id VARCHAR PRIMARY KEY,
             country VARCHAR NOT NULL,
             system_code VARCHAR NOT NULL,
+            report_code VARCHAR NOT NULL DEFAULT '',
             report_name VARCHAR NOT NULL,
             frequency VARCHAR NOT NULL DEFAULT '',
             frequency_other VARCHAR NOT NULL DEFAULT '',
@@ -332,6 +338,7 @@ def _migrate() -> None:
             l2_capability VARCHAR NOT NULL,
             l3_capability VARCHAR NOT NULL,
             description VARCHAR NOT NULL DEFAULT '',
+            sequence_diagrams VARCHAR NOT NULL DEFAULT '[]',
             processing_rules VARCHAR NOT NULL DEFAULT '',
             country_behavior VARCHAR NOT NULL DEFAULT '',
             created_at TIMESTAMP NOT NULL,
@@ -495,6 +502,33 @@ def _ensure_columns() -> None:
         if "frequency_other" not in present:
             _conn.execute(f"ALTER TABLE {table} ADD COLUMN frequency_other VARCHAR DEFAULT ''")
             _conn.execute(f"UPDATE {table} SET frequency_other = '' WHERE frequency_other IS NULL")
+    report_columns = {
+        row[0]
+        for row in _conn.execute(
+            "SELECT column_name FROM information_schema.columns WHERE table_name = 'kb_reports'"
+        ).fetchall()
+    }
+    if "report_code" not in report_columns:
+        _conn.execute("ALTER TABLE kb_reports ADD COLUMN report_code VARCHAR DEFAULT ''")
+        _conn.execute("UPDATE kb_reports SET report_code = '' WHERE report_code IS NULL")
+    capability_columns = {
+        row[0]
+        for row in _conn.execute(
+            "SELECT column_name FROM information_schema.columns WHERE table_name = 'kb_capabilities'"
+        ).fetchall()
+    }
+    if "sequence_diagrams" not in capability_columns:
+        _conn.execute("ALTER TABLE kb_capabilities ADD COLUMN sequence_diagrams VARCHAR DEFAULT '[]'")
+        _conn.execute("UPDATE kb_capabilities SET sequence_diagrams = '[]' WHERE sequence_diagrams IS NULL OR sequence_diagrams = ''")
+    interface_columns = {
+        row[0]
+        for row in _conn.execute(
+            "SELECT column_name FROM information_schema.columns WHERE table_name = 'interfaces'"
+        ).fetchall()
+    }
+    if "endpoint" not in interface_columns:
+        _conn.execute("ALTER TABLE interfaces ADD COLUMN endpoint VARCHAR DEFAULT ''")
+        _conn.execute("UPDATE interfaces SET endpoint = '' WHERE endpoint IS NULL")
     if "indexed_embedding_signature" not in columns:
         _conn.execute("ALTER TABLE app_settings ADD COLUMN indexed_embedding_signature VARCHAR DEFAULT ''")
         _conn.execute("UPDATE app_settings SET indexed_embedding_signature = '' WHERE indexed_embedding_signature IS NULL")
@@ -655,13 +689,14 @@ def default_section_prompt(document_name: str, name: str, hint: str) -> str:
     return prompt
 
 
-def _seed_interface_layout() -> None:
-    if not _ensure_layout(INTERFACE_LAYOUT_ID, INTERFACE_LAYOUT_NAME, INTERFACE_LAYOUT_DESCRIPTION):
+def _seed_code_layout(layout_id: str, name: str, description: str, sections: list[dict]) -> None:
+    """Seed a built-in layout defined in seed_layouts.py (only when the layout does not exist yet)."""
+    if not _ensure_layout(layout_id, name, description):
         return
     used: set[str] = set()
 
-    def template_id(name: str) -> str:
-        base = f"{INTERFACE_LAYOUT_ID}--{slugify(name)}"
+    def template_id(section_name: str) -> str:
+        base = f"{layout_id}--{slugify(section_name)}"
         candidate, counter = base, 2
         while candidate in used:
             candidate = f"{base}-{counter}"
@@ -672,13 +707,13 @@ def _seed_interface_layout() -> None:
     def add(section: dict, parent_id: str | None, sequence: int) -> str:
         identifier = template_id(section["name"])
         insert_template(
-            INTERFACE_LAYOUT_ID,
+            layout_id,
             {
                 "template_id": identifier,
                 "parent_id": parent_id,
                 "section_name": section["name"],
                 "sequence_order": sequence,
-                "system_prompt": default_section_prompt(INTERFACE_LAYOUT_NAME, section["name"], section["hint"]),
+                "system_prompt": default_section_prompt(name, section["name"], section["hint"]),
                 "temperature": 0.2,
                 "max_words": 2000,
                 "content_kind": kind_from_blocks(section["blocks"]),
@@ -688,10 +723,18 @@ def _seed_interface_layout() -> None:
         )
         return identifier
 
-    for index, section in enumerate(INTERFACE_SECTIONS, start=1):
+    for index, section in enumerate(sections, start=1):
         parent = add(section, None, index * 100)
         for child_index, child in enumerate(section["children"], start=1):
             add(child, parent, index * 100 + child_index)
+
+
+def _seed_interface_layout() -> None:
+    _seed_code_layout(INTERFACE_LAYOUT_ID, INTERFACE_LAYOUT_NAME, INTERFACE_LAYOUT_DESCRIPTION, INTERFACE_SECTIONS)
+
+
+def _seed_fmea_layout() -> None:
+    _seed_code_layout(FMEA_LAYOUT_ID, FMEA_LAYOUT_NAME, FMEA_LAYOUT_DESCRIPTION, FMEA_SECTIONS)
 
 
 def _migrate_documents() -> None:
@@ -802,6 +845,7 @@ def _seed() -> None:
             )
     exec_sql("UPDATE layout_templates SET max_words = 2000 WHERE max_words = 500")
     _seed_interface_layout()
+    _seed_fmea_layout()
     _migrate_documents()
     _backfill_structures()
     if fetchone("SELECT settings_id FROM app_settings WHERE settings_id = 'default'") is None:

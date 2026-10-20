@@ -5,7 +5,7 @@ from app.services import reindex
 from openpyxl import Workbook
 from tests.conftest import auth, login
 
-SIX = ["Country", "Interface name", "Description", "Protocol", "Source", "Destination"]
+SIX = ["Interface name", "Endpoint", "Description", "Protocol", "Source", "Destination"]
 
 
 def _excel(rows) -> bytes:
@@ -22,8 +22,8 @@ def _fill(client, admin, writer):
     """One of everything that is embedded."""
     for code in ("SPL", "DGE"):
         client.post("/api/systems", json={"system_code": code, "system_name": f"{code} name"}, headers=auth(admin))
-    files = {"file": ("i.xlsx", _excel([["SG", "Get", "", "API", "SPL", "DGE"]]), "application/octet-stream")}
-    client.post("/api/interfaces/SPL/upload", files=files, headers=auth(admin))
+    files = {"file": ("i.xlsx", _excel([["Get", "", "", "API", "SPL", "DGE"]]), "application/octet-stream")}
+    client.post("/api/interfaces/SPL/upload", data={"country": "SG"}, files=files, headers=auth(admin))
     db.exec_sql(
         "INSERT INTO rag_inventory (rag_id, inventory_type, system_name, source_name, raw_content, parsed_json, embedding, created_at) "
         "VALUES ('CA-0001', 'Capabilities', 'Pay', 'f.md', 'Payments capability', '{}', NULL, CURRENT_TIMESTAMP)"
@@ -155,8 +155,8 @@ def test_interface_upload_embeds_new_rows_in_the_background(client, monkeypatch)
     for code in ("SPL", "DGE"):
         client.post("/api/systems", json={"system_code": code, "system_name": code}, headers=admin)
     _embedding_on(monkeypatch, 3)
-    files = {"file": ("i.xlsx", _excel([["SG", "Get", "", "API", "SPL", "DGE"]]), "application/octet-stream")}
-    assert client.post("/api/interfaces/SPL/upload", files=files, headers=admin).status_code == 200
+    files = {"file": ("i.xlsx", _excel([["Get", "", "", "API", "SPL", "DGE"]]), "application/octet-stream")}
+    assert client.post("/api/interfaces/SPL/upload", data={"country": "SG"}, files=files, headers=admin).status_code == 200
     assert len(jobs) == 1 and _vectors()["interfaces"]["embedded"] == 0
     jobs.pop(0)()
     assert _vectors()["interfaces"]["embedded"] == 1

@@ -193,6 +193,7 @@ export type InterfaceRecord = {
   channel: InterfaceChannel;
   country: string;
   interface_name: string;
+  endpoint: string;
   description: string;
   protocol: string;
   source: string;
@@ -286,6 +287,7 @@ export type KbReportRecord = {
   report_id: string;
   country: string;
   system_code: string;
+  report_code: string;
   report_name: string;
   frequency: string;
   frequency_other: string;
@@ -356,6 +358,7 @@ export type KbCapabilityRecord = {
   l2_capability: string;
   l3_capability: string;
   description: string;
+  sequence_diagrams?: { id: string; title: string; mermaid: string }[];
   processing_rules: string;
   country_behavior?: string;
   created_at: string;

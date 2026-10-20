@@ -5,6 +5,7 @@ import { useOptionalAuth } from "../auth";
 import type { Catalogs, KbReportRecord, SystemRecord } from "../types";
 import { ConfirmDialog } from "./ConfirmDialog";
 import { FrequencyField, frequencyText, selectedFrequencies } from "./FrequencyField";
+import { FileDrop } from "./FileDrop";
 import { SelectField } from "./SelectField";
 import { SortHeader, sortRows, toggleColumnSort, type ColumnSort } from "./SortHeader";
 import { PageSlice } from "./TablePager";
@@ -59,7 +60,7 @@ function UploadReportsDialog({
       <form role="dialog" aria-modal="true" aria-label="Upload reports" className="w-full max-w-lg rounded-lg border border-hairline bg-panel p-6 shadow-xl space-y-4" onSubmit={(e) => void submit(e)}>
         <div>
           <h2 className="font-headline text-xl font-semibold">Upload Reports</h2>
-          <p className="text-xs text-muted mt-1">Excel (.xlsx) with columns: REPORT_NAME, REPORT_DESCRIPTION, REPORT_LAYOUT.</p>
+          <p className="text-xs text-muted mt-1">Excel (.xlsx) with columns: REPORT_ID, REPORT_NAME, REPORT_DESCRIPTION, REPORT_LAYOUT.</p>
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <label className="block">
@@ -93,10 +94,12 @@ function UploadReportsDialog({
             </div>
           </label>
         </div>
-        <label className="block">
+        <div>
           <span className="font-label text-[10px] uppercase text-muted">Excel file (.xlsx)</span>
-          <input className="field mt-1" type="file" aria-label="Excel file" accept=".xlsx" disabled={busy} onChange={(e) => setFile(e.target.files?.[0] ?? null)} />
-        </label>
+          <div className="mt-1">
+            <FileDrop accept=".xlsx" ariaLabel="Excel file" file={file} disabled={busy} grow onFile={setFile} />
+          </div>
+        </div>
         {error && <p className="text-alert text-sm">{error}</p>}
         {problems.length > 0 && (
           <ul className="max-h-40 overflow-auto rounded-lg border border-hairline p-3 text-alert text-xs space-y-1" aria-label="Upload problems">
@@ -136,6 +139,7 @@ function ReportFormDialog({
   const editing = Boolean(report);
   const [country, setCountry] = useState(report?.country ?? (countries.includes("SG") ? "SG" : countries[0] ?? "SG"));
   const [system, setSystem] = useState(report?.system_code ?? systems[0]?.system_code ?? "");
+  const [code, setCode] = useState(report?.report_code ?? "");
   const [name, setName] = useState(report?.report_name ?? "");
   const [frequency, setFrequency] = useState(selectedFrequencies(report?.frequency));
   const [frequencyOther, setFrequencyOther] = useState(report?.frequency_other ?? "");
@@ -163,6 +167,7 @@ function ReportFormDialog({
       const payload = {
         country,
         system_code: system,
+        report_code: code.trim(),
         report_name: name.trim(),
         frequency: frequency.join(", "),
         frequency_other: frequency.includes("Other") ? frequencyOther.trim() : "",
@@ -223,6 +228,10 @@ function ReportFormDialog({
           </label>
         </div>
         <label className="block">
+          <span className="font-label text-[10px] uppercase text-muted">Report ID</span>
+          <input className="field mt-1" aria-label="Report ID" value={code} required maxLength={50} disabled={busy} onChange={(e) => setCode(e.target.value)} />
+        </label>
+        <label className="block">
           <span className="font-label text-[10px] uppercase text-muted">Report name</span>
           <input className="field mt-1" aria-label="Report name" value={name} required disabled={busy} onChange={(e) => setName(e.target.value)} />
         </label>
@@ -248,7 +257,7 @@ function ReportFormDialog({
           <button type="button" className="btn" disabled={busy} onClick={onClose}>
             Cancel
           </button>
-          <button type="submit" className="btn btn-primary" disabled={busy || !name.trim() || !system}>
+          <button type="submit" className="btn btn-primary" disabled={busy || !code.trim() || !name.trim() || !system}>
             {editing ? "Save" : "Add report"}
           </button>
         </div>
@@ -265,6 +274,7 @@ function ReportLayoutDialog({ report, onClose }: { report: KbReportRecord; onClo
           <div className="min-w-0">
             <div className="font-label text-[11px] uppercase text-muted">
               {report.country} · {report.system_code}
+              {report.report_code ? ` · ${report.report_code}` : ""}
             </div>
             <h2 className="font-headline text-xl font-semibold mt-0.5">{report.report_name}</h2>
             {frequencyText(report.frequency, report.frequency_other) && (
@@ -363,7 +373,7 @@ export function ReportsPanel() {
       if (row.system_code !== systemFilter) continue;
       if (
         needle &&
-        !`${row.report_name} ${frequencyText(row.frequency, row.frequency_other)} ${row.description} ${row.layout} ${row.country} ${row.system_code}`
+        !`${row.report_code} ${row.report_name} ${frequencyText(row.frequency, row.frequency_other)} ${row.description} ${row.layout} ${row.country} ${row.system_code}`
           .toLowerCase()
           .includes(needle)
       ) {
@@ -455,12 +465,22 @@ export function ReportsPanel() {
                   {group.reports.length} {group.reports.length === 1 ? "report" : "reports"}
                 </span>
               </div>
-              <PageSlice rows={sortRows(group.reports, sort, (row) => (sort?.key === "frequency" ? frequencyText(row.frequency, row.frequency_other) : row.report_name))} resetKey={`${search}|${countryFilter}|${systemFilter}|${sort?.key ?? ""}|${sort?.dir ?? ""}`}>
+              <PageSlice
+                rows={sortRows(group.reports, sort, (row) => {
+                  if (sort?.key === "frequency") return frequencyText(row.frequency, row.frequency_other);
+                  if (sort?.key === "report_code") return row.report_code;
+                  return row.report_name;
+                })}
+                resetKey={`${search}|${countryFilter}|${systemFilter}|${sort?.key ?? ""}|${sort?.dir ?? ""}`}
+              >
                 {(visible, pager) => (
                   <>
               <table className="w-full text-left border-collapse">
                 <thead>
                   <tr className="border-b border-hairline font-label text-[10px] uppercase text-muted">
+                    <th className="py-2.5 px-3 w-36" aria-sort={sort?.key === "report_code" ? (sort.dir === "asc" ? "ascending" : "descending") : "none"}>
+                      <SortHeader label="Report ID" active={sort?.key === "report_code" ? sort.dir : null} onClick={() => setSort((current) => toggleColumnSort(current, "report_code"))} />
+                    </th>
                     <th className="py-2.5 px-3 w-72" aria-sort={sort?.key === "report_name" ? (sort.dir === "asc" ? "ascending" : "descending") : "none"}>
                       <SortHeader label="Report Name" active={sort?.key === "report_name" ? sort.dir : null} onClick={() => setSort((current) => toggleColumnSort(current, "report_name"))} />
                     </th>
@@ -474,6 +494,9 @@ export function ReportsPanel() {
                 <tbody>
                   {visible.map((row) => (
                     <tr key={row.report_id} className="border-b border-hairline last:border-b-0 hover:bg-inset/50">
+                      <td className="py-2.5 px-3 font-label text-xs font-medium whitespace-nowrap cursor-pointer" onClick={() => setInspecting(row)}>
+                        {row.report_code || "—"}
+                      </td>
                       <td className="py-2.5 px-3 font-label text-xs font-medium">
                         <button type="button" className="text-left text-accent hover:underline" onClick={() => setInspecting(row)}>
                           {row.report_name}

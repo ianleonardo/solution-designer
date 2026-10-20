@@ -9,13 +9,16 @@ import type {
   KbCapabilityLinkBatch,
   KbCapabilityLinkInterface,
   KbCapabilityLinkReport,
-  KbCapabilityLinkTable,
   KbCapabilityRecord,
   KbReportRecord,
   KbTableRecord,
   SystemRecord,
 } from "../types";
 import { ConfirmDialog } from "./ConfirmDialog";
+import { FileDrop } from "./FileDrop";
+import { MermaidPreview } from "./DiagramBlock";
+import { SequenceDiagramsDialog, type SequenceDiagram } from "./SequenceDiagramsDialog";
+import { TableDetailsDialog } from "./TablesPanel";
 import { SortHeader, sortRows, toggleColumnSort, type ColumnSort } from "./SortHeader";
 import { ProcessingRulesEditor } from "./ProcessingRulesEditor";
 import { SelectField } from "./SelectField";
@@ -58,7 +61,8 @@ function UploadCapabilitiesDialog({
   onUploaded: (capabilities: KbCapabilityRecord[]) => void;
   onClose: () => void;
 }) {
-  const [country, setCountry] = useState(countries.includes("SG") ? "SG" : countries[0] ?? "SG");
+  const [allCountries, setAllCountries] = useState(false);
+  const [selectedCountries, setSelectedCountries] = useState<string[]>([countries.includes("SG") ? "SG" : countries[0]].filter(Boolean));
   const [system, setSystem] = useState(systems[0]?.system_code ?? "");
   const [file, setFile] = useState<File | null>(null);
   const [busy, setBusy] = useState(false);
@@ -71,8 +75,9 @@ function UploadCapabilitiesDialog({
 
   async function submit(event: FormEvent) {
     event.preventDefault();
-    if (!file || !system) {
-      setError(!file ? "Please select an Excel (.xlsx) file." : "Please select a system.");
+    const country = allCountries ? "" : countries.filter((code) => selectedCountries.includes(code)).join(",");
+    if (!file || !system || (!allCountries && !country)) {
+      setError(!file ? "Please select an Excel (.xlsx) file." : !system ? "Please select a system." : "Choose All countries or at least one country.");
       return;
     }
     setBusy(true);
@@ -104,146 +109,6 @@ function UploadCapabilitiesDialog({
             Excel (.xlsx) with columns: L1_CAPABILITY, L2_CAPABILITY, L3_CAPABILITY, DESCRIPTION. L1–L3 are required. An empty DESCRIPTION is filled with a short description generated from those levels.
           </p>
         </div>
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          <label className="block">
-            <span className="font-label text-[10px] uppercase text-muted">Country</span>
-            <div className="mt-1">
-              <SelectField aria-label="Country" value={country} disabled={busy} className="w-full [&_button]:w-full [&_button]:max-w-none" options={countries.map((item) => ({ value: item, label: item }))} onChange={setCountry} />
-            </div>
-          </label>
-          <label className="block">
-            <span className="font-label text-[10px] uppercase text-muted">System</span>
-            <div className="mt-1">
-              <SelectField
-                aria-label="System"
-                value={system}
-                disabled={busy || systems.length === 0}
-                className="w-full [&_button]:w-full [&_button]:max-w-none"
-                options={
-                  systems.length === 0
-                    ? [{ value: "", label: "No systems" }]
-                    : systems.map((item) => ({ value: item.system_code, label: `${item.system_code} — ${item.system_name}` }))
-                }
-                onChange={setSystem}
-              />
-            </div>
-          </label>
-        </div>
-        <label className="block">
-          <span className="font-label text-[10px] uppercase text-muted">Excel file (.xlsx)</span>
-          <input className="field mt-1" type="file" aria-label="Excel file" accept=".xlsx" disabled={busy} onChange={(e) => setFile(e.target.files?.[0] ?? null)} />
-        </label>
-        {error && <p className="text-alert text-sm">{error}</p>}
-        {problems.length > 0 && (
-          <ul className="max-h-40 overflow-auto rounded-lg border border-hairline p-3 text-alert text-xs space-y-1" aria-label="Upload problems">
-            {problems.map((problem, index) => (
-              <li key={index}>
-                Row {problem.row}, {problem.field}: {problem.message}
-              </li>
-            ))}
-          </ul>
-        )}
-        <div className="flex justify-end gap-2 pt-2">
-          <button type="button" className="btn" disabled={busy} onClick={onClose}>
-            Cancel
-          </button>
-          <button type="submit" className="btn btn-primary" disabled={busy || !file || !system}>
-            {busy ? "Uploading…" : "Upload file"}
-          </button>
-        </div>
-      </form>
-    </div>
-  );
-}
-
-function CapabilityFormDialog({
-  capability,
-  countries,
-  systems,
-  onSaved,
-  onClose,
-}: {
-  capability?: KbCapabilityRecord;
-  countries: string[];
-  systems: SystemRecord[];
-  onSaved: (item: KbCapabilityRecord) => void;
-  onClose: () => void;
-}) {
-  const editing = Boolean(capability);
-  const storedCodes = capability ? countryCodes(capability.country) : null;
-  const [allCountries, setAllCountries] = useState(storedCodes !== null && storedCodes.length === 0);
-  const [selectedCountries, setSelectedCountries] = useState<string[]>(
-    storedCodes && storedCodes.length ? storedCodes : storedCodes ? [] : [countries.includes("SG") ? "SG" : countries[0]].filter(Boolean),
-  );
-  const [behavior, setBehavior] = useState(capability?.country_behavior ?? "");
-  const [system, setSystem] = useState(capability?.system_code ?? systems[0]?.system_code ?? "");
-  const [l1, setL1] = useState(capability?.l1_capability ?? "");
-  const [l2, setL2] = useState(capability?.l2_capability ?? "");
-  const [l3, setL3] = useState(capability?.l3_capability ?? "");
-  const [description, setDescription] = useState(capability?.description ?? "");
-  const [rules, setRules] = useState(capability?.processing_rules ?? "");
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState("");
-
-  useEffect(() => {
-    if (!system && systems[0]) setSystem(systems[0].system_code);
-  }, [systems, system]);
-
-  async function submit(event: FormEvent) {
-    event.preventDefault();
-    const country = allCountries ? "" : countries.filter((code) => selectedCountries.includes(code)).join(",");
-    if ((!allCountries && !country) || !system || !l1.trim() || !l2.trim() || !l3.trim()) {
-      setError("Choose All countries or at least one country, and fill in system, L1, L2 and L3.");
-      return;
-    }
-    setBusy(true);
-    setError("");
-    const payload = {
-      country,
-      country_behavior: behavior.trim(),
-      system_code: system,
-      l1_capability: l1.trim(),
-      l2_capability: l2.trim(),
-      l3_capability: l3.trim(),
-      description: description.trim(),
-      processing_rules: rules,
-    };
-    try {
-      const saved = capability
-        ? await api<KbCapabilityRecord>(`/api/capabilities/${encodeURIComponent(capability.capability_id)}`, {
-            method: "PATCH",
-            body: JSON.stringify(payload),
-          })
-        : await api<KbCapabilityRecord>("/api/capabilities", { method: "POST", body: JSON.stringify(payload) });
-      onSaved(saved);
-    } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Could not save the capability");
-      setBusy(false);
-    }
-  }
-
-  const title = editing ? "Edit capability" : "Add capability";
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" role="presentation" onMouseDown={(e) => e.target === e.currentTarget && !busy && onClose()}>
-      <form role="dialog" aria-modal="true" aria-label={title} className="w-full max-w-3xl max-h-[90vh] overflow-y-auto rounded-lg border border-hairline bg-panel p-6 shadow-xl space-y-3" onSubmit={(e) => void submit(e)}>
-        <h2 className="font-headline text-xl font-semibold">{title}</h2>
-        <label className="block">
-          <span className="font-label text-[10px] uppercase text-muted">System</span>
-          <div className="mt-1">
-            <SelectField
-              aria-label="Capability system"
-              value={system}
-              disabled={busy || systems.length === 0}
-              className="w-full [&_button]:w-full [&_button]:max-w-none"
-              options={
-                systems.length === 0
-                  ? [{ value: "", label: "No systems" }]
-                  : systems.map((item) => ({ value: item.system_code, label: `${item.system_code} — ${item.system_name}` }))
-              }
-              onChange={setSystem}
-            />
-          </div>
-        </label>
         <fieldset className="space-y-2" disabled={busy}>
           <legend className="font-label text-[10px] uppercase text-muted">Applicable for</legend>
           <div className="flex flex-wrap gap-x-4 gap-y-2">
@@ -279,22 +144,443 @@ function CapabilityFormDialog({
             ))}
           </div>
         </fieldset>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <label className="block">
+            <span className="font-label text-[10px] uppercase text-muted">System</span>
+            <div className="mt-1">
+              <SelectField
+                aria-label="System"
+                value={system}
+                disabled={busy || systems.length === 0}
+                className="w-full [&_button]:w-full [&_button]:max-w-none"
+                options={
+                  systems.length === 0
+                    ? [{ value: "", label: "No systems" }]
+                    : systems.map((item) => ({ value: item.system_code, label: `${item.system_code} — ${item.system_name}` }))
+                }
+                onChange={setSystem}
+              />
+            </div>
+          </label>
+        </div>
+        <div>
+          <span className="font-label text-[10px] uppercase text-muted">Excel file (.xlsx)</span>
+          <div className="mt-1">
+            <FileDrop accept=".xlsx" ariaLabel="Excel file" file={file} disabled={busy} grow onFile={setFile} />
+          </div>
+        </div>
+        {error && <p className="text-alert text-sm">{error}</p>}
+        {problems.length > 0 && (
+          <ul className="max-h-40 overflow-auto rounded-lg border border-hairline p-3 text-alert text-xs space-y-1" aria-label="Upload problems">
+            {problems.map((problem, index) => (
+              <li key={index}>
+                Row {problem.row}, {problem.field}: {problem.message}
+              </li>
+            ))}
+          </ul>
+        )}
+        <div className="flex justify-end gap-2 pt-2">
+          <button type="button" className="btn" disabled={busy} onClick={onClose}>
+            Cancel
+          </button>
+          <button type="submit" className="btn btn-primary" disabled={busy || !file || !system}>
+            {busy ? "Uploading…" : "Upload file"}
+          </button>
+        </div>
+      </form>
+    </div>
+  );
+}
+
+type LinkKind = "interfaces" | "tables" | "batches" | "reports";
+
+function itemMatchesCountries(applicable: string, unrestricted: boolean, itemCountry: string) {
+  const codes = (value: string) =>
+    countryCodes(value)
+      .map((code) => code.toLowerCase())
+      .filter((code) => code !== "all");
+  if (unrestricted) return true;
+  const selected = codes(applicable);
+  if (selected.length === 0) return false;
+  const item = codes(itemCountry);
+  if (item.length === 0) return true;
+  return selected.some((code) => item.includes(code));
+}
+
+function CapabilityFormDialog({
+  capability,
+  capabilityId,
+  readOnly = false,
+  countries,
+  systems,
+  onSaved,
+  onClose,
+}: {
+  capability?: KbCapabilityRecord;
+  capabilityId?: string;
+  readOnly?: boolean;
+  countries: string[];
+  systems: SystemRecord[];
+  onSaved: (item: KbCapabilityRecord) => void;
+  onClose: () => void;
+}) {
+  const recordId = capabilityId || capability?.capability_id || "";
+  const [savedId, setSavedId] = useState(recordId);
+  const editing = Boolean(savedId);
+  const storedCodes = capability ? countryCodes(capability.country) : null;
+  const [allCountries, setAllCountries] = useState(storedCodes !== null && storedCodes.length === 0);
+  const [selectedCountries, setSelectedCountries] = useState<string[]>(
+    storedCodes && storedCodes.length ? storedCodes : storedCodes ? [] : [countries.includes("SG") ? "SG" : countries[0]].filter(Boolean),
+  );
+  const [behavior, setBehavior] = useState(capability?.country_behavior ?? "");
+  const [system, setSystem] = useState(capability?.system_code ?? systems[0]?.system_code ?? "");
+  const [l1, setL1] = useState(capability?.l1_capability ?? "");
+  const [l2, setL2] = useState(capability?.l2_capability ?? "");
+  const [l3, setL3] = useState(capability?.l3_capability ?? "");
+  const [description, setDescription] = useState(capability?.description ?? "");
+  const [diagrams, setDiagrams] = useState<SequenceDiagram[]>(capability?.sequence_diagrams ?? []);
+  const [diagramsOpen, setDiagramsOpen] = useState(false);
+  const [rules, setRules] = useState(capability?.processing_rules ?? "");
+  const [links, setLinks] = useState<Pick<KbCapabilityRecord, "interfaces" | "tables" | "batches" | "reports">>({
+    interfaces: capability?.interfaces ?? [],
+    tables: capability?.tables ?? [],
+    batches: capability?.batches ?? [],
+    reports: capability?.reports ?? [],
+  });
+  const [pending, setPending] = useState<{ kind: LinkKind; id: string }[]>([]);
+  const [catalog, setCatalog] = useState<{ interfaces: InterfaceRecord[]; tables: KbTableRecord[]; batches: KbBatchRecord[]; reports: KbReportRecord[] }>({
+    interfaces: [],
+    tables: [],
+    batches: [],
+    reports: [],
+  });
+  const [picker, setPicker] = useState<LinkKind | null>(null);
+  const [inspect, setInspect] = useState<
+    | { kind: "interface"; row: KbCapabilityLinkInterface }
+    | { kind: "table"; tableId: string }
+    | { kind: "batch"; row: KbCapabilityLinkBatch }
+    | { kind: "report"; row: KbCapabilityLinkReport }
+    | null
+  >(null);
+  const [unlinking, setUnlinking] = useState<{ kind: LinkKind; id: string; name: string } | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [loadingRecord, setLoadingRecord] = useState(Boolean(recordId));
+  const [error, setError] = useState("");
+
+  function applyRecord(data: KbCapabilityRecord) {
+    const codes = countryCodes(data.country);
+    setAllCountries(codes.length === 0);
+    setSelectedCountries(codes);
+    setBehavior(data.country_behavior ?? "");
+    setSystem(data.system_code);
+    setL1(data.l1_capability);
+    setL2(data.l2_capability);
+    setL3(data.l3_capability);
+    setDescription(data.description ?? "");
+    setDiagrams(data.sequence_diagrams ?? []);
+    setRules(data.processing_rules ?? "");
+    setLinks({
+      interfaces: data.interfaces ?? [],
+      tables: data.tables ?? [],
+      batches: data.batches ?? [],
+      reports: data.reports ?? [],
+    });
+    setSavedId(data.capability_id);
+  }
+
+  useEffect(() => {
+    if (!system && systems[0] && !readOnly) setSystem(systems[0].system_code);
+  }, [systems, system, readOnly]);
+
+  useEffect(() => {
+    if (!recordId) return;
+    let current = true;
+    api<KbCapabilityRecord>(`/api/capabilities/${encodeURIComponent(recordId)}`)
+      .then((data) => {
+        if (current) applyRecord(data);
+      })
+      .catch((err: unknown) => {
+        if (current) setError(err instanceof ApiError ? err.message : "Could not load capability");
+      })
+      .finally(() => {
+        if (current) setLoadingRecord(false);
+      });
+    return () => {
+      current = false;
+    };
+  }, [recordId]);
+
+  useEffect(() => {
+    if (readOnly) return;
+    let current = true;
+    void (async () => {
+      const catalogs = await api<Catalogs>("/api/catalogs").catch(() => null);
+      if (!current) return;
+      const channels = catalogs?.interface_channels?.length ? catalogs.interface_channels : ["EAI"];
+      let interfaces: InterfaceRecord[] = [];
+      for (const channel of channels) {
+        try {
+          interfaces = [...interfaces, ...(await api<InterfaceRecord[]>(`/api/interfaces/${encodeURIComponent(channel)}`))];
+        } catch {
+          // A channel can be empty.
+        }
+      }
+      const [tables, batches, reports] = await Promise.all([
+        api<KbTableRecord[]>("/api/tables").catch(() => [] as KbTableRecord[]),
+        api<KbBatchRecord[]>("/api/batches").catch(() => [] as KbBatchRecord[]),
+        api<KbReportRecord[]>("/api/reports").catch(() => [] as KbReportRecord[]),
+      ]);
+      if (current) setCatalog({ interfaces, tables, batches, reports });
+    })();
+    return () => {
+      current = false;
+    };
+  }, [readOnly]);
+
+  const countryValue = allCountries ? "" : countries.filter((code) => selectedCountries.includes(code)).join(",");
+
+  async function linkOne(kind: LinkKind, id: string, capabilityKey: string) {
+    return api<KbCapabilityRecord>(`/api/capabilities/${encodeURIComponent(capabilityKey)}/${kind}/${encodeURIComponent(id)}`, { method: "POST" });
+  }
+
+  async function submit(event: FormEvent) {
+    event.preventDefault();
+    if (readOnly) return;
+    if ((!allCountries && !countryValue) || !system || !l1.trim() || !l2.trim() || !l3.trim()) {
+      setError("Choose All countries or at least one country, and fill in system, L1, L2 and L3.");
+      return;
+    }
+    setBusy(true);
+    setError("");
+    const payload = {
+      country: countryValue,
+      country_behavior: behavior.trim(),
+      system_code: system,
+      l1_capability: l1.trim(),
+      l2_capability: l2.trim(),
+      l3_capability: l3.trim(),
+      description: description.trim(),
+      sequence_diagrams: diagrams,
+      processing_rules: rules,
+    };
+    try {
+      let saved = savedId
+        ? await api<KbCapabilityRecord>(`/api/capabilities/${encodeURIComponent(savedId)}`, { method: "PATCH", body: JSON.stringify(payload) })
+        : await api<KbCapabilityRecord>("/api/capabilities", { method: "POST", body: JSON.stringify(payload) });
+      if (!savedId) setSavedId(saved.capability_id);
+      const queue = [...pending];
+      for (const item of queue) {
+        saved = await linkOne(item.kind, item.id, saved.capability_id);
+        setPending((current) => current.filter((entry) => !(entry.kind === item.kind && entry.id === item.id)));
+      }
+      onSaved(saved);
+      onClose();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Could not save the capability");
+      setBusy(false);
+    }
+  }
+
+  async function applyLink(kind: LinkKind, id: string) {
+    if (!allCountries && !countryValue) {
+      throw new ApiError(400, "Choose All countries or at least one country before linking.");
+    }
+    if (savedId) {
+      await api<KbCapabilityRecord>(`/api/capabilities/${encodeURIComponent(savedId)}`, {
+        method: "PATCH",
+        body: JSON.stringify({ country: countryValue }),
+      });
+      const saved = await linkOne(kind, id, savedId);
+      applyRecord(saved);
+      onSaved(saved);
+      return;
+    }
+    setPending((current) => (current.some((item) => item.kind === kind && item.id === id) ? current : [...current, { kind, id }]));
+  }
+
+  async function unlink() {
+    if (!unlinking) return;
+    if (!savedId) {
+      setPending((current) => current.filter((item) => !(item.kind === unlinking.kind && item.id === unlinking.id)));
+      setUnlinking(null);
+      setInspect(null);
+      return;
+    }
+    const saved = await api<KbCapabilityRecord>(
+      `/api/capabilities/${encodeURIComponent(savedId)}/${unlinking.kind}/${encodeURIComponent(unlinking.id)}`,
+      { method: "DELETE" },
+    );
+    applyRecord(saved);
+    onSaved(saved);
+    setUnlinking(null);
+    setInspect(null);
+  }
+
+  const pickerOptions = useMemo(() => {
+    if (!picker) return [];
+    const linkedIds = new Set([
+      ...(picker === "interfaces" ? (links.interfaces || []).map((row) => row.interface_id) : []),
+      ...(picker === "tables" ? (links.tables || []).map((row) => row.table_id) : []),
+      ...(picker === "batches" ? (links.batches || []).map((row) => row.batch_id) : []),
+      ...(picker === "reports" ? (links.reports || []).map((row) => row.report_id) : []),
+      ...pending.filter((item) => item.kind === picker).map((item) => item.id),
+    ]);
+    const matches = (itemCountry: string) => itemMatchesCountries(countryValue, allCountries, itemCountry);
+    if (picker === "interfaces") {
+      return catalog.interfaces
+        .filter((row) => matches(row.country) && !linkedIds.has(row.interface_id))
+        .map((row) => ({ id: row.interface_id, label: `${applicableFor(row.country)} · ${row.channel} · ${row.interface_name}` }));
+    }
+    if (picker === "tables") {
+      return catalog.tables
+        .filter((row) => matches(row.country) && !linkedIds.has(row.table_id))
+        .map((row) => ({ id: row.table_id, label: `${row.country} · ${row.database_name}.${row.schema_name}.${row.table_name}` }));
+    }
+    if (picker === "batches") {
+      return catalog.batches
+        .filter((row) => matches(row.country) && !linkedIds.has(row.batch_id))
+        .map((row) => ({ id: row.batch_id, label: `${row.country} · ${row.system_code} · ${row.batch_name}` }));
+    }
+    return catalog.reports
+      .filter((row) => matches(row.country) && !linkedIds.has(row.report_id))
+      .map((row) => ({ id: row.report_id, label: `${row.country} · ${row.system_code} · ${row.report_name}` }));
+  }, [picker, links, pending, catalog, countryValue, allCountries]);
+
+  function linkRows(kind: LinkKind): { id: string; label: string; onOpen: () => void }[] {
+    if (kind === "interfaces") {
+      const saved = (links.interfaces || []).map((row) => ({
+        id: row.interface_id,
+        label: `${row.channel} · ${row.interface_name}`,
+        onOpen: () => setInspect({ kind: "interface", row }),
+      }));
+      const extra = pending
+        .filter((item) => item.kind === "interfaces")
+        .map((item) => {
+          const row = catalog.interfaces.find((entry) => entry.interface_id === item.id);
+          return { id: item.id, label: row ? `${row.channel} · ${row.interface_name}` : item.id, onOpen: () => undefined };
+        });
+      return [...saved, ...extra];
+    }
+    if (kind === "tables") {
+      const saved = (links.tables || []).map((row) => ({
+        id: row.table_id,
+        label: `${row.database_name}.${row.schema_name}.${row.table_name}`,
+        onOpen: () => setInspect({ kind: "table", tableId: row.table_id }),
+      }));
+      const extra = pending
+        .filter((item) => item.kind === "tables")
+        .map((item) => {
+          const row = catalog.tables.find((entry) => entry.table_id === item.id);
+          return {
+            id: item.id,
+            label: row ? `${row.database_name}.${row.schema_name}.${row.table_name}` : item.id,
+            onOpen: () => setInspect({ kind: "table", tableId: item.id }),
+          };
+        });
+      return [...saved, ...extra];
+    }
+    if (kind === "batches") {
+      const saved = (links.batches || []).map((row) => ({
+        id: row.batch_id,
+        label: `${row.system_code} · ${row.batch_name}`,
+        onOpen: () => setInspect({ kind: "batch", row }),
+      }));
+      const extra = pending
+        .filter((item) => item.kind === "batches")
+        .map((item) => {
+          const row = catalog.batches.find((entry) => entry.batch_id === item.id);
+          return { id: item.id, label: row ? `${row.system_code} · ${row.batch_name}` : item.id, onOpen: () => undefined };
+        });
+      return [...saved, ...extra];
+    }
+    const saved = (links.reports || []).map((row) => ({
+      id: row.report_id,
+      label: `${row.system_code} · ${row.report_name}`,
+      onOpen: () => setInspect({ kind: "report", row }),
+    }));
+    const extra = pending
+      .filter((item) => item.kind === "reports")
+      .map((item) => {
+        const row = catalog.reports.find((entry) => entry.report_id === item.id);
+        return { id: item.id, label: row ? `${row.system_code} · ${row.report_name}` : item.id, onOpen: () => undefined };
+      });
+    return [...saved, ...extra];
+  }
+
+  const title = readOnly ? "View capability" : editing ? "Edit capability" : "Add capability";
+  const locked = readOnly || busy;
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" role="presentation" onMouseDown={(e) => e.target === e.currentTarget && !busy && onClose()}>
+      <form role="dialog" aria-modal="true" aria-label={title} className="w-full max-w-4xl max-h-[90vh] overflow-y-auto rounded-lg border border-hairline bg-panel p-6 shadow-xl space-y-3" onSubmit={(e) => void submit(e)}>
+        <h2 className="font-headline text-xl font-semibold">{title}</h2>
+        {loadingRecord ? (
+          <p className="text-muted">Loading…</p>
+        ) : (
+          <>
         <label className="block">
-          <span className="font-label text-[10px] uppercase text-muted">Country specific behavior</span>
-          <input className="field mt-1" aria-label="Country specific behavior" value={behavior} disabled={busy} onChange={(event) => setBehavior(event.target.value)} />
+          <span className="font-label text-[10px] uppercase text-muted">System</span>
+          <div className="mt-1">
+            <SelectField
+              aria-label="Capability system"
+              value={system}
+              disabled={locked || systems.length === 0}
+              className="w-full [&_button]:w-full [&_button]:max-w-none"
+              options={
+                systems.length === 0
+                  ? [{ value: "", label: "No systems" }]
+                  : systems.map((item) => ({ value: item.system_code, label: `${item.system_code} — ${item.system_name}` }))
+              }
+              onChange={setSystem}
+            />
+          </div>
         </label>
+        <fieldset className="space-y-2" disabled={locked}>
+          <legend className="font-label text-[10px] uppercase text-muted">Applicable for</legend>
+          <div className="flex flex-wrap gap-x-4 gap-y-2">
+            <label className="inline-flex items-center gap-2 text-sm">
+              <input
+                type="checkbox"
+                aria-label="All countries"
+                checked={allCountries}
+                onChange={(event) => {
+                  if (event.target.checked) {
+                    setAllCountries(true);
+                    setSelectedCountries([]);
+                  } else {
+                    setAllCountries(false);
+                  }
+                }}
+              />
+              All countries
+            </label>
+            {countries.map((code) => (
+              <label key={code} className="inline-flex items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  aria-label={code}
+                  checked={!allCountries && selectedCountries.includes(code)}
+                  onChange={() => {
+                    setAllCountries(false);
+                    setSelectedCountries((current) => (current.includes(code) ? current.filter((item) => item !== code) : [...current, code]));
+                  }}
+                />
+                {code}
+              </label>
+            ))}
+          </div>
+        </fieldset>
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
           <label className="block">
             <span className="font-label text-[10px] uppercase text-muted">L1 capability</span>
-            <input className="field mt-1" aria-label="L1 capability" value={l1} disabled={busy} onChange={(e) => setL1(e.target.value)} />
+            <input className="field mt-1" aria-label="L1 capability" value={l1} disabled={locked} onChange={(e) => setL1(e.target.value)} />
           </label>
           <label className="block">
             <span className="font-label text-[10px] uppercase text-muted">L2 capability</span>
-            <input className="field mt-1" aria-label="L2 capability" value={l2} disabled={busy} onChange={(e) => setL2(e.target.value)} />
+            <input className="field mt-1" aria-label="L2 capability" value={l2} disabled={locked} onChange={(e) => setL2(e.target.value)} />
           </label>
           <label className="block">
             <span className="font-label text-[10px] uppercase text-muted">L3 capability</span>
-            <input className="field mt-1" aria-label="L3 capability" value={l3} disabled={busy} onChange={(e) => setL3(e.target.value)} />
+            <input className="field mt-1" aria-label="L3 capability" value={l3} disabled={locked} onChange={(e) => setL3(e.target.value)} />
           </label>
         </div>
         <label className="block">
@@ -302,28 +588,164 @@ function CapabilityFormDialog({
           <input
             className="field mt-1"
             aria-label="Capability description"
-            value={description}
-            disabled={busy}
+            value={readOnly ? description.trim() || inferredDescription(l1, l2, l3) : description}
+            disabled={locked}
             placeholder={inferredDescription(l1, l2, l3) || "Leave blank to generate a short description"}
             onChange={(e) => setDescription(e.target.value)}
           />
         </label>
         <div>
-          <span className="font-label text-[10px] uppercase text-muted">Processing rules</span>
+          <span className="font-label text-[10px] uppercase text-muted">Country specific behavior</span>
           <div className="mt-1">
-            <ProcessingRulesEditor value={rules} onChange={setRules} readOnly={busy} />
+            <ProcessingRulesEditor value={behavior} onChange={setBehavior} readOnly={locked} label="Country specific behavior" toolbarLabel="Country specific behavior formatting" />
           </div>
         </div>
+        <div>
+          <div className="flex items-center justify-between gap-2">
+            <span className="font-label text-[10px] uppercase text-muted">Sequence diagrams</span>
+            {!readOnly && (
+              <button type="button" className="btn" disabled={busy} onClick={() => setDiagramsOpen(true)}>
+                Add / edit
+              </button>
+            )}
+          </div>
+          {diagrams.length === 0 ? (
+            <p className="mt-1 text-sm text-muted">No sequence diagrams.</p>
+          ) : (
+            <ul className="mt-1 space-y-3">
+              {diagrams.map((diagram) => (
+                <li key={diagram.id} className="rounded-lg border border-hairline p-3">
+                  <p className="mb-2 text-sm font-medium">{diagram.title}</p>
+                  <MermaidPreview source={diagram.mermaid} />
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+        <div>
+          <span className="font-label text-[10px] uppercase text-muted">Processing rules</span>
+          <div className="mt-1">
+            <ProcessingRulesEditor value={rules} onChange={setRules} readOnly={locked} />
+          </div>
+        </div>
+        {(["interfaces", "tables", "batches", "reports"] as const).map((kind) => {
+          const heading = kind[0].toUpperCase() + kind.slice(1);
+          const rows = linkRows(kind);
+          return (
+            <section key={kind} className="space-y-2">
+              <div className="flex items-center justify-between gap-2">
+                <h3 className="font-headline text-base font-semibold m-0">{heading}</h3>
+                {!readOnly && (
+                  <button type="button" className="btn" aria-label={`Add ${kind}`} disabled={busy} onClick={() => setPicker(kind)}>
+                    <span className="material-symbols-outlined text-base" aria-hidden="true">add</span>
+                    Add
+                  </button>
+                )}
+              </div>
+              {rows.length === 0 ? (
+                <p className="text-sm text-muted">None linked.</p>
+              ) : (
+                <ul className="rounded-lg border border-hairline divide-y divide-hairline">
+                  {rows.map((row) => (
+                    <li key={row.id} className="flex items-center justify-between gap-2 px-3 py-2">
+                      <button type="button" className="text-left text-accent hover:underline text-sm" onClick={row.onOpen}>
+                        {row.label}
+                      </button>
+                      {!readOnly && (
+                        <button
+                          type="button"
+                          className="icon-btn icon-btn-danger"
+                          aria-label={`Unlink ${row.label}`}
+                          title="Unlink"
+                          onClick={() => setUnlinking({ kind, id: row.id, name: row.label })}
+                        >
+                          <span className="material-symbols-outlined text-base">link_off</span>
+                        </button>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </section>
+          );
+        })}
         {error && <p className="text-alert text-sm">{error}</p>}
         <div className="flex justify-end gap-2 pt-2">
           <button type="button" className="btn" disabled={busy} onClick={onClose}>
-            Cancel
+            {readOnly ? "Close" : "Cancel"}
           </button>
-          <button type="submit" className="btn btn-primary" disabled={busy}>
-            {editing ? "Save" : "Add"}
-          </button>
+          {!readOnly && (
+            <button type="submit" className="btn btn-primary" disabled={busy}>
+              {editing ? "Save" : "Add"}
+            </button>
+          )}
         </div>
+          </>
+        )}
       </form>
+      {diagramsOpen && (
+        <SequenceDiagramsDialog
+          diagrams={diagrams}
+          onClose={() => setDiagramsOpen(false)}
+          onSave={(next) => {
+            setDiagrams(next);
+            setDiagramsOpen(false);
+          }}
+        />
+      )}
+      {picker && (
+        <LinkPickerDialog
+          title={`Link ${{ interfaces: "interface", tables: "table", batches: "batch", reports: "report" }[picker]}`}
+          country={applicableFor(countryValue)}
+          options={pickerOptions}
+          onPick={(id) => applyLink(picker, id)}
+          onClose={() => setPicker(null)}
+        />
+      )}
+      {inspect?.kind === "table" && (
+        <TableDetailsDialog
+          tableId={inspect.tableId}
+          canEdit={false}
+          layerClass="z-[70]"
+          onTableChanged={() => undefined}
+          onClose={() => setInspect(null)}
+        />
+      )}
+      {inspect && inspect.kind !== "table" && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-4" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && setInspect(null)}>
+          <div role="dialog" aria-modal="true" aria-label="Linked item detail" className="w-full max-w-lg rounded-lg border border-hairline bg-panel p-6 shadow-xl space-y-3">
+            <div className="flex items-start justify-between gap-2">
+              <h3 className="font-headline text-lg font-semibold m-0">
+                {inspect.kind === "interface" && inspect.row.interface_name}
+                {inspect.kind === "batch" && inspect.row.batch_name}
+                {inspect.kind === "report" && inspect.row.report_name}
+              </h3>
+              <button type="button" className="icon-btn" aria-label="Close linked detail" onClick={() => setInspect(null)}>
+                <span className="material-symbols-outlined text-base">close</span>
+              </button>
+            </div>
+            <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-sm">
+              {Object.entries(inspect.row).map(([key, value]) =>
+                key.endsWith("_id") ? null : (
+                  <div key={key} className="contents">
+                    <dt className="font-label text-[10px] uppercase text-muted">{key.replace(/_/g, " ")}</dt>
+                    <dd className="m-0">{String(value || "—")}</dd>
+                  </div>
+                ),
+              )}
+            </dl>
+          </div>
+        </div>
+      )}
+      {unlinking && (
+        <ConfirmDialog
+          title="Unlink item"
+          message={`Remove the link to “${unlinking.name}”? The catalogue item itself is kept.`}
+          confirmLabel="Unlink"
+          onConfirm={() => void unlink()}
+          onClose={() => setUnlinking(null)}
+        />
+      )}
     </div>
   );
 }
@@ -344,6 +766,11 @@ function LinkPickerDialog({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [choice, setChoice] = useState(options[0]?.id ?? "");
+  const optionKey = options.map((item) => item.id).join("|");
+
+  useEffect(() => {
+    setChoice(options[0]?.id ?? "");
+  }, [optionKey]);
 
   async function submit(event: FormEvent) {
     event.preventDefault();
@@ -366,6 +793,7 @@ function LinkPickerDialog({
     <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-4" role="presentation" onMouseDown={(e) => e.target === e.currentTarget && !busy && onClose()}>
       <form role="dialog" aria-modal="true" aria-label={title} className="w-full max-w-md rounded-lg border border-hairline bg-panel p-6 shadow-xl space-y-3" onSubmit={(e) => void submit(e)}>
         <h2 className="font-headline text-lg font-semibold">{title}</h2>
+        <p className="text-sm text-muted">Applicable for {country}.</p>
         {options.length === 0 ? (
           <p className="text-sm text-muted">No items in {country} left to link.</p>
         ) : (
@@ -393,350 +821,6 @@ function LinkPickerDialog({
           </button>
         </div>
       </form>
-    </div>
-  );
-}
-
-function CapabilityDetailDialog({
-  capabilityId,
-  canEdit,
-  onClose,
-  onChanged,
-}: {
-  capabilityId: string;
-  canEdit: boolean;
-  onClose: () => void;
-  onChanged: (item: KbCapabilityRecord) => void;
-}) {
-  const [item, setItem] = useState<KbCapabilityRecord | null>(null);
-  const [error, setError] = useState("");
-  const [rules, setRules] = useState("");
-  const [savingRules, setSavingRules] = useState(false);
-  const [picker, setPicker] = useState<"interfaces" | "tables" | "batches" | "reports" | null>(null);
-  const [catalog, setCatalog] = useState<{
-    interfaces: InterfaceRecord[];
-    tables: KbTableRecord[];
-    batches: KbBatchRecord[];
-    reports: KbReportRecord[];
-  }>({ interfaces: [], tables: [], batches: [], reports: [] });
-  const [inspect, setInspect] = useState<
-    | { kind: "interface"; row: KbCapabilityLinkInterface }
-    | { kind: "table"; row: KbCapabilityLinkTable }
-    | { kind: "batch"; row: KbCapabilityLinkBatch }
-    | { kind: "report"; row: KbCapabilityLinkReport }
-    | null
-  >(null);
-  const [unlinking, setUnlinking] = useState<{ kind: string; id: string; name: string } | null>(null);
-
-  useEffect(() => {
-    api<KbCapabilityRecord>(`/api/capabilities/${encodeURIComponent(capabilityId)}`)
-      .then((data) => {
-        setItem(data);
-        setRules(data.processing_rules || "");
-      })
-      .catch((err: unknown) => setError(err instanceof ApiError ? err.message : "Could not load capability"));
-    if (canEdit) {
-      void (async () => {
-        const catalogs = await api<Catalogs>("/api/catalogs").catch(() => null);
-        const channels = catalogs?.interface_channels?.length ? catalogs.interface_channels : ["EAI"];
-        let interfaces: InterfaceRecord[] = [];
-        for (const channel of channels) {
-          try {
-            const more = await api<InterfaceRecord[]>(`/api/interfaces/${encodeURIComponent(channel)}`);
-            interfaces = [...interfaces, ...more];
-          } catch {
-            // channel may be empty
-          }
-        }
-        const [tables, batches, reports] = await Promise.all([
-          api<KbTableRecord[]>("/api/tables").catch(() => [] as KbTableRecord[]),
-          api<KbBatchRecord[]>("/api/batches").catch(() => [] as KbBatchRecord[]),
-          api<KbReportRecord[]>("/api/reports").catch(() => [] as KbReportRecord[]),
-        ]);
-        setCatalog({ interfaces, tables, batches, reports });
-      })();
-    }
-  }, [capabilityId, canEdit]);
-
-  async function saveRules() {
-    if (!item) return;
-    setSavingRules(true);
-    try {
-      const saved = await api<KbCapabilityRecord>(`/api/capabilities/${encodeURIComponent(item.capability_id)}`, {
-        method: "PATCH",
-        body: JSON.stringify({ processing_rules: rules }),
-      });
-      setItem(saved);
-      onChanged(saved);
-    } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Could not save processing rules");
-    } finally {
-      setSavingRules(false);
-    }
-  }
-
-  async function applyLink(kind: "interfaces" | "tables" | "batches" | "reports", id: string) {
-    if (!item) return;
-    const saved = await api<KbCapabilityRecord>(`/api/capabilities/${encodeURIComponent(item.capability_id)}/${kind}/${encodeURIComponent(id)}`, {
-      method: "POST",
-    });
-    setItem(saved);
-    onChanged(saved);
-  }
-
-  async function unlink() {
-    if (!item || !unlinking) return;
-    const saved = await api<KbCapabilityRecord>(
-      `/api/capabilities/${encodeURIComponent(item.capability_id)}/${unlinking.kind}/${encodeURIComponent(unlinking.id)}`,
-      { method: "DELETE" },
-    );
-    setItem(saved);
-    onChanged(saved);
-    setUnlinking(null);
-    if (inspect) setInspect(null);
-  }
-
-  const pickerOptions = useMemo(() => {
-    if (!item || !picker) return [];
-    const inCountry = (country: string) => appliesToCountry(item.country, country);
-    if (picker === "interfaces") {
-      const linked = new Set((item.interfaces || []).map((row) => row.interface_id));
-      return catalog.interfaces
-        .filter((row) => inCountry(row.country) && !linked.has(row.interface_id))
-        .map((row) => ({ id: row.interface_id, label: `${row.channel} · ${row.interface_name}` }));
-    }
-    if (picker === "tables") {
-      const linked = new Set((item.tables || []).map((row) => row.table_id));
-      return catalog.tables
-        .filter((row) => inCountry(row.country) && !linked.has(row.table_id))
-        .map((row) => ({ id: row.table_id, label: `${row.database_name}.${row.schema_name}.${row.table_name}` }));
-    }
-    if (picker === "batches") {
-      const linked = new Set((item.batches || []).map((row) => row.batch_id));
-      return catalog.batches
-        .filter((row) => inCountry(row.country) && !linked.has(row.batch_id))
-        .map((row) => ({ id: row.batch_id, label: `${row.system_code} · ${row.batch_name}` }));
-    }
-    const linked = new Set((item.reports || []).map((row) => row.report_id));
-    return catalog.reports
-      .filter((row) => inCountry(row.country) && !linked.has(row.report_id))
-      .map((row) => ({ id: row.report_id, label: `${row.system_code} · ${row.report_name}` }));
-  }, [item, picker, catalog]);
-
-  function LinkSection({
-    title,
-    kind,
-    rows,
-    labelOf,
-  }: {
-    title: string;
-    kind: "interfaces" | "tables" | "batches" | "reports";
-    rows: { id: string; label: string; onOpen: () => void }[];
-    labelOf: (id: string) => string;
-  }) {
-    return (
-      <section className="space-y-2">
-        <div className="flex items-center justify-between gap-2">
-          <h3 className="font-headline text-base font-semibold m-0">{title}</h3>
-          {canEdit && (
-            <button type="button" className="btn" onClick={() => setPicker(kind)}>
-              <span className="material-symbols-outlined text-base">add</span>
-              Add
-            </button>
-          )}
-        </div>
-        {rows.length === 0 ? (
-          <p className="text-sm text-muted">None linked.</p>
-        ) : (
-          <ul className="rounded-lg border border-hairline divide-y divide-hairline">
-            {rows.map((row) => (
-              <li key={row.id} className="flex items-center justify-between gap-2 px-3 py-2">
-                <button type="button" className="text-left text-accent hover:underline text-sm" onClick={row.onOpen}>
-                  {row.label}
-                </button>
-                {canEdit && (
-                  <button
-                    type="button"
-                    className="icon-btn icon-btn-danger"
-                    aria-label={`Unlink ${labelOf(row.id)}`}
-                    title="Unlink"
-                    onClick={() => setUnlinking({ kind, id: row.id, name: labelOf(row.id) })}
-                  >
-                    <span className="material-symbols-outlined text-base">link_off</span>
-                  </button>
-                )}
-              </li>
-            ))}
-          </ul>
-        )}
-      </section>
-    );
-  }
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" role="presentation" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
-      <div role="dialog" aria-modal="true" aria-label="Capability detail" className="w-full max-w-4xl max-h-[90vh] overflow-y-auto rounded-lg border border-hairline bg-panel p-6 shadow-xl space-y-4">
-        {!item ? (
-          <p className="text-muted">{error || "Loading…"}</p>
-        ) : (
-          <>
-            <div className="flex items-start justify-between gap-3">
-              <div>
-                <p className="font-label text-[10px] uppercase text-muted">
-                  {applicableFor(item.country)} · {item.system_code}
-                </p>
-                <h2 className="font-headline text-xl font-semibold mt-0.5">
-                  {item.l1_capability} / {item.l2_capability} / {item.l3_capability}
-                </h2>
-                <p className="text-sm text-muted mt-1">{capabilityDescription(item)}</p>
-                {item.country_behavior?.trim() && (
-                  <p className="text-sm mt-1">
-                    <span className="font-label text-[10px] uppercase text-muted">Country specific behavior </span>
-                    {item.country_behavior}
-                  </p>
-                )}
-              </div>
-              <button type="button" className="icon-btn" aria-label="Close" onClick={onClose}>
-                <span className="material-symbols-outlined text-base">close</span>
-              </button>
-            </div>
-            {error && <p className="text-alert text-sm">{error}</p>}
-            <div>
-              <div className="flex items-center justify-between gap-2 mb-1">
-                <span className="font-label text-[10px] uppercase text-muted">Processing rules</span>
-                {canEdit && (
-                  <button type="button" className="btn" disabled={savingRules} onClick={() => void saveRules()}>
-                    {savingRules ? "Saving…" : "Save rules"}
-                  </button>
-                )}
-              </div>
-              <ProcessingRulesEditor value={rules} onChange={setRules} readOnly={!canEdit || savingRules} />
-            </div>
-            <LinkSection
-              title="Interfaces"
-              kind="interfaces"
-              rows={(item.interfaces || []).map((row) => ({
-                id: row.interface_id,
-                label: `${row.channel} · ${row.interface_name}`,
-                onOpen: () => setInspect({ kind: "interface", row }),
-              }))}
-              labelOf={(id) => (item.interfaces || []).find((row) => row.interface_id === id)?.interface_name || id}
-            />
-            <LinkSection
-              title="Tables"
-              kind="tables"
-              rows={(item.tables || []).map((row) => ({
-                id: row.table_id,
-                label: `${row.database_name}.${row.schema_name}.${row.table_name}`,
-                onOpen: () => setInspect({ kind: "table", row }),
-              }))}
-              labelOf={(id) => (item.tables || []).find((row) => row.table_id === id)?.table_name || id}
-            />
-            <LinkSection
-              title="Batches"
-              kind="batches"
-              rows={(item.batches || []).map((row) => ({
-                id: row.batch_id,
-                label: row.batch_name,
-                onOpen: () => setInspect({ kind: "batch", row }),
-              }))}
-              labelOf={(id) => (item.batches || []).find((row) => row.batch_id === id)?.batch_name || id}
-            />
-            <LinkSection
-              title="Reports"
-              kind="reports"
-              rows={(item.reports || []).map((row) => ({
-                id: row.report_id,
-                label: row.report_name,
-                onOpen: () => setInspect({ kind: "report", row }),
-              }))}
-              labelOf={(id) => (item.reports || []).find((row) => row.report_id === id)?.report_name || id}
-            />
-          </>
-        )}
-      </div>
-      {picker && (
-        <LinkPickerDialog
-          title={`Link ${picker.slice(0, -1)}`}
-          country={item?.country ?? ""}
-          options={pickerOptions}
-          onPick={(id) => applyLink(picker, id)}
-          onClose={() => setPicker(null)}
-        />
-      )}
-      {inspect && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-4" role="presentation" onMouseDown={(e) => e.target === e.currentTarget && setInspect(null)}>
-          <div role="dialog" aria-modal="true" aria-label="Linked item detail" className="w-full max-w-lg rounded-lg border border-hairline bg-panel p-6 shadow-xl space-y-3">
-            <div className="flex items-start justify-between gap-2">
-              <h3 className="font-headline text-lg font-semibold m-0">
-                {inspect.kind === "interface" && inspect.row.interface_name}
-                {inspect.kind === "table" && inspect.row.table_name}
-                {inspect.kind === "batch" && inspect.row.batch_name}
-                {inspect.kind === "report" && inspect.row.report_name}
-              </h3>
-              <button type="button" className="icon-btn" aria-label="Close linked detail" onClick={() => setInspect(null)}>
-                <span className="material-symbols-outlined text-base">close</span>
-              </button>
-            </div>
-            <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-sm">
-              {Object.entries(inspect.row).map(([key, value]) =>
-                key.endsWith("_id") ? null : (
-                  <div key={key} className="contents">
-                    <dt className="font-label text-[10px] uppercase text-muted">{key.replace(/_/g, " ")}</dt>
-                    <dd className="m-0">{String(value || "—")}</dd>
-                  </div>
-                ),
-              )}
-            </dl>
-            {canEdit && (
-              <div className="flex justify-end gap-2 pt-2">
-                <button
-                  type="button"
-                  className="btn"
-                  onClick={() => {
-                    const id =
-                      inspect.kind === "interface"
-                        ? inspect.row.interface_id
-                        : inspect.kind === "table"
-                          ? inspect.row.table_id
-                          : inspect.kind === "batch"
-                            ? inspect.row.batch_id
-                            : inspect.row.report_id;
-                    const name =
-                      inspect.kind === "interface"
-                        ? inspect.row.interface_name
-                        : inspect.kind === "table"
-                          ? inspect.row.table_name
-                          : inspect.kind === "batch"
-                            ? inspect.row.batch_name
-                            : inspect.row.report_name;
-                    const kind =
-                      inspect.kind === "interface"
-                        ? "interfaces"
-                        : inspect.kind === "table"
-                          ? "tables"
-                          : inspect.kind === "batch"
-                            ? "batches"
-                            : "reports";
-                    setUnlinking({ kind, id, name });
-                  }}
-                >
-                  Unlink from capability
-                </button>
-              </div>
-            )}
-          </div>
-        </div>
-      )}
-      {unlinking && (
-        <ConfirmDialog
-          title="Unlink item"
-          message={`Remove the link to “${unlinking.name}”? The catalogue item itself is kept.`}
-          confirmLabel="Unlink"
-          onConfirm={() => unlink()}
-          onClose={() => setUnlinking(null)}
-        />
-      )}
     </div>
   );
 }
@@ -1025,19 +1109,18 @@ export function CapabilitiesPanel() {
                 ),
               );
             });
-            setForm(null);
           }}
           onClose={() => setForm(null)}
         />
       )}
       {inspecting && (
-        <CapabilityDetailDialog
+        <CapabilityFormDialog
           capabilityId={inspecting}
-          canEdit={canEdit}
+          readOnly
+          countries={countries}
+          systems={systems}
+          onSaved={() => undefined}
           onClose={() => setInspecting(null)}
-          onChanged={(saved) => {
-            setItems((current) => current.map((item) => (item.capability_id === saved.capability_id ? { ...item, ...saved } : item)));
-          }}
         />
       )}
       {deleting && (

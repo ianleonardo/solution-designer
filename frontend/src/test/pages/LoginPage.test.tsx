@@ -64,9 +64,9 @@ describe("LoginPage", () => {
       </ThemeProvider>,
     );
     const name = screen.getByTestId("wordmark");
-    expect((name.previousElementSibling as HTMLElement).className).toContain("h-10");
-    expect(name.className).toContain("leading-10");
-    expect(name.className).toContain("text-[40px]");
+    expect((name.previousElementSibling as HTMLElement).className).toContain("h-14");
+    expect(name.className).toContain("leading-[56px]");
+    expect(name.className).toContain("text-[56px]");
     expect(name.className).toContain("font-wordmark");
     expect(screen.getByText("Transform requirements into solution designs, diagrams, and living specs in minutes.")).toBeTruthy();
   });

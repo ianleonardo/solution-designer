@@ -140,6 +140,46 @@ def test_capabilities_link_interface_and_unlink(client):
     assert unlinked.status_code == 200
     assert unlinked.json()["interfaces"] == []
 
+    regional = client.post(
+        "/api/capabilities",
+        json={
+            "country": "MY,TH",
+            "system_code": "SPL",
+            "l1_capability": "Pay",
+            "l2_capability": "Card",
+            "l3_capability": "Regional",
+        },
+        headers=auth(analyst),
+    )
+    assert regional.status_code == 200, regional.text
+    regional_id = regional.json()["capability_id"]
+    everywhere = client.post(
+        "/api/interfaces/EAI",
+        json={
+            "country": "",
+            "interface_name": "Login API",
+            "description": "d",
+            "protocol": "API",
+            "source": "SPL",
+            "destination": "DGE",
+        },
+        headers=auth(analyst),
+    )
+    assert everywhere.status_code == 200, everywhere.text
+    linked_all = client.post(
+        f"/api/capabilities/{regional_id}/interfaces/{everywhere.json()['interface_id']}",
+        headers=auth(analyst),
+    )
+    assert linked_all.status_code == 200, linked_all.text
+    assert linked_all.json()["interfaces"][0]["interface_name"] == "Login API"
+
+    other = client.post(
+        f"/api/capabilities/{regional_id}/interfaces/{interface_id}",
+        headers=auth(analyst),
+    )
+    assert other.status_code == 400
+    assert "same country" in other.json()["detail"].lower()
+
 
 def test_capabilities_accept_system_without_flag(client):
     admin = login(client, "Admin")

@@ -1,6 +1,7 @@
 """Integration interfaces per channel, loaded from Excel or managed by hand, checked against the systems catalogue."""
 
 import io
+import re
 import uuid
 from datetime import datetime, timezone
 
@@ -10,10 +11,11 @@ from app.errors import AppError
 from app.services import gcs, systems
 
 PROTOCOLS = ("API", "MQ", "Kafka", "gRPC", "FTP", "SMTP", "SMPP")
-HEADERS = ("Country", "Interface name", "Description", "Protocol", "Source", "Destination")
+HEADERS = ("Interface name", "Endpoint", "Description", "Protocol", "Source", "Destination")
 MAX_ROWS = 5000
 MAX_BYTES = 20 * 1024 * 1024
 MAX_NAME = 200
+MAX_ENDPOINT = 500
 MAX_DESCRIPTION = 2000
 
 
@@ -39,12 +41,32 @@ def _canonical(value: str, allowed: tuple[str, ...]) -> str | None:
     return lookup.get((value or "").strip().lower())
 
 
+def country_label(value: str) -> str:
+    """Empty means the interface applies in every catalog country."""
+    codes = [part.strip() for part in (value or "").split(",") if part.strip()]
+    return ", ".join(codes) if codes else "All countries"
+
+
 def _country(value: str) -> str:
-    countries = kb_countries()
-    canonical = _canonical(value, countries)
-    if canonical is None:
-        raise AppError(400, f"Country must be one of: {', '.join(countries)}.")
-    return canonical
+    """Blank is all countries. Several codes are stored in catalog order, comma-separated."""
+    text = (value or "").strip()
+    if not text or text.lower() in {"all", "all countries"}:
+        return ""
+    allowed = kb_countries()
+    order = {code: index for index, code in enumerate(allowed)}
+    chosen: list[str] = []
+    seen: set[str] = set()
+    for part in re.split(r"[\s,]+", text):
+        if not part:
+            continue
+        canonical = _canonical(part, allowed)
+        if canonical is None:
+            raise AppError(400, f"Country must be one of: {', '.join(allowed)}.")
+        if canonical not in seen:
+            seen.add(canonical)
+            chosen.append(canonical)
+    chosen.sort(key=lambda code: order[code])
+    return ",".join(chosen)
 
 
 def _protocol(value: str) -> str:
@@ -54,20 +76,31 @@ def _protocol(value: str) -> str:
     return canonical
 
 
-def _system_code(value: str, label: str) -> str:
-    code = (value or "").strip().upper()
-    if not code:
+def _system_codes(value: str, label: str) -> str:
+    raw = (value or "").replace(";", ",")
+    codes = systems.split_codes(raw)
+    if not codes:
         raise AppError(400, f"{label} is required.")
-    if code not in systems.existing_codes():
-        raise AppError(400, f"{label} '{value}' is not a known system code.")
-    return code
+    known = systems.existing_codes()
+    unknown = [code for code in codes if code not in known]
+    if unknown:
+        raise AppError(400, f"{label} '{', '.join(unknown)}' is not a known system code.")
+    return ", ".join(codes)
+
+
+def _endpoint(value: str) -> str:
+    text = (value or "").strip()
+    if len(text) > MAX_ENDPOINT:
+        raise AppError(400, f"Endpoint must be {MAX_ENDPOINT} characters or fewer.")
+    return text
 
 
 def text_for(row: dict) -> str:
     """The interface as one readable sentence: what is embedded, searched and shown to the chat model."""
     description = f" {row['description']}" if row.get("description") else ""
+    endpoint = f" Endpoint {row['endpoint']}." if row.get("endpoint") else ""
     return (
-        f"Interface {row['interface_name']} ({row['channel']} channel, country {row['country']}).{description} "
+        f"Interface {row['interface_name']} ({row['channel']} channel, country {country_label(row.get('country') or '')}).{description}{endpoint} "
         f"Protocol {row['protocol']}. Source {row['source']} -> Destination {row['destination']}."
     )
 
@@ -75,7 +108,7 @@ def text_for(row: dict) -> str:
 def list_interfaces(channel: str) -> list[dict]:
     rows = db.fetchall(
         """
-        SELECT interface_id, channel, country, interface_name, description, protocol, source, destination
+        SELECT interface_id, channel, country, interface_name, endpoint, description, protocol, source, destination
         FROM interfaces WHERE channel = ? ORDER BY created_at, interface_name
         """,
         [_channel(channel)],
@@ -86,7 +119,7 @@ def list_interfaces(channel: str) -> list[dict]:
 def get_interface(channel: str, interface_id: str) -> dict:
     row = db.fetchone(
         """
-        SELECT interface_id, channel, country, interface_name, description, protocol, source, destination
+        SELECT interface_id, channel, country, interface_name, endpoint, description, protocol, source, destination
         FROM interfaces WHERE channel = ? AND interface_id = ?
         """,
         [_channel(channel), interface_id],
@@ -108,17 +141,18 @@ def create_interface(user: dict, channel: str, body: dict) -> dict:
     description = (body.get("description") or "").strip()
     if len(description) > MAX_DESCRIPTION:
         raise AppError(400, f"Description must be {MAX_DESCRIPTION} characters or fewer.")
+    endpoint = _endpoint(str(body.get("endpoint") or ""))
     protocol = _protocol(str(body.get("protocol") or ""))
-    source = _system_code(str(body.get("source") or ""), "Source")
-    destination = _system_code(str(body.get("destination") or ""), "Destination")
+    source = _system_codes(str(body.get("source") or ""), "Source")
+    destination = _system_codes(str(body.get("destination") or ""), "Destination")
     interface_id = str(uuid.uuid4())
     db.exec_sql(
         """
         INSERT INTO interfaces (
-            interface_id, channel, country, interface_name, description, protocol, source, destination, created_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            interface_id, channel, country, interface_name, endpoint, description, protocol, source, destination, created_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
-        [interface_id, channel, country, name, description, protocol, source, destination, _now()],
+        [interface_id, channel, country, name, endpoint, description, protocol, source, destination, _now()],
     )
     from app.services import reindex
 
@@ -139,16 +173,17 @@ def update_interface(user: dict, channel: str, interface_id: str, body: dict) ->
     description = (body.get("description", current["description"]) or "").strip()
     if len(description) > MAX_DESCRIPTION:
         raise AppError(400, f"Description must be {MAX_DESCRIPTION} characters or fewer.")
+    endpoint = _endpoint(str(body.get("endpoint", current.get("endpoint") or "") or ""))
     protocol = _protocol(str(body.get("protocol", current["protocol"]) or ""))
-    source = _system_code(str(body.get("source", current["source"]) or ""), "Source")
-    destination = _system_code(str(body.get("destination", current["destination"]) or ""), "Destination")
+    source = _system_codes(str(body.get("source", current["source"]) or ""), "Source")
+    destination = _system_codes(str(body.get("destination", current["destination"]) or ""), "Destination")
     db.exec_sql(
         """
         UPDATE interfaces
-        SET country = ?, interface_name = ?, description = ?, protocol = ?, source = ?, destination = ?
+        SET country = ?, interface_name = ?, endpoint = ?, description = ?, protocol = ?, source = ?, destination = ?
         WHERE interface_id = ?
         """,
-        [country, name, description, protocol, source, destination, interface_id],
+        [country, name, endpoint, description, protocol, source, destination, interface_id],
     )
     from app.services import reindex
 
@@ -193,7 +228,6 @@ def parse_and_validate(data: bytes) -> list[dict]:
         raise AppError(400, f"Missing column(s): {', '.join(missing)}. Expected: {', '.join(HEADERS)}.")
     index = {name: header.index(name.lower()) for name in HEADERS}
     known = systems.existing_codes()
-    countries = kb_countries()
     records: list[dict] = []
     errors: list[dict] = []
 
@@ -204,11 +238,9 @@ def parse_and_validate(data: bytes) -> list[dict]:
         values = {name: row[index[name]] if index[name] < len(row) else "" for name in HEADERS}
         if not any(values.values()):
             continue
-        record = {"description": values["Description"]}
-        country = _canonical(values["Country"], countries)
-        if country is None:
-            error(offset, "Country", f"'{values['Country']}' is not allowed. Use one of: {', '.join(countries)}.")
-        record["country"] = country or ""
+        record = {"description": values["Description"], "endpoint": values["Endpoint"].strip()}
+        if len(record["endpoint"]) > MAX_ENDPOINT:
+            error(offset, "Endpoint", f"Endpoint must be {MAX_ENDPOINT} characters or fewer.")
         if not values["Interface name"]:
             error(offset, "Interface name", "Interface name is required.")
         record["interface_name"] = values["Interface name"]
@@ -217,10 +249,13 @@ def parse_and_validate(data: bytes) -> list[dict]:
             error(offset, "Protocol", f"'{values['Protocol']}' is not allowed. Use one of: {', '.join(PROTOCOLS)}.")
         record["protocol"] = protocol or ""
         for field, key in (("Source", "source"), ("Destination", "destination")):
-            code = values[field].upper()
-            if not code or code not in known:
-                error(offset, field, f"'{values[field]}' is not a known system code.")
-            record[key] = code
+            codes = systems.split_codes(values[field].replace(";", ","))
+            unknown = [code for code in codes if code not in known]
+            if not codes:
+                error(offset, field, f"{field} is required.")
+            elif unknown:
+                error(offset, field, f"'{', '.join(unknown)}' is not a known system code.")
+            record[key] = ", ".join(codes)
         records.append(record)
     if len(records) > MAX_ROWS:
         raise AppError(400, f"At most {MAX_ROWS} rows can be uploaded at once.")
@@ -231,28 +266,30 @@ def parse_and_validate(data: bytes) -> list[dict]:
     return records
 
 
-def replace_from_excel(user: dict, channel: str, filename: str, data: bytes) -> list[dict]:
+def replace_from_excel(user: dict, channel: str, country_raw: str, filename: str, data: bytes) -> list[dict]:
     _require_editor(user)
     channel = _channel(channel)
+    country = _country(country_raw)
     if not (filename or "").lower().endswith(".xlsx"):
         raise AppError(400, "Upload an Excel file (.xlsx).")
     if len(data) > MAX_BYTES:
         raise AppError(400, "The file is larger than 20 MB.")
     records = parse_and_validate(data)
     now = _now()
-    db.exec_sql("DELETE FROM interfaces WHERE channel = ?", [channel])
+    db.exec_sql("DELETE FROM interfaces WHERE channel = ? AND country = ?", [channel, country])
     for record in records:
         db.exec_sql(
             """
             INSERT INTO interfaces (
-                interface_id, channel, country, interface_name, description, protocol, source, destination, created_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                interface_id, channel, country, interface_name, endpoint, description, protocol, source, destination, created_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             [
                 str(uuid.uuid4()),
                 channel,
-                record["country"],
+                country,
                 record["interface_name"],
+                record["endpoint"],
                 record["description"],
                 record["protocol"],
                 record["source"],

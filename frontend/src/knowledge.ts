@@ -5,7 +5,6 @@ export const KNOWLEDGE_KINDS: KnowledgeKind[] = [
   { slug: "capabilities", label: "Capabilities", inventoryType: "Capabilities" },
   { slug: "interfaces", label: "Interfaces", inventoryType: "Interfaces" },
   { slug: "tables", label: "Tables", inventoryType: "Tables" },
-  { slug: "screens", label: "Screens", inventoryType: "Screens" },
   { slug: "batches", label: "Batches", inventoryType: "Batches" },
   { slug: "reports", label: "Reports", inventoryType: "Reports" },
   { slug: "bitbucket", label: "Bitbucket Repositories", inventoryType: "Bitbucket Repos" },

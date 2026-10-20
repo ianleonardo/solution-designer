@@ -40,6 +40,7 @@ def test_dashboard_includes_knowledge_base_stats_by_country(client):
             json={
                 "country": "SG",
                 "system_code": "SPL",
+                "report_code": "RPT-01",
                 "report_name": "Daily",
                 "description": "Balances",
                 "layout": "A|B",

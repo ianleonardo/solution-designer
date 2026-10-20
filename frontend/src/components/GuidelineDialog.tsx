@@ -1,6 +1,7 @@
-import { FormEvent, useEffect, useRef, useState } from "react";
+import { FormEvent, useEffect, useState } from "react";
 import { api, ApiError } from "../api";
 import type { Guideline } from "../types";
+import { FileDrop } from "./FileDrop";
 
 export const GUIDELINE_ACCEPT = ".md,.markdown,.pdf,.txt";
 
@@ -10,8 +11,6 @@ export function GuidelineDialog({ onAdded, onClose }: { onAdded: (guideline: Gui
   const [file, setFile] = useState<File | null>(null);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
-  const picker = useRef<HTMLInputElement>(null);
-
   useEffect(() => {
     function onKey(event: KeyboardEvent) {
       if (event.key === "Escape" && !busy) onClose();
@@ -55,22 +54,8 @@ export function GuidelineDialog({ onAdded, onClose }: { onAdded: (guideline: Gui
         </label>
         <div className="mb-4">
           <span className="font-label text-[10px] uppercase text-muted">File</span>
-          <div className="mt-1 flex items-center gap-3">
-            <button type="button" className="btn" disabled={busy} onClick={() => picker.current?.click()}>
-              <span className="material-symbols-outlined text-base">upload</span>
-              Upload
-            </button>
-            <span className="text-muted truncate" aria-live="polite">
-              {file ? file.name : "md, pdf or txt"}
-            </span>
-            <input
-              ref={picker}
-              className="hidden"
-              type="file"
-              aria-label="Guideline file"
-              accept={GUIDELINE_ACCEPT}
-              onChange={(event) => setFile(event.target.files?.[0] ?? null)}
-            />
+          <div className="mt-1">
+            <FileDrop accept={GUIDELINE_ACCEPT} ariaLabel="Guideline file" file={file} disabled={busy} grow idleLabel="Drop md, pdf or txt" onFile={setFile} />
           </div>
         </div>
         {busy && <p className="text-accent mb-3">Generating embeddings… large files can take a moment.</p>}

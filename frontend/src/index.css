@@ -421,3 +421,87 @@ input.no-spinner {
 }
 .chart-node-decision > span { display: inline-block; transform: skewX(8deg); }
 .react-flow__node.selected .chart-node { box-shadow: 0 0 0 2px var(--gold); }
+
+/* ---- SpecForge animated logo ---- */
+.sf-logo { overflow: visible; }
+.sf-guides path { stroke-dasharray: 2 3; opacity: 0.35; animation: sf-dash 6s linear infinite; }
+.sf-guides .sf-axis { stroke-dasharray: none; opacity: 0.55; animation: sf-axis 3.2s ease-in-out infinite; }
+.sf-flow path { stroke-dasharray: 9 91; stroke-dashoffset: 100; animation: sf-flow 3.2s linear infinite; }
+.sf-pen { transform-box: view-box; transform-origin: 86px 22px; animation: sf-strike 1.6s ease-in infinite; }
+.sf-heat { animation: sf-heat 1.6s ease-out infinite; transform-box: fill-box; transform-origin: center; }
+.sf-hot { animation: sf-hot 1.6s ease-out infinite; }
+@keyframes sf-dash { to { stroke-dashoffset: -50; } }
+@keyframes sf-flow { to { stroke-dashoffset: 0; } }
+@keyframes sf-axis { 0%, 100% { opacity: 0.25; } 50% { opacity: 0.8; } }
+@keyframes sf-strike {
+  0% { transform: rotate(-9deg); }
+  38% { transform: rotate(-9deg); }
+  42% { transform: rotate(1.5deg); }
+  50% { transform: rotate(-1deg); }
+  100% { transform: rotate(-9deg); }
+}
+@keyframes sf-heat { 0%, 40% { opacity: 0.35; transform: scale(0.85); } 46% { opacity: 1; transform: scale(1.1); } 100% { opacity: 0.35; transform: scale(0.85); } }
+@keyframes sf-hot { 0%, 40% { opacity: 0.7; } 46% { opacity: 1; } 100% { opacity: 0.7; } }
+@media (prefers-reduced-motion: reduce) {
+  .sf-guides path, .sf-guides .sf-axis, .sf-flow path, .sf-pen, .sf-heat, .sf-hot { animation: none; }
+  .sf-flow { display: none; }
+}
+
+/* ---- SpecForge animated wordmark ---- */
+.sf-word {
+  position: relative;
+  display: inline-block;
+  color: transparent;
+  -webkit-background-clip: text;
+  background-clip: text;
+  background-repeat: no-repeat;
+  background-size: 250% 100%, 100% 100%;
+  /* extend the painted box below the baseline so descenders (the "g") aren't clipped */
+  padding-bottom: 0.18em;
+  margin-bottom: -0.18em;
+  animation: sf-sheen 3.2s linear infinite;
+}
+/* brushed steel — dark steel on light themes, silver on dark */
+.sf-spec {
+  background-image:
+    linear-gradient(105deg, transparent 42%, rgba(255, 255, 255, 0.85) 50%, transparent 58%),
+    linear-gradient(180deg, #5b6878 0%, #2a3340 48%, #1b222c 52%, #4a5666 100%);
+  filter: drop-shadow(0 1px 0 rgba(255, 255, 255, 0.6)) drop-shadow(0 2px 3px rgba(20, 30, 45, 0.25));
+}
+.dark .sf-spec {
+  background-image:
+    linear-gradient(105deg, transparent 42%, rgba(255, 255, 255, 0.95) 50%, transparent 58%),
+    linear-gradient(180deg, #ffffff 0%, #d9dee5 46%, #9aa4b1 54%, #e8ecf1 100%);
+  filter: drop-shadow(0 2px 2px rgba(0, 0, 0, 0.55)) drop-shadow(0 0 6px rgba(120, 200, 255, 0.18));
+}
+/* molten metal */
+.sf-forge {
+  background-image:
+    linear-gradient(105deg, transparent 42%, rgba(255, 252, 225, 0.95) 50%, transparent 58%),
+    linear-gradient(180deg, #fff0a0 0%, #ffd24a 30%, #ffad2e 58%, #ff8a1f 82%, #f2741a 100%);
+  animation: sf-sheen 3.2s linear infinite, sf-forge-glow 1.6s ease-out infinite;
+  animation-delay: -1.6s, 0s;
+}
+.sf-embers {
+  position: absolute;
+  left: 0;
+  top: -30%;
+  width: 115%;
+  height: 160%;
+  overflow: visible;
+  pointer-events: none;
+  filter: drop-shadow(0 0 2px rgba(255, 150, 60, 0.9));
+}
+@keyframes sf-sheen {
+  from { background-position: 160% 0, 0 0; }
+  to { background-position: -60% 0, 0 0; }
+}
+@keyframes sf-forge-glow {
+  0%, 40% { filter: drop-shadow(0 2px 2px rgba(0, 0, 0, 0.35)) drop-shadow(0 0 4px rgba(255, 170, 40, 0.4)); }
+  46% { filter: drop-shadow(0 2px 2px rgba(0, 0, 0, 0.35)) drop-shadow(0 0 12px rgba(255, 185, 60, 0.9)); }
+  100% { filter: drop-shadow(0 2px 2px rgba(0, 0, 0, 0.35)) drop-shadow(0 0 4px rgba(255, 170, 40, 0.4)); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .sf-word, .sf-forge { animation: none; background-position: 200% 0, 0 0; }
+  .sf-embers { display: none; }
+}

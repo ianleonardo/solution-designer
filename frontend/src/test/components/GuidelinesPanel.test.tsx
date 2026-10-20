@@ -72,7 +72,7 @@ test("the Add dialog needs a title and a file, then posts them as form data", as
   const dialog = screen.getByRole("dialog", { name: "Add guideline" });
   const submit = within(dialog).getByRole("button", { name: "Add" }) as HTMLButtonElement;
   expect(submit.disabled).toBe(true);
-  expect(within(dialog).getByRole("button", { name: /Upload$/ })).toBeTruthy();
+  expect(within(dialog).getByRole("button", { name: "Choose file" })).toBeTruthy();
 
   fireEvent.change(within(dialog).getByLabelText("Guideline title"), { target: { value: "Logging rules" } });
   expect(submit.disabled).toBe(true);

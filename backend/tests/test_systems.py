@@ -14,32 +14,20 @@ def test_admin_adds_edits_lists_and_deletes_systems(client):
     created = _create(client, admin, " spl ", description="Front door")
     assert created.status_code == 200, created.text
     assert created.json()["system_code"] == "SPL"
-    assert _create(client, admin, "DGE", upstreams="spl").json()["upstreams"] == "SPL"
-    assert _create(client, admin, "PIB", upstreams="SPL, DGE,spl", downstreams="").json()["upstreams"] == "SPL, DGE"
+    assert created.json()["upstreams"] == "" and created.json()["downstreams"] == ""
+    assert _create(client, admin, "DGE").status_code == 200
+    assert _create(client, admin, "PIB").status_code == 200
 
-    edited = client.patch("/api/systems/dge", json={"system_name": "Digital gateway", "downstreams": "PIB", "upstreams": ""}, headers=auth(admin))
+    edited = client.patch("/api/systems/dge", json={"system_name": "Digital gateway"}, headers=auth(admin))
     assert edited.status_code == 200, edited.text
     assert edited.json()["system_name"] == "Digital gateway"
-    assert edited.json()["downstreams"] == "PIB" and edited.json()["upstreams"] == ""
+    assert edited.json()["upstreams"] == "" and edited.json()["downstreams"] == ""
 
     listed = client.get("/api/systems", headers=auth(admin)).json()
     assert [item["system_code"] for item in listed] == ["DGE", "PIB", "SPL"]
 
-    assert client.delete("/api/systems/PIB", headers=auth(admin)).status_code == 409  # DGE still points at it
-    client.patch("/api/systems/DGE", json={"downstreams": ""}, headers=auth(admin))
     assert client.delete("/api/systems/PIB", headers=auth(admin)).status_code == 200
     assert [item["system_code"] for item in client.get("/api/systems", headers=auth(admin)).json()] == ["DGE", "SPL"]
-
-
-def test_upstreams_and_downstreams_must_exist_but_may_be_empty(client):
-    admin = login(client, "Admin")
-    assert _create(client, admin, "SPL", upstreams="", downstreams="").status_code == 200
-    unknown = _create(client, admin, "DGE", upstreams="SPL, NOPE, ALSO")
-    assert unknown.status_code == 400
-    assert "NOPE" in unknown.json()["detail"] and "ALSO" in unknown.json()["detail"]
-    bad_down = client.patch("/api/systems/SPL", json={"downstreams": "GHOST"}, headers=auth(admin))
-    assert bad_down.status_code == 400 and "GHOST" in bad_down.json()["detail"]
-    assert client.patch("/api/systems/SPL", json={"downstreams": "SPL"}, headers=auth(admin)).status_code == 400
 
 
 def test_system_code_and_name_rules(client):
@@ -51,16 +39,6 @@ def test_system_code_and_name_rules(client):
     assert _create(client, admin, "a").status_code == 400
     assert client.patch("/api/systems/NOPE", json={"system_name": "x"}, headers=auth(admin)).status_code == 404
     assert client.delete("/api/systems/NOPE", headers=auth(admin)).status_code == 404
-
-
-def test_system_cannot_be_deleted_while_another_system_lists_it(client):
-    admin = login(client, "Admin")
-    _create(client, admin, "SPL")
-    _create(client, admin, "DGE", upstreams="SPL")
-    blocked = client.delete("/api/systems/SPL", headers=auth(admin))
-    assert blocked.status_code == 409 and "DGE" in blocked.json()["detail"]
-    client.patch("/api/systems/DGE", json={"upstreams": ""}, headers=auth(admin))
-    assert client.delete("/api/systems/SPL", headers=auth(admin)).status_code == 200
 
 
 def test_analyst_can_edit_and_viewer_can_only_view_systems(client):
@@ -111,8 +89,8 @@ def _workbook(rows: list[list], headers=("SYSTEM_CODE", "SYSTEM_NAME", "DESCRIPT
 
 def test_excel_upload_adds_and_updates_systems(client):
     admin = login(client, "Admin")
-    _create(client, admin, "SPL", description="Keep me", upstreams="", downstreams="")
-    _create(client, admin, "DGE", upstreams="SPL")
+    _create(client, admin, "SPL", description="Keep me")
+    _create(client, admin, "DGE")
     data = _workbook(
         [
             ["spl", "SPL Core", ""],
@@ -131,7 +109,7 @@ def test_excel_upload_adds_and_updates_systems(client):
     assert by_code["SPL"]["description"] == "Keep me"
     assert by_code["PIB"]["description"] == "Payments"
     assert by_code["PIB"]["upstreams"] == "" and by_code["PIB"]["has_batch"] is False
-    assert by_code["DGE"]["upstreams"] == "SPL"
+    assert by_code["DGE"]["upstreams"] == ""
 
     missing = client.post(
         "/api/systems/upload",

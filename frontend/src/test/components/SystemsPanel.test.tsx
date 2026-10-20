@@ -41,7 +41,7 @@ test("lists systems with their upstreams and downstreams, sortable by code", asy
   mockFetch([system("SPL", { downstreams: "DGE" }), system("DGE", { upstreams: "SPL", description: "Gateway" })]);
   render(<SystemsPanel />);
   await waitFor(() => expect(screen.getByText("DGE name")).toBeTruthy());
-  for (const header of ["System Code", "System Name", "Description", "Upstreams", "Downstreams", "Has batch", "Has report"]) {
+  for (const header of ["System Code", "System Name", "Description", "Has batch", "Has report"]) {
     expect(screen.getByRole("columnheader", { name: new RegExp(header) })).toBeTruthy();
   }
   expect(screen.queryByRole("columnheader", { name: /Has capability/ })).toBeNull();
@@ -72,7 +72,6 @@ test("adds a system and shows it in the table", async () => {
   fireEvent.click(screen.getByRole("button", { name: /Add$/ }));
   fireEvent.change(screen.getByLabelText("System code"), { target: { value: "SPL" } });
   fireEvent.change(screen.getByLabelText("System name"), { target: { value: "SPL name" } });
-  fireEvent.change(screen.getByLabelText("Upstreams"), { target: { value: " A, B " } });
   fireEvent.click(screen.getByRole("button", { name: "Add" }));
   await waitFor(() => expect(screen.getByText("SPL name")).toBeTruthy());
   const post = fetchMock.mock.calls.find((call) => (call[1] as RequestInit | undefined)?.method === "POST")!;
@@ -80,11 +79,11 @@ test("adds a system and shows it in the table", async () => {
   expect(JSON.parse((post[1] as RequestInit).body as string)).toMatchObject({
     system_code: "SPL",
     system_name: "SPL name",
-    upstreams: "A, B",
-    downstreams: "",
     has_batch: false,
     has_report: false,
   });
+  expect(JSON.parse((post[1] as RequestInit).body as string)).not.toHaveProperty("upstreams");
+  expect(JSON.parse((post[1] as RequestInit).body as string)).not.toHaveProperty("downstreams");
 });
 
 test("saves has batch and has report checkboxes", async () => {
@@ -105,16 +104,15 @@ test("saves has batch and has report checkboxes", async () => {
   expect(JSON.parse((post[1] as RequestInit).body as string)).not.toHaveProperty("has_capability");
 });
 
-test("shows the server's message when an upstream code is unknown", async () => {
-  mockFetch([], (_url, init) => (init?.method === "POST" ? json({ detail: "Upstreams has unknown system code(s): NOPE." }, 400) : undefined));
+test("shows the server's message when a save is refused", async () => {
+  mockFetch([], (_url, init) => (init?.method === "POST" ? json({ detail: "System code SPL already exists." }, 400) : undefined));
   render(<SystemsPanel />);
   await waitFor(() => expect(screen.getByText("No systems found.")).toBeTruthy());
   fireEvent.click(screen.getByRole("button", { name: /Add$/ }));
   fireEvent.change(screen.getByLabelText("System code"), { target: { value: "SPL" } });
   fireEvent.change(screen.getByLabelText("System name"), { target: { value: "x" } });
-  fireEvent.change(screen.getByLabelText("Upstreams"), { target: { value: "NOPE" } });
   fireEvent.click(screen.getByRole("button", { name: "Add" }));
-  await waitFor(() => expect(screen.getByText(/unknown system code\(s\): NOPE/)).toBeTruthy());
+  await waitFor(() => expect(screen.getByText(/already exists/)).toBeTruthy());
   expect(screen.getByRole("dialog")).toBeTruthy();
 });
 
@@ -125,7 +123,6 @@ test("edits a system without letting the code change", async () => {
   fireEvent.click(screen.getByRole("button", { name: "Edit SPL" }));
   expect((screen.getByLabelText("System code") as HTMLInputElement).readOnly).toBe(true);
   fireEvent.change(screen.getByLabelText("System name"), { target: { value: "Renamed" } });
-  fireEvent.change(screen.getByLabelText("Downstreams"), { target: { value: "DGE" } });
   fireEvent.click(screen.getByRole("button", { name: "Save" }));
   await waitFor(() => expect(screen.getByText("Renamed")).toBeTruthy());
   const patch = fetchMock.mock.calls.find((call) => (call[1] as RequestInit | undefined)?.method === "PATCH")!;
@@ -137,14 +134,14 @@ test("deletes after confirmation and shows why a delete is refused", async () =>
   let refuse = true;
   mockFetch([system("SPL"), system("DGE")], (_url, init) => {
     if (init?.method !== "DELETE") return undefined;
-    if (refuse) return json({ detail: "SPL is still listed as upstream or downstream of: DGE." }, 409);
+    if (refuse) return json({ detail: "SPL is used by interfaces in: PIB. Upload a new file without it first." }, 409);
     return json({ ok: true });
   });
   render(<SystemsPanel />);
   await waitFor(() => expect(screen.getByText("SPL name")).toBeTruthy());
   fireEvent.click(screen.getByRole("button", { name: "Delete SPL" }));
   fireEvent.click(within(screen.getByRole("alertdialog")).getByRole("button", { name: "Delete" }));
-  await waitFor(() => expect(screen.getByText(/still listed as upstream or downstream of: DGE/)).toBeTruthy());
+  await waitFor(() => expect(screen.getByText(/used by interfaces in: PIB/)).toBeTruthy());
   expect(screen.getByText("SPL name")).toBeTruthy();
   refuse = false;
   fireEvent.click(within(screen.getByRole("alertdialog")).getByRole("button", { name: "Delete" }));

@@ -5,7 +5,7 @@ import type { InterfaceRecord } from "../../types";
 import { InterfacesPanel } from "../../components/InterfacesPanel";
 
 function item(channel: string, name: string, country = "SG", overrides: Partial<InterfaceRecord> = {}): InterfaceRecord {
-  return { interface_id: `${channel}-${name}`, channel: channel as InterfaceRecord["channel"], country, interface_name: name, description: "", protocol: "API", source: "SPL", destination: "DGE", ...overrides };
+  return { interface_id: `${channel}-${name}`, channel: channel as InterfaceRecord["channel"], country, interface_name: name, endpoint: "", description: "", protocol: "API", source: "SPL", destination: "DGE", ...overrides };
 }
 
 function json(body: unknown, status = 200) {
@@ -51,7 +51,7 @@ test("shows the channel tabs and the interface columns, sortable", async () => {
   await waitFor(() => expect(screen.getByRole("tab", { name: "NTN" })).toBeTruthy());
   expect(screen.getAllByRole("tab").map((tab) => tab.textContent)).toEqual(["SPL", "DGE", "PIB", "NTN", "WSM", "EAI"]);
   await waitFor(() => expect(screen.getByText("Zeta")).toBeTruthy());
-  for (const header of ["Country", "Interface Name", "Description", "Protocol", "Source", "Destination"]) expect(screen.getByRole("columnheader", { name: new RegExp(header) })).toBeTruthy();
+  for (const header of ["Country", "Interface Name", "Endpoint", "Protocol", "Description", "Source", "Destination"]) expect(screen.getByRole("columnheader", { name: new RegExp(header) })).toBeTruthy();
   const names = () => screen.getAllByRole("row").slice(1).map((row) => within(row).getAllByRole("cell")[1].textContent);
   fireEvent.click(screen.getByRole("button", { name: /Interface Name/ }));
   expect(names()).toEqual(["Alpha", "Zeta"]);
@@ -72,7 +72,9 @@ test("uploads an Excel file to the current tab and shows the new rows", async ()
   const fetchMock = mockFetch(() => json([item("DGE", "From excel"), item("DGE", "Second")]));
   renderAt("/knowledge/interfaces?tab=DGE");
   await waitFor(() => expect(screen.getByText("DGE only")).toBeTruthy());
-  fireEvent.change(screen.getByLabelText("Upload DGE Excel"), { target: { files: [new File(["x"], "dge.xlsx")] } });
+  fireEvent.click(screen.getByRole("button", { name: /Upload$/ }));
+  fireEvent.change(within(screen.getByRole("dialog", { name: "Upload interfaces" })).getByLabelText("Upload DGE Excel"), { target: { files: [new File(["x"], "dge.xlsx")] } });
+  fireEvent.click(within(screen.getByRole("dialog", { name: "Upload interfaces" })).getByRole("button", { name: "Upload file" }));
   await waitFor(() => expect(screen.getByText("From excel")).toBeTruthy());
   expect(screen.queryByText("DGE only")).toBeNull();
   expect(screen.getByRole("status").textContent).toBe("DGE now has 2 interfaces.");
@@ -95,7 +97,10 @@ test("lists the row problems of a rejected upload and keeps the table", async ()
   );
   renderAt("/knowledge/interfaces?tab=SPL");
   await waitFor(() => expect(screen.getByText("Zeta")).toBeTruthy());
-  fireEvent.change(screen.getByLabelText("Upload SPL Excel"), { target: { files: [new File(["x"], "spl.xlsx")] } });
+  fireEvent.click(screen.getByRole("button", { name: /Upload$/ }));
+  const dialog = screen.getByRole("dialog", { name: "Upload interfaces" });
+  fireEvent.change(within(dialog).getByLabelText("Upload SPL Excel"), { target: { files: [new File(["x"], "spl.xlsx")] } });
+  fireEvent.click(within(dialog).getByRole("button", { name: "Upload file" }));
   await waitFor(() => expect(screen.getByText(/Nothing was imported/)).toBeTruthy());
   const list = screen.getByRole("list", { name: "Upload problems" });
   expect(within(list).getAllByRole("listitem").map((entry) => entry.textContent)).toEqual(["Row 2, Country: 'JP' is not allowed.", "Row 5, Source: 'NOPE' is not a known system code."]);

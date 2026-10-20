@@ -3,6 +3,7 @@ import MarkdownIt from "markdown-it";
 import { api, ApiError, authHeaders, downloadFile, formatBytes } from "../api";
 import type { Reference } from "../types";
 import { ConfirmDialog } from "./ConfirmDialog";
+import { FileDrop } from "./FileDrop";
 
 const markdown = new MarkdownIt({ html: false, linkify: true, breaks: true });
 
@@ -179,21 +180,15 @@ export function ReferencesPanel({ projectId, references, canEdit, onChange, onCl
         </div>
         <div className="flex items-center justify-between gap-3 px-4 py-3 border-t border-hairline">
           {canEdit ? (
-            <label className="btn btn-primary cursor-pointer">
-              {uploading ? "Uploading…" : "Upload reference"}
-              <input
-                className="hidden"
-                type="file"
-                aria-label="Upload reference"
-                accept=".md,.markdown,.pdf,.xlsx,.xls"
-                disabled={uploading}
-                onChange={(event) => {
-                  const file = event.target.files?.[0];
-                  if (file) void upload(file);
-                  event.target.value = "";
-                }}
-              />
-            </label>
+            <FileDrop
+              primary
+              accept=".md,.markdown,.pdf,.xlsx,.xls"
+              ariaLabel="Upload reference"
+              disabled={uploading}
+              idleLabel="Drop file"
+              buttonLabel={uploading ? "Uploading…" : "Upload reference"}
+              onFile={(file) => void upload(file)}
+            />
           ) : (
             <span className="text-xs text-muted">Only Analyst users can change references.</span>
           )}

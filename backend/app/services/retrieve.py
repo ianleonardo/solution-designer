@@ -142,7 +142,11 @@ def _report_hits(query_tokens: set[str], query_vector: list[float] | None) -> li
     for row in db.fetchall("SELECT * FROM kb_reports"):
         text = reports_svc.text_for(row)
         score = score_text(query_tokens, text, query_vector, row.get("embedding"))
-        if row["report_name"].lower() in query_tokens or row["system_code"].lower() in query_tokens:
+        if (
+            row["report_name"].lower() in query_tokens
+            or (row.get("report_code") or "").lower() in query_tokens
+            or row["system_code"].lower() in query_tokens
+        ):
             score += 2
         if score <= 0:
             continue

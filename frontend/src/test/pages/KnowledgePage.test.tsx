@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { KnowledgePage } from "../../pages/KnowledgePage";
@@ -13,7 +13,7 @@ const item = (id: string, type: string, system: string) => ({
   created_at: "2026-10-13T00:00:00",
 });
 
-const data = [item("SC-0001", "Screens", "Login screen"), item("BA-0001", "Batches", "Nightly job"), item("SC-0002", "Screens", "Home screen")];
+const data = [item("SC-0001", "Screens", "Login screen"), item("BA-0001", "Batches", "Nightly job")];
 
 function json(body: unknown) {
   return new Response(JSON.stringify(body), { status: 200, headers: { "Content-Type": "application/json" } });
@@ -32,39 +32,20 @@ function renderAt(path: string) {
 afterEach(() => vi.unstubAllGlobals());
 
 describe("KnowledgePage", () => {
-  it("lists only entries of the selected type and supports search", async () => {
+  it("does not offer a Screens inventory", async () => {
     vi.stubGlobal("localStorage", { getItem: () => null });
     vi.stubGlobal(
       "fetch",
       vi.fn().mockImplementation((url: string) => {
         if (url === "/api/catalogs") return Promise.resolve(json({ countries: ["SG"], databases: [], interface_channels: [] }));
+        if (url === "/api/systems") return Promise.resolve(json([]));
         return Promise.resolve(json(data));
       }),
     );
     renderAt("/knowledge/screens");
-    await waitFor(() => expect(screen.getByText("Login screen")).toBeTruthy());
-    expect(screen.getByText("Home screen")).toBeTruthy();
-    expect(screen.queryByText("Nightly job")).toBeNull();
-    fireEvent.change(screen.getByLabelText("Search Screens"), { target: { value: "login" } });
-    expect(screen.queryByText("Home screen")).toBeNull();
-    expect(screen.getByText("Login screen")).toBeTruthy();
-  });
-
-  it("uploads with the type of the current screen", async () => {
-    vi.stubGlobal("localStorage", { getItem: () => null });
-    const fetchMock = vi.fn().mockImplementation((url: string, init?: RequestInit) => {
-      if (init?.method === "POST") return Promise.resolve(json([item("SC-0003", "Screens", "Created screen")]));
-      if (url === "/api/catalogs") return Promise.resolve(json({ countries: ["SG"], databases: [], interface_channels: [] }));
-      return Promise.resolve(json(data));
-    });
-    vi.stubGlobal("fetch", fetchMock);
-    renderAt("/knowledge/screens");
-    await waitFor(() => expect(screen.getByText("Login screen")).toBeTruthy());
-    const input = screen.getByLabelText("Upload Screens");
-    fireEvent.change(input, { target: { files: [new File(["| a |"], "screens.md", { type: "text/markdown" })] } });
-    await waitFor(() => expect(screen.getByText("Created screen")).toBeTruthy());
-    const post = fetchMock.mock.calls.find((call) => (call[1] as RequestInit | undefined)?.method === "POST");
-    expect(post?.[0]).toBe("/api/rag?inventory_type=Screens");
+    await waitFor(() => expect(screen.getByRole("heading", { name: "Systems" })).toBeTruthy());
+    expect(screen.queryByLabelText("Upload Screens")).toBeNull();
+    expect(screen.queryByLabelText("Search Screens")).toBeNull();
   });
 
   it("shows the structured batches screen, not the generic upload", async () => {

@@ -2,6 +2,8 @@ import { FormEvent, useState } from "react";
 import { Navigate } from "react-router-dom";
 import { ApiError } from "../api";
 import { useAuth } from "../auth";
+import { AnimatedLogo } from "../components/AnimatedLogo";
+import { AnimatedWordmark } from "../components/AnimatedWordmark";
 import { THEME_LABELS, themeIcon, useTheme } from "../theme";
 
 export function LoginPage() {
@@ -32,18 +34,17 @@ export function LoginPage() {
       <button type="button" className="btn absolute top-4 right-4" aria-label="Toggle theme" title={`Switch to ${THEME_LABELS[next]}`} onClick={toggle}>
         <span className="material-symbols-outlined">{themeIcon(next)}</span>
       </button>
-      <form onSubmit={(event) => void onSubmit(event)} className="w-full max-w-lg bg-panel border border-hairline rounded-lg shadow-glaze p-8">
-        <div className="mb-6">
-          <div className="flex items-center gap-3">
-            <span className="h-10 w-10 rounded bg-cobalt text-on-cobalt flex items-center justify-center">
-              <span className="material-symbols-outlined">hub</span>
+      <form onSubmit={(event) => void onSubmit(event)} className="w-full max-w-xl bg-panel border border-hairline rounded-lg shadow-glaze p-8">
+        <div className="mb-6 -mt-3">
+          <div className="flex items-center gap-4">
+            <span className="h-14 w-14 shrink-0 flex items-center justify-center">
+              <AnimatedLogo className="h-full w-full" />
             </span>
-            <h1 className="font-wordmark text-[40px] font-bold leading-10 tracking-tight whitespace-nowrap" data-testid="wordmark">
-              <span>Spec</span>
-              <span className="text-accent">Forge</span>
+            <h1 className="font-wordmark text-[56px] font-bold leading-[56px] tracking-tight whitespace-nowrap" data-testid="wordmark">
+              <AnimatedWordmark />
             </h1>
           </div>
-          <p className="mt-3 text-sm text-muted">
+          <p className="mt-3 text-[11px] italic text-muted whitespace-nowrap">
             Transform requirements into solution designs, diagrams, and living specs in minutes.
           </p>
         </div>

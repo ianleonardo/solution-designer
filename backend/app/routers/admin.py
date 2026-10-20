@@ -293,9 +293,14 @@ def delete_interface(channel: str, interface_id: str, user: dict = Depends(requi
 
 
 @router.post("/interfaces/{channel}/upload")
-async def upload_interfaces(channel: str, file: UploadFile = File(...), user: dict = Depends(require_kb_editor)):
+async def upload_interfaces(
+    channel: str,
+    file: UploadFile = File(...),
+    country: str = Form(""),
+    user: dict = Depends(require_kb_editor),
+):
     data = await file.read()
-    return interfaces.replace_from_excel(user, channel, file.filename or "interfaces.xlsx", data)
+    return interfaces.replace_from_excel(user, channel, country, file.filename or "interfaces.xlsx", data)
 
 
 @router.get("/tables")

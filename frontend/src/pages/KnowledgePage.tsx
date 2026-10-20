@@ -3,6 +3,7 @@ import { Navigate, useParams, useSearchParams } from "react-router-dom";
 import { api, ApiError } from "../api";
 import { useOptionalAuth } from "../auth";
 import { ConfirmDialog } from "../components/ConfirmDialog";
+import { FileDrop } from "../components/FileDrop";
 import { type Column, DataTable } from "../components/DataTable";
 import { KB_PAGE_SIZES } from "../components/TablePager";
 import { GuidelinesPanel } from "../components/GuidelinesPanel";
@@ -180,22 +181,22 @@ function InventoryPage() {
         searchPlaceholder={`Search ${kind.label.toLowerCase()}`}
         toolbar={
           canEdit ? (
-            <label className={`btn btn-primary cursor-pointer ${uploading ? "opacity-50" : ""}`}>
-              <span className="material-symbols-outlined text-base">upload</span>
-              {uploading ? "Uploading…" : "Upload"}
-              <input
-                className="hidden"
-                type="file"
-                aria-label={`Upload ${kind.label}`}
-                accept=".md,.markdown,.pdf,.html,.htm"
-                disabled={uploading}
-                onChange={(event) => {
-                  const file = event.target.files?.[0];
-                  event.target.value = "";
-                  if (file) void upload(file);
-                }}
-              />
-            </label>
+            <FileDrop
+              primary
+              accept=".md,.markdown,.pdf,.html,.htm"
+              ariaLabel={`Upload ${kind.label}`}
+              disabled={uploading}
+              idleLabel="Drop file"
+              buttonLabel={
+                <>
+                  <span className="material-symbols-outlined text-base" aria-hidden="true">
+                    upload
+                  </span>
+                  {uploading ? "Uploading…" : "Upload"}
+                </>
+              }
+              onFile={(file) => void upload(file)}
+            />
           ) : undefined
         }
       />

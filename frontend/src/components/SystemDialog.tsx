@@ -8,8 +8,6 @@ export function SystemDialog({ system, onSaved, onClose }: { system?: SystemReco
   const [code, setCode] = useState(system?.system_code ?? "");
   const [name, setName] = useState(system?.system_name ?? "");
   const [description, setDescription] = useState(system?.description ?? "");
-  const [upstreams, setUpstreams] = useState(system?.upstreams ?? "");
-  const [downstreams, setDownstreams] = useState(system?.downstreams ?? "");
   const [hasBatch, setHasBatch] = useState(Boolean(system?.has_batch));
   const [hasReport, setHasReport] = useState(Boolean(system?.has_report));
   const [error, setError] = useState("");
@@ -30,8 +28,6 @@ export function SystemDialog({ system, onSaved, onClose }: { system?: SystemReco
     const body = {
       system_name: name.trim(),
       description: description.trim(),
-      upstreams: upstreams.trim(),
-      downstreams: downstreams.trim(),
       has_batch: hasBatch,
       has_report: hasReport,
     };
@@ -64,14 +60,6 @@ export function SystemDialog({ system, onSaved, onClose }: { system?: SystemReco
         <label className="block mb-3">
           <span className="font-label text-[10px] uppercase text-muted">Description</span>
           <textarea className="field mt-1 min-h-[80px]" value={description} onChange={(event) => setDescription(event.target.value)} aria-label="Description" maxLength={2000} disabled={busy} />
-        </label>
-        <label className="block mb-3">
-          <span className="font-label text-[10px] uppercase text-muted">Upstreams</span>
-          <input className="field mt-1" value={upstreams} onChange={(event) => setUpstreams(event.target.value)} aria-label="Upstreams" placeholder="System codes separated by commas, or empty" disabled={busy} />
-        </label>
-        <label className="block mb-3">
-          <span className="font-label text-[10px] uppercase text-muted">Downstreams</span>
-          <input className="field mt-1" value={downstreams} onChange={(event) => setDownstreams(event.target.value)} aria-label="Downstreams" placeholder="System codes separated by commas, or empty" disabled={busy} />
         </label>
         <div className="flex flex-wrap gap-4 mb-4">
           <label className="inline-flex items-center gap-2 text-sm">

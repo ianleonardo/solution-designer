@@ -27,6 +27,24 @@ def test_builtin_layouts_are_seeded(client):
     assert purpose["system_prompt"]
 
 
+def test_fmea_layout_is_seeded_with_rating_scales(client):
+    headers = _admin(client)
+    layouts = {item["layout_id"]: item for item in client.get("/api/layouts", headers=headers).json()}
+    assert layouts["fmea"]["name"] == "FMEA Document"
+    assert layouts["fmea"]["is_system"]
+    detail = client.get("/api/layouts/fmea", headers=headers).json()
+    by_name = {item["section_name"]: item for item in detail["templates"]}
+    worksheet = by_name["FMEA Worksheet"]
+    assert worksheet["parent_id"] == "fmea--failure-analysis"
+    columns = worksheet["blocks"][0]["columns"]
+    assert columns[:4] == ["ID", "Item / Function", "Failure Mode", "Effect"]
+    assert columns[-3:] == ["D", "RPN", "Priority"]
+    severity = by_name["Severity Scale"]["blocks"][0]
+    assert [row[0] for row in severity["rows"]] == [str(n) for n in range(10, 0, -1)]
+    assert len(by_name["Action Thresholds"]["blocks"][0]["rows"]) == 4
+    assert client.delete("/api/layouts/fmea", headers=headers).status_code == 400
+
+
 def test_create_update_delete_layout(client):
     headers = _admin(client)
     layout = _create(client, "Runbook", description="Operations runbook")

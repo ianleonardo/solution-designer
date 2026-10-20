@@ -11,6 +11,7 @@ import type {
   TablesUploadResponse,
 } from "../types";
 import { ConfirmDialog } from "./ConfirmDialog";
+import { FileDrop } from "./FileDrop";
 import { SelectField } from "./SelectField";
 import { SortHeader, sortRows, toggleColumnSort, type ColumnSort } from "./SortHeader";
 import { PageSlice, TablePager, usePageWindow } from "./TablePager";
@@ -127,17 +128,12 @@ function UploadTablesDialog({
             onChange={(event) => setSchema(event.target.value)}
           />
         </label>
-        <label className="block">
+        <div>
           <span className="font-label text-[10px] uppercase text-muted">Excel file (.xlsx)</span>
-          <input
-            className="field mt-1"
-            type="file"
-            aria-label="Excel file"
-            accept=".xlsx"
-            disabled={busy}
-            onChange={(event) => setFile(event.target.files?.[0] ?? null)}
-          />
-        </label>
+          <div className="mt-1">
+            <FileDrop accept=".xlsx" ariaLabel="Excel file" file={file} disabled={busy} grow onFile={setFile} />
+          </div>
+        </div>
         {error && <p className="text-alert text-sm">{error}</p>}
         {problems.length > 0 && (
           <ul className="max-h-40 overflow-auto rounded-lg border border-hairline p-3 text-alert text-xs space-y-1" aria-label="Upload problems">
@@ -580,16 +576,18 @@ function ColumnFormDialog({
   );
 }
 
-function TableDetailsDialog({
+export function TableDetailsDialog({
   tableId,
   canEdit,
   onTableChanged,
   onClose,
+  layerClass = "z-50",
 }: {
   tableId: string;
   canEdit: boolean;
   onTableChanged: () => void;
   onClose: () => void;
+  layerClass?: string;
 }) {
   const [table, setTable] = useState<KbTableRecord | null>(null);
   const [loading, setLoading] = useState(true);
@@ -641,7 +639,7 @@ function TableDetailsDialog({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+      className={`fixed inset-0 ${layerClass} flex items-center justify-center bg-black/50 p-4`}
       role="presentation"
       onMouseDown={(event) => event.target === event.currentTarget && onClose()}
     >

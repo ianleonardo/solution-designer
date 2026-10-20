@@ -49,9 +49,9 @@ describe("SideNav", () => {
         <SideNav role="Admin" />
       </MemoryRouter>,
     );
-    expect(screen.queryByRole("button", { name: "Screens" })).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: /Knowledge Base/ }));
-    for (const label of ["Systems", "Capabilities", "Interfaces", "Tables", "Screens", "Batches", "Reports", "Bitbucket Repositories", "Guidelines"]) {
+    expect(screen.queryByRole("button", { name: "Screens" })).toBeNull();
+    for (const label of ["Systems", "Capabilities", "Interfaces", "Tables", "Batches", "Reports", "Bitbucket Repositories", "Guidelines"]) {
       expect(screen.getByRole("button", { name: label })).toBeTruthy();
     }
   });

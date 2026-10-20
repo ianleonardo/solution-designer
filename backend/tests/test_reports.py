@@ -3,7 +3,7 @@ import io
 from openpyxl import Workbook
 from tests.conftest import auth, login
 
-HEADER = ["REPORT_NAME", "REPORT_DESCRIPTION", "REPORT_LAYOUT"]
+HEADER = ["REPORT_ID", "REPORT_NAME", "REPORT_DESCRIPTION", "REPORT_LAYOUT"]
 
 
 def _excel(rows, header=HEADER) -> bytes:
@@ -36,8 +36,8 @@ def test_reports_upload_list_and_layout(client):
 
     data = _excel(
         [
-            ["Daily Balance", "End of day balances", "Col A | Col B"],
-            ["Exception Report", "Failed postings", "Layout text"],
+            ["RPT-01", "Daily Balance", "End of day balances", "Col A | Col B"],
+            ["RPT-02", "Exception Report", "Failed postings", "Layout text"],
         ]
     )
     files = {"file": ("reports.xlsx", data, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")}
@@ -56,6 +56,7 @@ def test_reports_upload_list_and_layout(client):
     assert listed.status_code == 200
     names = {row["report_name"] for row in listed.json()}
     assert names == {"Daily Balance", "Exception Report"}
+    assert {row["report_code"] for row in listed.json()} == {"RPT-01", "RPT-02"}
     first = listed.json()[0]
     detail = client.get(f"/api/reports/{first['report_id']}", headers=auth(viewer))
     assert detail.status_code == 200
@@ -95,6 +96,7 @@ def test_reports_edit_country_system_and_reject_duplicate_name(client):
         json={
             "country": "SG",
             "system_code": "SPL",
+            "report_code": "RPT-01",
             "report_name": "Daily",
             "description": "a",
             "layout": "A",
@@ -107,6 +109,7 @@ def test_reports_edit_country_system_and_reject_duplicate_name(client):
         json={
             "country": "MY",
             "system_code": "DGE",
+            "report_code": "RPT-02",
             "report_name": "Weekly",
             "description": "b",
             "layout": "B",

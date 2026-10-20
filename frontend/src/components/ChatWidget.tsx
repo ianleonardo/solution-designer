@@ -198,7 +198,7 @@ export function ChatWidget({ open, onOpen }: { open: boolean; onOpen: (open: boo
       <button
         type="button"
         aria-label="Open chat"
-        className="fixed bottom-4 right-4 z-40 h-12 w-12 rounded-full bg-cobalt text-on-cobalt shadow-glaze border border-hairline"
+        className="fixed bottom-4 left-4 z-40 h-12 w-12 rounded-full bg-cobalt text-on-cobalt shadow-glaze border border-hairline"
         onClick={() => onOpen(true)}
       >
         <span className="material-symbols-outlined">forum</span>
@@ -210,7 +210,7 @@ export function ChatWidget({ open, onOpen }: { open: boolean; onOpen: (open: boo
     <section
       ref={panel}
       aria-label="Chat with analyst"
-      className={`fixed z-40 flex flex-col rounded-lg border border-hairline bg-panel shadow-glaze ${frame ? "" : "bottom-4 right-4 w-[min(420px,calc(100vw-2rem))] h-[480px]"}`}
+      className={`fixed z-40 flex flex-col rounded-lg border border-hairline bg-panel shadow-glaze ${frame ? "" : "bottom-4 left-4 w-[min(420px,calc(100vw-2rem))] h-[480px]"}`}
       style={frame ? { left: frame.left, top: frame.top, width: frame.width, height: frame.height } : undefined}
     >
       <header

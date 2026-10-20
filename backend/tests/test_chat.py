@@ -168,27 +168,25 @@ def _knowledge(client):
     from openpyxl import Workbook
 
     admin = login(client, "Admin")
-    for code, name, up, down in (("SPL", "Payment gateway", "", "DGE"), ("DGE", "Digital engine", "SPL", "PIB"), ("PIB", "Internet banking", "DGE", ""), ("ZZZ", "Unrelated ledger", "", "")):
+    for code, name in (("SPL", "Payment gateway"), ("DGE", "Digital engine"), ("PIB", "Internet banking"), ("ZZZ", "Unrelated ledger")):
         body = {
             "system_code": code,
             "system_name": name,
-            "upstreams": up,
-            "downstreams": down,
             "description": f"{name} platform",
             "has_capability": code == "SPL",
         }
-        response = client.post("/api/systems", json=body, headers=auth(admin))
-        if response.status_code != 200:  # DGE is listed before it exists: create without links, link afterwards
-            client.post("/api/systems", json={**body, "upstreams": "", "downstreams": ""}, headers=auth(admin))
-    client.patch("/api/systems/SPL", json={"downstreams": "DGE", "has_capability": True}, headers=auth(admin))
-    client.patch("/api/systems/DGE", json={"upstreams": "SPL", "downstreams": "PIB"}, headers=auth(admin))
-    client.patch("/api/systems/PIB", json={"upstreams": "DGE"}, headers=auth(admin))
+        assert client.post("/api/systems", json=body, headers=auth(admin)).status_code == 200
     workbook = Workbook()
-    workbook.active.append(["Country", "Interface name", "Description", "Protocol", "Source", "Destination"])
-    workbook.active.append(["SG", "Remittance payment", "Sends remittances", "MQ", "SPL", "DGE"])
+    workbook.active.append(["Interface name", "Endpoint", "Description", "Protocol", "Source", "Destination"])
+    workbook.active.append(["Remittance payment", "/remit", "Sends remittances", "MQ", "SPL", "DGE"])
     buffer = io.BytesIO()
     workbook.save(buffer)
-    client.post("/api/interfaces/EAI/upload", files={"file": ("i.xlsx", buffer.getvalue(), "application/octet-stream")}, headers=auth(admin))
+    client.post(
+        "/api/interfaces/EAI/upload",
+        data={"country": "SG"},
+        files={"file": ("i.xlsx", buffer.getvalue(), "application/octet-stream")},
+        headers=auth(admin),
+    )
     assert (
         client.post(
             "/api/capabilities",
@@ -244,8 +242,8 @@ def test_chat_includes_a_named_system_and_its_neighbours(client, monkeypatch):
     seen = _ask(client, monkeypatch, "What sits upstream and downstream of DGE?")
     prompt = seen["user"]
     assert "[Systems]" in prompt
-    assert "System DGE - Digital engine." in prompt and "Upstreams: SPL." in prompt and "Downstreams: PIB." in prompt
-    assert "System SPL - Payment gateway." in prompt and "System PIB - Internet banking." in prompt
+    assert "System DGE - Digital engine." in prompt
+    assert "Upstreams:" not in prompt and "Downstreams:" not in prompt
 
 
 def test_chat_context_summarises_everything_the_knowledge_base_holds(client, monkeypatch):
