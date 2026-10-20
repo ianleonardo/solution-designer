@@ -69,11 +69,13 @@ test("lists batches by country and system and opens detail", async () => {
   expect(screen.getByText("Settle cards")).toBeTruthy();
   expect(screen.queryByText("Malaysia Feed")).toBeNull();
 
-  fireEvent.click(screen.getByLabelText("Filter by country"));
-  fireEvent.click(screen.getByRole("option", { name: "SG" }));
-  expect(screen.getByText("Nightly Settlement")).toBeTruthy();
-  expect(screen.queryByText("Malaysia Feed")).toBeNull();
+  expect(screen.getByRole("tab", { name: "SG", selected: true })).toBeTruthy();
+  fireEvent.click(screen.getByRole("tab", { name: "MY" }));
+  await waitFor(() => expect(screen.getByText("Malaysia Feed")).toBeTruthy());
+  expect(screen.queryByText("Nightly Settlement")).toBeNull();
 
+  fireEvent.click(screen.getByRole("tab", { name: "SG" }));
+  await waitFor(() => expect(screen.getByText("Nightly Settlement")).toBeTruthy());
   fireEvent.change(screen.getByLabelText("Search Batches"), { target: { value: "Settlement" } });
   expect(screen.getByText("Nightly Settlement")).toBeTruthy();
   fireEvent.change(screen.getByLabelText("Search Batches"), { target: { value: "zzzz" } });

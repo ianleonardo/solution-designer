@@ -6,6 +6,7 @@ import type { Catalogs, KbReportRecord, SystemRecord } from "../types";
 import { ConfirmDialog } from "./ConfirmDialog";
 import { FrequencyField, frequencyText, selectedFrequencies } from "./FrequencyField";
 import { FileDrop } from "./FileDrop";
+import { appliesToCountry, countryLabel } from "../countries";
 import { SelectField } from "./SelectField";
 import { SortHeader, sortRows, toggleColumnSort, type ColumnSort } from "./SortHeader";
 import { PageSlice } from "./TablePager";
@@ -308,7 +309,7 @@ export function ReportsPanel() {
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [search, setSearch] = useState("");
-  const [countryFilter, setCountryFilter] = useState(() => searchParams.get("country") ?? "");
+  const [countryFilter, setCountryFilter] = useState(() => searchParams.get("country") || "SG");
   const [systemFilter, setSystemFilter] = useState("");
   const [uploading, setUploading] = useState(false);
   const [form, setForm] = useState<{ report?: KbReportRecord } | null>(null);
@@ -334,6 +335,10 @@ export function ReportsPanel() {
       .finally(() => setLoading(false));
   }, []);
 
+  useEffect(() => {
+    setCountryFilter((current) => (countries.includes(current) ? current : countries.includes("SG") ? "SG" : countries[0] ?? "SG"));
+  }, [countries]);
+
   async function remove() {
     if (!deleting) return;
     await api(`/api/reports/${encodeURIComponent(deleting.report_id)}`, { method: "DELETE" });
@@ -347,7 +352,7 @@ export function ReportsPanel() {
   const systemsForFilter = useMemo(() => {
     const present = new Set(
       reports
-        .filter((item) => !countryFilter || item.country === countryFilter)
+        .filter((item) => appliesToCountry(item.country, countryFilter))
         .map((item) => item.system_code),
     );
     const known = systems.filter((item) => present.has(item.system_code));
@@ -369,7 +374,7 @@ export function ReportsPanel() {
     const needle = search.trim().toLowerCase();
     const map = new Map<string, Group>();
     for (const row of reports) {
-      if (countryFilter && row.country !== countryFilter) continue;
+      if (!appliesToCountry(row.country, countryFilter)) continue;
       if (row.system_code !== systemFilter) continue;
       if (
         needle &&
@@ -382,7 +387,7 @@ export function ReportsPanel() {
       const key = `${row.country}|${row.system_code}`;
       let group = map.get(key);
       if (!group) {
-        group = { key, country: row.country, system: row.system_code, reports: [] };
+        group = { key, country: countryLabel(row.country), system: row.system_code, reports: [] };
         map.set(key, group);
       }
       group.reports.push(row);
@@ -416,19 +421,21 @@ export function ReportsPanel() {
           {notice}
         </p>
       )}
+      <div role="tablist" aria-label="Countries" className="flex gap-1 border-b border-hairline flex-wrap">
+        {countries.map((item) => (
+          <button
+            key={item}
+            type="button"
+            role="tab"
+            aria-selected={item === countryFilter}
+            className={`px-3 py-2 text-sm border-b-2 -mb-px ${item === countryFilter ? "border-[var(--accent,currentColor)] font-semibold" : "border-transparent text-muted hover:text-inherit"}`}
+            onClick={() => setCountryFilter(item)}
+          >
+            {item}
+          </button>
+        ))}
+      </div>
       <div className="flex flex-wrap items-center gap-2">
-        <SelectField
-          aria-label="Filter by country"
-          value={countryFilter}
-          options={[
-            { value: "", label: "All countries" },
-            ...(countryFilter && !countries.includes(countryFilter) ? [countryFilter, ...countries] : countries).map((item) => ({
-              value: item,
-              label: item,
-            })),
-          ]}
-          onChange={setCountryFilter}
-        />
         <SelectField
           aria-label="Filter by system"
           value={systemFilter}
@@ -457,8 +464,6 @@ export function ReportsPanel() {
             <section key={group.key} className="bg-panel border border-hairline rounded-lg overflow-hidden">
               <div className="flex items-center justify-between gap-2 border-b border-hairline bg-inset px-4 py-2.5">
                 <div className="flex items-center gap-2 text-sm font-semibold">
-                  <span>{group.country}</span>
-                  <span className="text-muted">/</span>
                   <span className="font-label text-xs text-accent">{group.system}</span>
                 </div>
                 <span className="font-label text-[11px] text-muted">

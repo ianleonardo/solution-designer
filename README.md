@@ -216,6 +216,32 @@ The backend tests use a temporary data directory and run with no LLM key set.
 
 ---
 
+## RHEL server (Docker or Podman)
+
+One image serves the app and its API on port 8000. It is built for `linux/amd64`. The `.env` file and the DuckDB database stay on the server, outside the image. The scripts use `docker`, or `podman` when Docker is not installed (set `CONTAINER_ENGINE` to choose).
+
+**Build** (on any machine; Apple-silicon Macs build the amd64 image through emulation, which is slower):
+
+```bash
+./scripts/docker-build.sh                 # builds specforge:latest
+./scripts/docker-build.sh --save          # also writes dist/specforge-latest.tar.gz to copy to the server
+```
+
+Behind a proxy or a private mirror, export `HTTP_PROXY`, `HTTPS_PROXY`, `NO_PROXY`, `PIP_INDEX_URL` (with `PIP_TRUSTED_HOST`) or `NPM_CONFIG_REGISTRY` before building; the script passes them to the build. On a server without internet access, copy the saved file over and run `docker load -i specforge-latest.tar.gz` (or `podman load -i ...`).
+
+**Start.** Set the paths at the top of `scripts/docker-start.sh`, or pass them:
+
+```bash
+./scripts/docker-start.sh --env-file /opt/specforge/.env --db /opt/specforge/data/solutioncrafter.duckdb --port 8080
+```
+
+- `--env-file` is mounted read-only. Variables the script sets on the container (`DATA_DIR`, `DUCKDB_PATH`) win over the same names in the file, so a `DATA_DIR=./data` line there does no harm.
+- `--db` can be any `.duckdb` file name; it is created on first start. Its folder is mounted, so the `.wal` file and the `uploads` folder sit beside it, and backing up that folder backs up everything.
+- The container runs as the user who runs the script (rootless Podman keeps your user id), so the files stay yours. With SELinux enforcing, the mounts are labelled automatically.
+- It restarts on failure and after a reboot of the Docker service. The script waits for `/api/health` and prints the URL, or the last log lines if it fails.
+
+**Stop:** `./scripts/docker-stop.sh` stops and removes the container (30 seconds to close the database cleanly). The data on the host is kept. Logs: `docker logs -f specforge`.
+
 ## Cloud deployment (Google Cloud Run)
 
 The app deploys as two Cloud Run services:

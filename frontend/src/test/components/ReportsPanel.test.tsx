@@ -56,17 +56,49 @@ test("filters reports by country and search", async () => {
     </MemoryRouter>,
   );
   await waitFor(() => expect(screen.getByText("Daily Balance")).toBeTruthy());
+  expect(screen.getByRole("tab", { name: "SG", selected: true })).toBeTruthy();
   expect(screen.getByText("RPT-01")).toBeTruthy();
   expect(screen.queryByText("MY Summary")).toBeNull();
 
-  fireEvent.click(screen.getByLabelText("Filter by country"));
-  fireEvent.click(screen.getByRole("option", { name: "SG" }));
-  expect(screen.getByText("Daily Balance")).toBeTruthy();
-  expect(screen.queryByText("MY Summary")).toBeNull();
+  fireEvent.click(screen.getByRole("tab", { name: "MY" }));
+  await waitFor(() => expect(screen.getByText("MY Summary")).toBeTruthy());
+  expect(screen.queryByText("Daily Balance")).toBeNull();
 
+  fireEvent.click(screen.getByRole("tab", { name: "SG" }));
+  await waitFor(() => expect(screen.getByText("Daily Balance")).toBeTruthy());
   fireEvent.change(screen.getByLabelText("Search Reports"), { target: { value: "Balance" } });
   expect(screen.getByText("Daily Balance")).toBeTruthy();
   fireEvent.change(screen.getByLabelText("Search Reports"), { target: { value: "zzzz" } });
+  expect(screen.queryByText("Daily Balance")).toBeNull();
+});
+
+test("shows a report on every country it applies to", async () => {
+  const shared = { ...report, report_id: "r-both", country: "SG,MY", report_code: "RPT-BOTH", report_name: "Regional Ledger" };
+  const everywhere = { ...report, report_id: "r-all", country: "", report_code: "RPT-ALL", report_name: "Global Ledger" };
+  vi.stubGlobal("localStorage", { getItem: () => JSON.stringify({ role_name: "Analyst", username: "a" }) });
+  vi.stubGlobal(
+    "fetch",
+    vi.fn().mockImplementation((url: string) => {
+      if (url === "/api/catalogs") return Promise.resolve(json({ countries: ["SG", "MY"], databases: [], interface_channels: [] }));
+      if (url === "/api/systems")
+        return Promise.resolve(json([{ system_code: "SPL", system_name: "SPL Core", description: "", upstreams: "", downstreams: "", has_batch: false, has_report: true, has_capability: false }]));
+      if (url === "/api/reports") return Promise.resolve(json([report, other, shared, everywhere]));
+      return Promise.resolve(json([]));
+    }),
+  );
+  render(
+    <MemoryRouter>
+      <ReportsPanel />
+    </MemoryRouter>,
+  );
+  await waitFor(() => expect(screen.getByText("Regional Ledger")).toBeTruthy());
+  expect(screen.getByText("Global Ledger")).toBeTruthy();
+  expect(screen.getByText("Daily Balance")).toBeTruthy();
+  expect(screen.queryByText("MY Summary")).toBeNull();
+
+  fireEvent.click(screen.getByRole("tab", { name: "MY" }));
+  expect(screen.getByText("Regional Ledger")).toBeTruthy();
+  expect(screen.getByText("Global Ledger")).toBeTruthy();
   expect(screen.queryByText("Daily Balance")).toBeNull();
 });
 

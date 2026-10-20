@@ -81,8 +81,8 @@ describe("TablesPanel", () => {
     renderPanel();
     await waitFor(() => expect(screen.getByText("CUSTOMER_ACCOUNT")).toBeTruthy());
     expect(screen.getByText("Stores customer account records.")).toBeTruthy();
-    expect(screen.getByLabelText("Filter by country").textContent).toContain("SG");
-    expect(screen.queryByText("All countries")).toBeNull();
+    expect(screen.getByRole("tab", { name: "SG", selected: true })).toBeTruthy();
+    expect(screen.getByRole("tab", { name: "MY" })).toBeTruthy();
 
     fireEvent.click(screen.getByRole("button", { name: "CUSTOMER_ACCOUNT" }));
     const dialog = await screen.findByRole("dialog", { name: "Table CUSTOMER_ACCOUNT" });

@@ -8,6 +8,12 @@ def data_dir() -> Path:
     return Path(os.environ.get("DATA_DIR", str(ROOT / "data")))
 
 
+def db_path() -> Path:
+    """The DuckDB file. DUCKDB_PATH names it directly (any file name); otherwise it lives in DATA_DIR."""
+    configured = os.environ.get("DUCKDB_PATH", "").strip()
+    return Path(configured) if configured else data_dir() / "solutioncrafter.duckdb"
+
+
 def template_path() -> Path:
     configured = os.environ.get("SDD_TEMPLATE_PATH")
     if configured:

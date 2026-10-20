@@ -64,12 +64,15 @@ test("lists capabilities and filters by country", async () => {
   );
   renderPanel();
   await waitFor(() => expect(screen.getByText("Payments")).toBeTruthy());
+  expect(screen.getByRole("tab", { name: "SG", selected: true })).toBeTruthy();
   expect(screen.queryByText("Lending")).toBeNull();
 
-  fireEvent.click(screen.getByLabelText("Filter by country"));
-  fireEvent.click(screen.getByRole("option", { name: "SG" }));
-  expect(screen.getByText("Payments")).toBeTruthy();
-  expect(screen.queryByText("Lending")).toBeNull();
+  fireEvent.click(screen.getByRole("tab", { name: "MY" }));
+  await waitFor(() => expect(screen.getByText("Lending")).toBeTruthy());
+  expect(screen.queryByText("Payments")).toBeNull();
+
+  fireEvent.click(screen.getByRole("tab", { name: "SG" }));
+  await waitFor(() => expect(screen.getByText("Payments")).toBeTruthy());
 
   fireEvent.click(screen.getByText("Payments"));
   const detail = await screen.findByRole("dialog", { name: "View capability" });

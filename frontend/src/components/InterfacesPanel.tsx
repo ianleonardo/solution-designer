@@ -3,6 +3,7 @@ import { useSearchParams } from "react-router-dom";
 import { api, ApiError, type RowError } from "../api";
 import { useOptionalAuth } from "../auth";
 import type { Catalogs, InterfaceRecord, SystemRecord } from "../types";
+import { appliesToCountry } from "../countries";
 import { ConfirmDialog } from "./ConfirmDialog";
 import { FileDrop } from "./FileDrop";
 import { type Column, DataTable } from "./DataTable";
@@ -22,13 +23,6 @@ function countryCodes(value: string) {
 function applicableFor(country: string) {
   const codes = countryCodes(country);
   return codes.length ? codes.join(", ") : "All countries";
-}
-
-function appliesToCountry(country: string, filter: string) {
-  if (!filter) return true;
-  const codes = countryCodes(country);
-  if (codes.length === 0) return true;
-  return codes.includes(filter);
 }
 
 function CountryChecks({
@@ -348,7 +342,7 @@ export function InterfacesPanel() {
   const [notice, setNotice] = useState("");
   const [form, setForm] = useState<{ record?: InterfaceRecord } | null>(null);
   const [deleting, setDeleting] = useState<InterfaceRecord | null>(null);
-  const [countryFilter, setCountryFilter] = useState(() => params.get("country") ?? "");
+  const [countryFilter, setCountryFilter] = useState(() => params.get("country") || "SG");
 
   useEffect(() => {
     api<Catalogs>("/api/catalogs")
@@ -361,6 +355,10 @@ export function InterfacesPanel() {
       .then(setSystems)
       .catch(() => undefined);
   }, []);
+
+  useEffect(() => {
+    setCountryFilter((current) => (countries.includes(current) ? current : countries.includes("SG") ? "SG" : countries[0] ?? "SG"));
+  }, [countries]);
 
   useEffect(() => {
     let current = true;
@@ -386,18 +384,11 @@ export function InterfacesPanel() {
   }
 
   const filteredRows = useMemo(
-    () => (countryFilter ? rows.filter((row) => appliesToCountry(row.country, countryFilter)) : rows),
+    () => rows.filter((row) => appliesToCountry(row.country, countryFilter)),
     [rows, countryFilter],
   );
 
-  const countryOptions = useMemo(() => {
-    const list = [...countries];
-    if (countryFilter && !list.includes(countryFilter)) list.push(countryFilter);
-    return list;
-  }, [countries, countryFilter]);
-
   const columns: Column<InterfaceRecord>[] = [
-    { key: "country", header: "Country", sortValue: (row) => applicableFor(row.country), className: "whitespace-nowrap", render: (row) => applicableFor(row.country) },
     { key: "name", header: "Interface Name", sortValue: (row) => row.interface_name, className: "font-medium", render: (row) => row.interface_name },
     { key: "endpoint", header: "Endpoint", sortValue: (row) => row.endpoint, className: "font-label text-xs", render: (row) => row.endpoint || "—" },
     { key: "protocol", header: "Protocol", sortValue: (row) => row.protocol, className: "whitespace-nowrap", render: (row) => row.protocol },
@@ -451,19 +442,24 @@ export function InterfacesPanel() {
           </button>
         ))}
       </div>
-      <div className="flex flex-wrap items-center gap-2">
-        <SelectField
-          aria-label="Filter by country"
-          value={countryFilter}
-          options={[{ value: "", label: "All countries" }, ...countryOptions.map((item) => ({ value: item, label: item }))]}
-          onChange={(next) => {
-            setCountryFilter(next);
-            const nextParams = new URLSearchParams(params);
-            if (next) nextParams.set("country", next);
-            else nextParams.delete("country");
-            setParams(nextParams);
-          }}
-        />
+      <div role="tablist" aria-label="Countries" className="flex gap-1 border-b border-hairline flex-wrap">
+        {countries.map((item) => (
+          <button
+            key={item}
+            type="button"
+            role="tab"
+            aria-selected={item === countryFilter}
+            className={`px-3 py-2 text-sm border-b-2 -mb-px ${item === countryFilter ? "border-[var(--accent,currentColor)] font-semibold" : "border-transparent text-muted hover:text-inherit"}`}
+            onClick={() => {
+              setCountryFilter(item);
+              const next = new URLSearchParams(params);
+              next.set("country", item);
+              setParams(next);
+            }}
+          >
+            {item}
+          </button>
+        ))}
       </div>
       {error && <p className="text-alert">{error}</p>}
       {notice && (

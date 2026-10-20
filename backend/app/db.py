@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 import bcrypt
 import duckdb
 
-from app.config import DEFAULT_USERS, GLOBAL_PROMPT, LEGACY_GLOBAL_PROMPT, data_dir, template_path
+from app.config import DEFAULT_USERS, GLOBAL_PROMPT, LEGACY_GLOBAL_PROMPT, db_path, template_path
 from app.seed_layouts import (
     FMEA_LAYOUT_DESCRIPTION,
     FMEA_LAYOUT_ID,
@@ -41,7 +41,7 @@ def init() -> None:
     with _lock:
         if _conn is not None:
             return
-        path = data_dir() / "solutioncrafter.duckdb"
+        path = db_path()
         path.parent.mkdir(parents=True, exist_ok=True)
         _conn = duckdb.connect(str(path))
         _migrate()

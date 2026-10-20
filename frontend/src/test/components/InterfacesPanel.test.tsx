@@ -24,7 +24,14 @@ function mockFetch(upload?: () => Response) {
       ]);
     if (init?.method === "POST" && upload) return upload();
     const channel = url.split("/").pop();
-    if (channel === "SPL") return json([item("SPL", "Zeta"), item("SPL", "Alpha", "MY")]);
+    if (channel === "SPL")
+      return json([
+        item("SPL", "Zeta"),
+        item("SPL", "Bravo"),
+        item("SPL", "Alpha", "MY"),
+        item("SPL", "Shared", "SG,MY"),
+        item("SPL", "Global", ""),
+      ]);
     return json([item(channel ?? "", `${channel} only`)]);
   });
   vi.stubGlobal("fetch", fetchMock);
@@ -49,12 +56,24 @@ test("shows the channel tabs and the interface columns, sortable", async () => {
   mockFetch();
   renderAt();
   await waitFor(() => expect(screen.getByRole("tab", { name: "NTN" })).toBeTruthy());
-  expect(screen.getAllByRole("tab").map((tab) => tab.textContent)).toEqual(["SPL", "DGE", "PIB", "NTN", "WSM", "EAI"]);
+  const channels = within(screen.getByRole("tablist", { name: "Interface channels" })).getAllByRole("tab");
+  expect(channels.map((tab) => tab.textContent)).toEqual(["SPL", "DGE", "PIB", "NTN", "WSM", "EAI"]);
+  expect(screen.getByRole("tab", { name: "SG", selected: true })).toBeTruthy();
   await waitFor(() => expect(screen.getByText("Zeta")).toBeTruthy());
-  for (const header of ["Country", "Interface Name", "Endpoint", "Protocol", "Description", "Source", "Destination"]) expect(screen.getByRole("columnheader", { name: new RegExp(header) })).toBeTruthy();
-  const names = () => screen.getAllByRole("row").slice(1).map((row) => within(row).getAllByRole("cell")[1].textContent);
+  expect(screen.getByText("Shared")).toBeTruthy();
+  expect(screen.getByText("Global")).toBeTruthy();
+  expect(screen.queryByText("Alpha")).toBeNull();
+  for (const header of ["Interface Name", "Endpoint", "Protocol", "Description", "Source", "Destination"]) expect(screen.getByRole("columnheader", { name: new RegExp(header) })).toBeTruthy();
+  expect(screen.queryByRole("columnheader", { name: /Country/ })).toBeNull();
+  const names = () => screen.getAllByRole("row").slice(1).map((row) => within(row).getAllByRole("cell")[0].textContent);
   fireEvent.click(screen.getByRole("button", { name: /Interface Name/ }));
-  expect(names()).toEqual(["Alpha", "Zeta"]);
+  expect(names()).toEqual(["Bravo", "Global", "Shared", "Zeta"]);
+
+  fireEvent.click(screen.getByRole("tab", { name: "MY" }));
+  expect(screen.getByText("Alpha")).toBeTruthy();
+  expect(screen.getByText("Shared")).toBeTruthy();
+  expect(screen.getByText("Global")).toBeTruthy();
+  expect(screen.queryByText("Zeta")).toBeNull();
 });
 
 test("each tab loads its own interfaces and the tab is kept in the address", async () => {

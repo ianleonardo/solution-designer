@@ -1,10 +1,11 @@
 import logging
 import os
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import FileResponse, JSONResponse
 
 from app import cache, db
 from app.audit_middleware import AuditMiddleware
@@ -61,3 +62,18 @@ app.include_router(projects.router, prefix="/api")
 app.include_router(sdd.router, prefix="/api")
 app.include_router(admin.router, prefix="/api")
 app.include_router(chat.router, prefix="/api")
+
+
+# In the container the built frontend is served from here, so one port serves the app and its API.
+_frontend = Path(os.environ.get("FRONTEND_DIR", "")).resolve() if os.environ.get("FRONTEND_DIR") else None
+if _frontend and (_frontend / "index.html").is_file():
+
+    @app.get("/{path:path}", include_in_schema=False)
+    def frontend(path: str):
+        if path == "api" or path.startswith("api/"):
+            return JSONResponse({"detail": "Not Found"}, status_code=404)
+        target = (_frontend / path).resolve()
+        if path and target.is_file() and _frontend in target.parents:
+            return FileResponse(target)
+        # every other path is a page of the single-page app
+        return FileResponse(_frontend / "index.html", headers={"Cache-Control": "no-cache"})

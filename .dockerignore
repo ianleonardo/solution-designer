@@ -8,3 +8,6 @@
 **/*.duckdb
 frontend/dist
 **/.env
+
+# images saved by scripts/docker-build.sh --save
+dist

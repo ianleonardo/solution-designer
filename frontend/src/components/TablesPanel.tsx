@@ -10,6 +10,7 @@ import type {
   TableCompareResult,
   TablesUploadResponse,
 } from "../types";
+import { appliesToCountry, countryLabel } from "../countries";
 import { ConfirmDialog } from "./ConfirmDialog";
 import { FileDrop } from "./FileDrop";
 import { SelectField } from "./SelectField";
@@ -1014,7 +1015,7 @@ export function TablesPanel() {
           bitbucket_projects: data.bitbucket_projects ?? [],
         });
         setCountryFilter((current) => {
-          if (countryFromUrl && (countries.includes(countryFromUrl) || countryFromUrl === "Unspecified")) return countryFromUrl;
+          if (countryFromUrl && countries.includes(countryFromUrl)) return countryFromUrl;
           if (countries.includes(current)) return current;
           return countries.includes("SG") ? "SG" : countries[0] ?? "SG";
         });
@@ -1028,7 +1029,7 @@ export function TablesPanel() {
   const databasesForCountry = useMemo(() => {
     const allowed = new Set(catalogDatabases);
     const present = new Set(
-      tables.filter((item) => item.country === countryFilter).map((item) => item.database_name),
+      tables.filter((item) => appliesToCountry(item.country, countryFilter)).map((item) => item.database_name),
     );
     return catalogDatabases.filter((name) => allowed.has(name) && present.has(name));
   }, [tables, countryFilter, catalogDatabases]);
@@ -1037,7 +1038,7 @@ export function TablesPanel() {
     if (!databaseFilter) return [] as string[];
     const schemas = new Set(
       tables
-        .filter((item) => item.country === countryFilter && item.database_name === databaseFilter)
+        .filter((item) => appliesToCountry(item.country, countryFilter) && item.database_name === databaseFilter)
         .map((item) => item.schema_name),
     );
     return Array.from(schemas).sort((a, b) => a.localeCompare(b));
@@ -1080,7 +1081,7 @@ export function TablesPanel() {
   const groups = useMemo<SchemaGroup[]>(() => {
     const query = search.trim().toLowerCase();
     const filtered = tables.filter((item) => {
-      if (countryFilter && item.country !== countryFilter) return false;
+      if (!appliesToCountry(item.country, countryFilter)) return false;
       if (databaseFilter && item.database_name !== databaseFilter) return false;
       if (schemaFilter && item.schema_name !== schemaFilter) return false;
       if (!query) return true;
@@ -1095,7 +1096,7 @@ export function TablesPanel() {
       if (!group) {
         group = {
           key,
-          country: row.country,
+          country: countryLabel(row.country),
           database: row.database_name,
           schema: row.schema_name,
           tables: [],
@@ -1108,7 +1109,6 @@ export function TablesPanel() {
   }, [tables, search, countryFilter, databaseFilter, schemaFilter]);
 
   const countries = catalogs.countries.length ? catalogs.countries : DEFAULT_COUNTRIES;
-  const countryOptions = countryFilter && !countries.includes(countryFilter) ? [...countries, countryFilter] : countries;
   const allDatabases = catalogs.databases.length ? catalogs.databases : DEFAULT_DATABASES;
 
   return (
@@ -1125,16 +1125,24 @@ export function TablesPanel() {
           {notice}
         </p>
       )}
+      <div role="tablist" aria-label="Countries" className="flex gap-1 border-b border-hairline flex-wrap">
+        {countries.map((item) => (
+          <button
+            key={item}
+            type="button"
+            role="tab"
+            aria-selected={item === countryFilter}
+            className={`px-3 py-2 text-sm border-b-2 -mb-px ${item === countryFilter ? "border-[var(--accent,currentColor)] font-semibold" : "border-transparent text-muted hover:text-inherit"}`}
+            onClick={() => {
+              setFiltersReady(false);
+              setCountryFilter(item);
+            }}
+          >
+            {item}
+          </button>
+        ))}
+      </div>
       <div className="flex flex-nowrap items-center gap-2">
-        <SelectField
-          aria-label="Filter by country"
-          value={countryFilter}
-          options={countryOptions.map((item) => ({ value: item, label: item }))}
-          onChange={(next) => {
-            setFiltersReady(false);
-            setCountryFilter(next);
-          }}
-        />
         <SelectField
           aria-label="Filter by database"
           value={databaseFilter}
@@ -1195,8 +1203,6 @@ export function TablesPanel() {
             <section key={group.key} className="bg-panel border border-hairline rounded-lg overflow-hidden">
               <div className="flex items-center justify-between gap-2 border-b border-hairline bg-inset px-4 py-2.5">
                 <div className="flex items-center gap-2 text-sm font-semibold">
-                  <span>{group.country}</span>
-                  <span className="text-muted">/</span>
                   <span className="font-label text-xs text-accent">{group.database}</span>
                   <span className="text-muted">/</span>
                   <span className="font-label text-xs">{group.schema}</span>

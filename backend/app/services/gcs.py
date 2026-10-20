@@ -16,9 +16,9 @@ def enabled() -> bool:
 
 
 def local_db() -> Path:
-    from app.config import data_dir
+    from app.config import db_path
 
-    return data_dir() / "solutioncrafter.duckdb"
+    return db_path()
 
 
 def download_db_if_needed() -> None:

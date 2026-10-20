@@ -794,7 +794,7 @@ export function CapabilitiesPanel() {
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [search, setSearch] = useState("");
-  const [countryFilter, setCountryFilter] = useState(() => searchParams.get("country") ?? "");
+  const [countryFilter, setCountryFilter] = useState(() => searchParams.get("country") || "SG");
   const [systemFilter, setSystemFilter] = useState("");
   const [uploading, setUploading] = useState(false);
   const [form, setForm] = useState<{ capability?: KbCapabilityRecord } | null>(null);
@@ -819,6 +819,10 @@ export function CapabilitiesPanel() {
       .catch((err: unknown) => setError(err instanceof ApiError ? err.message : "Could not load capabilities"))
       .finally(() => setLoading(false));
   }, []);
+
+  useEffect(() => {
+    setCountryFilter((current) => (countries.includes(current) ? current : countries.includes("SG") ? "SG" : countries[0] ?? "SG"));
+  }, [countries]);
 
   const systemsForFilter = useMemo(() => {
     const present = new Set(items.filter((item) => appliesToCountry(item.country, countryFilter)).map((item) => item.system_code));
@@ -903,19 +907,21 @@ export function CapabilitiesPanel() {
           {notice}
         </p>
       )}
+      <div role="tablist" aria-label="Countries" className="flex gap-1 border-b border-hairline flex-wrap">
+        {countries.map((item) => (
+          <button
+            key={item}
+            type="button"
+            role="tab"
+            aria-selected={item === countryFilter}
+            className={`px-3 py-2 text-sm border-b-2 -mb-px ${item === countryFilter ? "border-[var(--accent,currentColor)] font-semibold" : "border-transparent text-muted hover:text-inherit"}`}
+            onClick={() => setCountryFilter(item)}
+          >
+            {item}
+          </button>
+        ))}
+      </div>
       <div className="flex flex-wrap items-center gap-2">
-        <SelectField
-          aria-label="Filter by country"
-          value={countryFilter}
-          options={[
-            { value: "", label: "All countries" },
-            ...(countryFilter && !countries.includes(countryFilter) ? [countryFilter, ...countries] : countries).map((item) => ({
-              value: item,
-              label: item,
-            })),
-          ]}
-          onChange={setCountryFilter}
-        />
         <SelectField
           aria-label="Filter by system"
           value={systemFilter}
