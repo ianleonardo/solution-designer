@@ -10,7 +10,7 @@ from app.content import section_is_empty
 from app.deps import current_user
 from app.errors import AppError, LLMNotConfigured
 from app.missing import evaluate_missing
-from app.services import documents, export, gcs, llm
+from app.services import documents, export, gcs, kb_links, llm
 from app.services.generate import generate_section
 
 router = APIRouter(tags=["documents"])
@@ -36,7 +36,7 @@ def list_documents(project_id: str, user: dict = Depends(current_user)):
 
 @router.post("/projects/{project_id}/documents")
 def create_document(project_id: str, body: dict, user: dict = Depends(current_user)):
-    return documents.create_document(user, project_id, str(body.get("layout_id") or ""))
+    return documents.create_document(user, project_id, str(body.get("layout_id") or ""), str(body.get("title") or ""))
 
 
 @router.get(DOC)
@@ -217,3 +217,23 @@ def regenerate_section(
     if template is None:
         raise AppError(404, "Section not found")
     return _generate_into(row, [template], user, str((body or {}).get("instruction") or ""))
+
+
+# --- Knowledge Base links ---------------------------------------------------------------------------------------------
+
+
+@router.post(f"{DOC}/sections/{{section_id}}/kb-links")
+def add_kb_links(project_id: str, document_id: str, section_id: str, body: dict = Body(...), user: dict = Depends(current_user)):
+    """Add Knowledge Base items as linked rows: {ids} for capabilities / interfaces / reports, or {table_id, column_ids}."""
+    return kb_links.link_items(user, project_id, document_id, section_id, body)
+
+
+@router.post(f"{DOC}/sections/{{section_id}}/kb-refresh")
+def refresh_kb_links(project_id: str, document_id: str, section_id: str, user: dict = Depends(current_user)):
+    return kb_links.refresh(user, project_id, document_id, section_id)
+
+
+@router.post(f"{DOC}/sections/{{section_id}}/kb-related")
+def related_kb_items(project_id: str, document_id: str, section_id: str, body: dict = Body(...), user: dict = Depends(current_user)):
+    del user
+    return kb_links.related(project_id, document_id, section_id, body)

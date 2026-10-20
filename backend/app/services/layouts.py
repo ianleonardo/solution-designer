@@ -3,6 +3,7 @@
 import json
 
 from app import cache, db
+from app.content import KB_SOURCES
 from app.errors import AppError
 from app.services import gcs
 from app.template_parser import slugify
@@ -62,7 +63,14 @@ def normalize_blocks(blocks) -> list[dict]:
                 cells = [str(cell or "") for cell in row][: len(columns)]
                 cells.extend([""] * (len(columns) - len(cells)))
                 rows.append(cells)
-            result.append({"type": "table", "columns": columns, "rows": rows or [[""] * len(columns)]})
+            table = {"type": "table", "columns": columns, "rows": rows or [[""] * len(columns)]}
+            if "source" in block:
+                source = str(block.get("source") or "").strip()
+                if source and source not in KB_SOURCES:
+                    raise AppError(400, "Unknown Knowledge Base source for a table")
+                # an empty source is kept so the seeded default is not put back
+                table["source"] = source
+            result.append(table)
         elif kind == "image":
             caption = str(block.get("caption") or "").strip()
             if len(caption) > 200:
@@ -88,6 +96,7 @@ def _layout_payload(row: dict) -> dict:
         "name": row["name"],
         "description": row["description"],
         "is_system": bool(row["is_system"]),
+        "allow_multiple": bool(row.get("allow_multiple")),
         "section_count": sections["c"] if sections else 0,
         "document_count": used["c"] if used else 0,
         "created_at": row["created_at"],
@@ -152,7 +161,26 @@ def _document_name(layout_id: str) -> str:
     return _layout_row(layout_id)["name"]
 
 
-def create_layout(user: dict, name: str, description: str = "", copy_from: str | None = None) -> dict:
+def _check_allow_multiple(layout_id: str, allow_multiple: bool) -> None:
+    if allow_multiple and layout_id == SDD_LAYOUT_ID:
+        raise AppError(400, "A project has exactly one Solution Design Document")
+    if not allow_multiple:
+        crowded = db.fetchone(
+            """
+            SELECT count(*) AS c FROM (
+                SELECT project_id FROM project_documents WHERE layout_id = ? GROUP BY project_id HAVING count(*) > 1
+            )
+            """,
+            [layout_id],
+        )
+        if crowded and crowded["c"]:
+            raise AppError(
+                400,
+                f"{crowded['c']} project(s) already have more than one of this document. Remove the extra copies first",
+            )
+
+
+def create_layout(user: dict, name: str, description: str = "", copy_from: str | None = None, allow_multiple: bool = False) -> dict:
     _admin(user)
     cleaned = _clean_name(name)
     summary = _clean_description(description)
@@ -162,10 +190,10 @@ def create_layout(user: dict, name: str, description: str = "", copy_from: str |
     now = db._now()
     db.exec_sql(
         """
-        INSERT INTO document_layouts (layout_id, name, description, is_system, created_at, updated_at)
-        VALUES (?, ?, ?, FALSE, ?, ?)
+        INSERT INTO document_layouts (layout_id, name, description, is_system, allow_multiple, created_at, updated_at)
+        VALUES (?, ?, ?, FALSE, ?, ?, ?)
         """,
-        [layout_id, cleaned, summary, now, now],
+        [layout_id, cleaned, summary, bool(allow_multiple), now, now],
     )
     if source:
         mapping: dict[str, str] = {}
@@ -185,7 +213,9 @@ def create_layout(user: dict, name: str, description: str = "", copy_from: str |
     return get_layout(layout_id)
 
 
-def update_layout(user: dict, layout_id: str, name: str | None, description: str | None) -> dict:
+def update_layout(
+    user: dict, layout_id: str, name: str | None, description: str | None, allow_multiple: bool | None = None
+) -> dict:
     _admin(user)
     row = _layout_row(layout_id)
     assignments = ["updated_at = ?"]
@@ -198,6 +228,10 @@ def update_layout(user: dict, layout_id: str, name: str | None, description: str
     if description is not None:
         assignments.append("description = ?")
         params.append(_clean_description(description))
+    if allow_multiple is not None:
+        _check_allow_multiple(layout_id, bool(allow_multiple))
+        assignments.append("allow_multiple = ?")
+        params.append(bool(allow_multiple))
     params.append(row["layout_id"])
     db.exec_sql(f"UPDATE document_layouts SET {', '.join(assignments)} WHERE layout_id = ?", params)
     gcs.upload_db()

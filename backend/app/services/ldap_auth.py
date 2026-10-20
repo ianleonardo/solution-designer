@@ -1,19 +1,19 @@
-"""Active Directory sign-in. The directory address and search settings come from the environment."""
+"""Active Directory sign-in.
+
+Bind as DOMAIN\\login over LDAPS, then read the display name. The directory
+address comes from the environment. Certificate checks are off by default so an
+internal Active Directory certificate can still be used.
+"""
 
 import os
+import ssl
 from urllib.parse import urlparse
 
 from app.errors import AppError
 
 
-class _BindFailed(Exception):
-    def __init__(self, description: str) -> None:
-        super().__init__(description)
-        self.description = description
-
-
 def configured() -> bool:
-    return bool(os.environ.get("LDAP_URL", "").strip())
+    return bool(_host())
 
 
 def _env(name: str) -> str:
@@ -22,6 +22,13 @@ def _env(name: str) -> str:
 
 def _flag(name: str) -> bool:
     return _env(name).lower() in {"1", "true", "yes", "y", "on"}
+
+
+def _host() -> str:
+    raw = _env("LDAP_HOST") or _env("LDAP_URL")
+    if "://" in raw:
+        return urlparse(raw).hostname or ""
+    return raw
 
 
 def escape_filter(value: str) -> str:
@@ -35,79 +42,71 @@ def escape_filter(value: str) -> str:
     )
 
 
-def authenticate(login_id: str, password: str) -> None:
-    """Confirm this password with the directory. Raises 401 or 503; a success returns nothing."""
+def authenticate(login_id: str, password: str) -> str:
+    """Confirm the password and return the directory display name."""
+    login_id = login_id.strip()
     if not configured():
         raise AppError(503, "LDAP is not configured.")
-    if not password:
+    if not login_id or not password:
         raise AppError(401, "Invalid login ID or password")
-    try:
-        _bind_user(login_id.strip(), password)
-    except AppError:
-        raise
-    except _BindFailed as exc:
-        raise AppError(401, "Invalid login ID or password") from exc
-    except Exception as exc:
-        raise AppError(503, "The directory server could not be reached.") from exc
+    domain = _env("LDAP_DOMAIN")
+    base = _env("LDAP_BASE_DN")
+    if not domain or not base:
+        raise AppError(503, "Set LDAP_DOMAIN and LDAP_BASE_DN.")
 
+    from ldap3 import NONE, SUBTREE, Connection, Server, Tls
+    from ldap3.core.exceptions import LDAPBindError, LDAPException
 
-def _bind_user(login_id: str, password: str) -> None:
-    from ldap3 import NONE, SUBTREE, Connection, Server
-    from ldap3.core.exceptions import LDAPException
-
-    parsed = urlparse(_env("LDAP_URL"))
-    host = parsed.hostname
-    if not host:
-        raise AppError(503, "LDAP_URL is not a valid directory address.")
-    use_ssl = parsed.scheme == "ldaps"
-    port = parsed.port or (636 if use_ssl else 389)
+    host, port, use_ssl = _address()
     timeout = int(_env("LDAP_TIMEOUT_SECONDS") or "10")
-    server = Server(host, port=port, use_ssl=use_ssl, get_info=NONE, connect_timeout=timeout)
-    start_tls = _flag("LDAP_STARTTLS") and not use_ssl
-    template = _env("LDAP_USER_DN")
+    tls = None
+    if use_ssl and not _flag("LDAP_TLS_VALIDATE"):
+        tls = Tls(validate=ssl.CERT_NONE, version=ssl.PROTOCOL_TLS_CLIENT)
+    server = Server(host, port=port, use_ssl=use_ssl, tls=tls, get_info=NONE, connect_timeout=timeout)
     try:
-        if template:
-            _open(Connection, server, template.replace("{login_id}", login_id), password, timeout, start_tls).unbind()
-            return
-        base = _env("LDAP_BASE_DN")
-        if not base:
-            raise AppError(503, "Set LDAP_BASE_DN or LDAP_USER_DN so Active Directory users can be found.")
-        try:
-            service = _open(Connection, server, _env("LDAP_BIND_DN"), os.environ.get("LDAP_BIND_PASSWORD", ""), timeout, start_tls)
-        except _BindFailed as exc:
-            raise AppError(503, "The directory service account could not sign in.") from exc
-        try:
-            filt = _env("LDAP_USER_FILTER") or "(sAMAccountName={login_id})"
-            service.search(
-                base,
-                filt.replace("{login_id}", escape_filter(login_id)),
-                search_scope=SUBTREE,
-                attributes=["distinguishedName"],
-                size_limit=2,
-            )
-            entries = list(service.entries)
-        finally:
-            service.unbind()
-        if len(entries) != 1:
-            raise AppError(401, "Invalid login ID or password")
-        _open(Connection, server, entries[0].entry_dn, password, timeout, start_tls).unbind()
-    except _BindFailed:
-        raise
-    except AppError:
-        raise
+        conn = Connection(
+            server,
+            user=f"{domain}\\{login_id}",
+            password=password,
+            receive_timeout=timeout,
+            auto_bind=True,
+        )
+    except LDAPBindError as exc:
+        raise AppError(401, "Invalid login ID or password") from exc
     except LDAPException as exc:
         raise AppError(503, "The directory server could not be reached.") from exc
 
+    try:
+        filt = _env("LDAP_USER_FILTER") or "(&(objectClass=person)(sAMAccountName={login_id}))"
+        conn.search(
+            base,
+            filt.replace("{login_id}", escape_filter(login_id)),
+            search_scope=SUBTREE,
+            attributes=["sAMAccountName", "displayName", "mail"],
+        )
+        if not conn.entries:
+            return login_id
+        entry = conn.entries[0]
+        return _value(entry, "displayName") or _value(entry, "sAMAccountName") or login_id
+    finally:
+        conn.unbind()
 
-def _open(connection_cls, server, user: str, password: str, timeout: int, start_tls: bool):
-    conn = connection_cls(server, user=user or None, password=password, receive_timeout=timeout, auto_bind=False)
-    if not conn.open():
-        raise AppError(503, "The directory server could not be reached.")
-    if start_tls and not conn.start_tls():
-        conn.unbind()
-        raise AppError(503, "The directory server could not start TLS.")
-    if not conn.bind():
-        description = str((conn.result or {}).get("description") or "bind failed")
-        conn.unbind()
-        raise _BindFailed(description)
-    return conn
+
+def _address() -> tuple[str, int, bool]:
+    raw = _env("LDAP_HOST") or _env("LDAP_URL")
+    if "://" in raw:
+        parsed = urlparse(raw)
+        use_ssl = parsed.scheme == "ldaps"
+        return parsed.hostname or "", parsed.port or (636 if use_ssl else 389), use_ssl
+    port = int(_env("LDAP_PORT") or "636")
+    return raw, port, port == 636 or _flag("LDAP_USE_SSL")
+
+
+def _value(entry, name: str) -> str:
+    try:
+        raw = entry[name].value
+    except (KeyError, AttributeError, IndexError, TypeError):
+        return ""
+    if isinstance(raw, list):
+        raw = raw[0] if raw else ""
+    return str(raw or "").strip()

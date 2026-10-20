@@ -64,10 +64,12 @@ describe("DataTable", () => {
     render(<DataTable rows={many} columns={columns} rowKey={(row) => row.id} pageSize={25} pageSizes={[25, 50, 100]} />);
     expect(names()).toHaveLength(25);
     expect(screen.getByText("1-25 of 60")).toBeTruthy();
-    fireEvent.change(screen.getByLabelText("Rows per page"), { target: { value: "50" } });
+    fireEvent.click(screen.getByRole("button", { name: "Rows per page" }));
+    fireEvent.click(screen.getByRole("option", { name: "50" }));
     expect(names()).toHaveLength(50);
     expect(screen.getByText("1-50 of 60")).toBeTruthy();
-    fireEvent.change(screen.getByLabelText("Rows per page"), { target: { value: "100" } });
+    fireEvent.click(screen.getByRole("button", { name: "Rows per page" }));
+    fireEvent.click(screen.getByRole("option", { name: "100" }));
     expect(names()).toHaveLength(60);
   });
 

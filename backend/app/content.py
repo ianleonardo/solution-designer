@@ -130,6 +130,65 @@ def _as_text(value) -> str:
     return str(value)
 
 
+KB_SOURCES = ("capabilities", "interfaces", "reports", "tables")
+LINK_KINDS = {"capability", "interface", "report", "column"}
+
+
+def is_repeating_table_slot(schema_blocks: list[dict], index: int) -> bool:
+    """A Knowledge Base 'tables' slot that is the section's last table holds one table per database table."""
+    block = schema_blocks[index]
+    if block.get("type") != "table" or block.get("source") != "tables":
+        return False
+    return not any(item.get("type") == "table" for item in schema_blocks[index + 1 :])
+
+
+def _clean_link(link, width: int):
+    """A row's link to the Knowledge Base item it was filled from, or None. Transient fields (state) are dropped."""
+    if not isinstance(link, dict):
+        return None
+    kind = link.get("kind")
+    item_id = _as_text(link.get("id")).strip()
+    if kind not in LINK_KINDS or not item_id:
+        return None
+    owned = sorted({int(i) for i in link.get("owned") or [] if isinstance(i, int) and 0 <= i < width})
+    raw_values = link.get("values") if isinstance(link.get("values"), dict) else {}
+    values = {str(i): _as_text(raw_values.get(str(i))) for i in owned}
+    cleaned = {"kind": kind, "id": item_id, "owned": owned, "values": values}
+    if kind == "column" and _as_text(link.get("table_id")).strip():
+        cleaned["table_id"] = _as_text(link["table_id"]).strip()
+    return cleaned
+
+
+def table_block(columns: list, rows: list[list[str]], source: dict | None = None) -> dict:
+    """A table block with its optional Knowledge Base links (one per row) and table name kept."""
+    block = {"type": "table", "columns": columns, "rows": number_rows(columns, rows)}
+    raw_links = (source or {}).get("links")
+    if isinstance(raw_links, list):
+        links = [_clean_link(raw_links[i] if i < len(raw_links) else None, len(columns)) for i in range(len(rows))]
+        if any(links):
+            block["links"] = links
+    table_name = " ".join(_as_text((source or {}).get("table_name")).split())[:200]
+    if table_name:
+        block["table_name"] = table_name
+    kb_table_id = _as_text((source or {}).get("kb_table_id")).strip()
+    if kb_table_id:
+        block["kb_table_id"] = kb_table_id
+    return block
+
+
+def _table_from(schema: dict, source: dict | None) -> dict:
+    columns = list(schema.get("columns") or [])
+    rows = []
+    for row in (source or {}).get("rows") or schema.get("rows") or [[""] * len(columns)]:
+        cells = [_as_text(cell) for cell in row]
+        if len(cells) < len(columns):
+            cells.extend([""] * (len(columns) - len(cells)))
+        rows.append(cells[: len(columns)])
+    if not rows:
+        rows = [[""] * len(columns)]
+    return table_block(columns, rows, source)
+
+
 def _sanitize_blocks(incoming: list, schema_blocks: list[dict]) -> list[dict]:
     pools: dict[str, list] = {}
     for block in incoming or []:
@@ -166,16 +225,11 @@ def _sanitize_blocks(incoming: list, schema_blocks: list[dict]) -> list[dict]:
         elif kind == "prose":
             result.append({"type": "prose", "markdown": _as_text((source or {}).get("markdown"))})
         elif kind == "table":
-            columns = list(schema.get("columns") or [])
-            rows = []
-            for row in (source or {}).get("rows") or schema.get("rows") or [[""] * len(columns)]:
-                cells = [_as_text(cell) for cell in row]
-                if len(cells) < len(columns):
-                    cells.extend([""] * (len(columns) - len(cells)))
-                rows.append(cells[: len(columns)])
-            if not rows:
-                rows = [[""] * len(columns)]
-            result.append({"type": "table", "columns": columns, "rows": number_rows(columns, rows)})
+            result.append(_table_from(schema, source))
+            if is_repeating_table_slot(schema_blocks, index):
+                # further tables in this slot are ones the document added (one per database table)
+                while found:
+                    result.append(_table_from(schema, found.pop(0)))
         index += 1
     for group in groups[group_index:]:
         for extra in group:

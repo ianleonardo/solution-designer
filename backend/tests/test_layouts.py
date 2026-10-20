@@ -43,6 +43,10 @@ def test_fmea_layout_is_seeded_with_rating_scales(client):
     assert [row[0] for row in severity["rows"]] == [str(n) for n in range(10, 0, -1)]
     assert len(by_name["Action Thresholds"]["blocks"][0]["rows"]) == 4
     assert client.delete("/api/layouts/fmea", headers=headers).status_code == 400
+    for layout_id in ("fmea", "interface-spec"):
+        layout = client.get(f"/api/layouts/{layout_id}", headers=headers).json()
+        intro = next(item for item in layout["templates"] if item["section_name"] == "Introduction")
+        assert intro["blocks"] == [{"type": "prose"}]
 
 
 def test_create_update_delete_layout(client):

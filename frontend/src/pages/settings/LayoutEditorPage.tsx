@@ -125,7 +125,7 @@ export function LayoutEditorPage() {
   const [layout, setLayout] = useState<LayoutDetail | null>(null);
   const [selectedId, setSelectedId] = useState("");
   const [form, setForm] = useState<SectionForm | null>(null);
-  const [details, setDetails] = useState({ name: "", description: "" });
+  const [details, setDetails] = useState({ name: "", description: "", allow_multiple: false });
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [adding, setAdding] = useState<null | { parentId: string | null }>(null);
@@ -139,7 +139,7 @@ export function LayoutEditorPage() {
     api<LayoutDetail>(`/api/layouts/${layoutId}`)
       .then((loaded) => {
         setLayout(loaded);
-        setDetails({ name: loaded.name, description: loaded.description });
+        setDetails({ name: loaded.name, description: loaded.description, allow_multiple: loaded.allow_multiple });
         setSelectedId(byOrder(loaded.templates)[0]?.template_id ?? "");
       })
       .catch((err: unknown) => setError(errorText(err, "Could not load the layout")));
@@ -159,7 +159,8 @@ export function LayoutEditorPage() {
     setNotice("");
     try {
       const updated = await api<LayoutDetail>(`/api/layouts/${layoutId}`, { method: "PUT", body: JSON.stringify(details) });
-      setLayout((current) => (current ? { ...current, name: updated.name, description: updated.description } : current));
+      setLayout((current) => (current ? { ...current, name: updated.name, description: updated.description, allow_multiple: updated.allow_multiple } : current));
+      setDetails((current) => ({ ...current, allow_multiple: updated.allow_multiple }));
       setNotice("Layout details saved");
     } catch (err) {
       setError(errorText(err, "Could not save the layout"));
@@ -277,7 +278,7 @@ export function LayoutEditorPage() {
       {error && <p className="text-alert">{error}</p>}
       {notice && <p className="text-muted" role="status">{notice}</p>}
 
-      <form aria-label="Layout details" className="bg-panel border border-hairline rounded-lg p-4 grid gap-3 md:grid-cols-[1fr_2fr_auto] items-end" onSubmit={(event) => void saveDetails(event)}>
+      <form aria-label="Layout details" className="bg-panel border border-hairline rounded-lg p-4 grid gap-3 md:grid-cols-[1fr_2fr_auto_auto] items-end" onSubmit={(event) => void saveDetails(event)}>
         <label className="block text-sm">
           Document name
           <input className="field mt-1" aria-label="Layout name" value={details.name} maxLength={100} onChange={(event) => setDetails({ ...details, name: event.target.value })} />
@@ -285,6 +286,19 @@ export function LayoutEditorPage() {
         <label className="block text-sm">
           Description
           <input className="field mt-1" aria-label="Layout description" value={details.description} maxLength={500} onChange={(event) => setDetails({ ...details, description: event.target.value })} />
+        </label>
+        <label
+          className="flex items-center gap-2 text-sm whitespace-nowrap pb-2"
+          title={layout.layout_id === "sdd" ? "A project has exactly one Solution Design Document" : "Let a project add this document more than once"}
+        >
+          <input
+            type="checkbox"
+            aria-label="Allow multiple per project"
+            checked={details.allow_multiple}
+            disabled={layout.layout_id === "sdd"}
+            onChange={(event) => setDetails({ ...details, allow_multiple: event.target.checked })}
+          />
+          Allow multiple per project
         </label>
         <button type="submit" className="btn btn-primary" disabled={!details.name.trim()}>Save details</button>
       </form>

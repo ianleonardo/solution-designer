@@ -12,11 +12,13 @@ import { Outline, type OutlineEditor, type OutlineItem } from "../components/Out
 import { ProseEditor } from "../components/ProseEditor";
 import { ReferencesPanel } from "../components/ReferencesPanel";
 import { SectionDialog, type SectionDialogMode, type SectionValues } from "../components/SectionDialog";
+import { KbSectionToolbar, kbSourceOf, presentColumns, TableFieldsDialog } from "../components/KbLinks";
 import { TableGrid } from "../components/TableGrid";
 import { sectionIsEmpty } from "../autofill";
 import { STARTER_FLOWCHART } from "../mermaidTemplates";
 import { indentSection, MAX_SECTION_DEPTH, moveSection, outdentSection, sectionDepth, sectionPlacement, toTree, type OutlineTree } from "../structure";
-import type { Block, Project, ProjectDocument, Sdd, Section, Template, WorkspaceData } from "../types";
+import type { Block, Project, ProjectDocument, Sdd, Section, TableBlock, Template, WorkspaceData } from "../types";
+import { SelectField } from "../components/SelectField";
 
 const HIDDEN_ALERTS = new Set([
   "Missing NFR volumetric projections",
@@ -66,6 +68,7 @@ export function WorkspacePage() {
   const [sectionDialog, setSectionDialog] = useState<(SectionDialogMode & { parentId?: string | null }) | null>(null);
   const [deletingSection, setDeletingSection] = useState<Template | null>(null);
   const [structureBusy, setStructureBusy] = useState(false);
+  const [fieldsFor, setFieldsFor] = useState<{ table_id: string; label: string; present: string[] } | null>(null);
   const timer = useRef<number | null>(null);
   const documentLocked = user?.role_name !== "Analyst";
   const canEditStructure = user?.role_name === "Analyst";
@@ -87,6 +90,7 @@ export function WorkspacePage() {
   const templates = [...(doc?.templates ?? [])].sort((a, b) => a.sequence_order - b.sequence_order);
   const activeTemplate = templates.find((item) => item.template_id === activeId);
   const section = doc?.content_json.sections[activeId];
+  const kbSource = kbSourceOf(activeTemplate?.blocks);
 
   useEffect(() => {
     const first = [...(doc?.templates ?? [])].sort((a, b) => a.sequence_order - b.sequence_order)[0];
@@ -114,6 +118,34 @@ export function WorkspacePage() {
     const blocks = [...section.blocks];
     blocks.splice(afterIndex + 1, 0, { type: "diagram", sequence: false, mermaid: STARTER_FLOWCHART });
     replaceSection(activeId, { ...section, blocks });
+  }
+
+  /** Apply a document the server changed (Knowledge Base rows added or refreshed) and redraw the editors. */
+  function applyServerDocument(fresh: Sdd) {
+    mergeDoc(fresh);
+    setRevision((value) => value + 1);
+  }
+
+  function addManualTable(afterIndex: number) {
+    if (!section) return;
+    const template = section.blocks[afterIndex];
+    if (template?.type !== "table") return;
+    const blocks = [...section.blocks];
+    blocks.splice(afterIndex + 1, 0, { type: "table", columns: template.columns, rows: [template.columns.map(() => "")] });
+    replaceSection(activeId, { ...section, blocks });
+  }
+
+  function removeTable(index: number) {
+    if (!section) return;
+    const tables = section.blocks.filter((item) => item.type === "table").length;
+    const target = section.blocks[index];
+    if (tables > 1 || target?.type !== "table") {
+      removeBlock(index);
+      return;
+    }
+    // the slot always keeps one table; the last one is cleared instead
+    const blank: TableBlock = { type: "table", columns: target.columns, rows: [target.columns.map(() => "")] };
+    replaceSection(activeId, { ...section, blocks: section.blocks.map((item, blockIndex) => (blockIndex === index ? blank : item)) });
   }
 
   function removeBlock(index: number) {
@@ -326,10 +358,10 @@ export function WorkspacePage() {
     }
   }
 
-  async function addDocument(layoutId: string) {
+  async function addDocument(layoutId: string, title = "") {
     const created = await api<ProjectDocument>(`/api/projects/${projectId}/documents`, {
       method: "POST",
-      body: JSON.stringify({ layout_id: layoutId }),
+      body: JSON.stringify(title ? { layout_id: layoutId, title } : { layout_id: layoutId }),
     });
     setData((current) => (current ? { ...current, documents: [...current.documents, created] } : current));
     navigate(`/projects/${projectId}/documents/${created.document_id}`);
@@ -475,11 +507,71 @@ export function WorkspacePage() {
                 </button>
               )}
             </div>
+            {kbSource && section && (
+              <KbSectionToolbar
+                key={`${docId}-${activeId}`}
+                base={base}
+                sectionId={activeId}
+                source={kbSource}
+                section={section}
+                project={data.project}
+                readOnly={documentLocked}
+                beforeChange={flushSave}
+                onDocument={applyServerDocument}
+                onError={setError}
+              />
+            )}
             {section?.blocks.map((block, index) => {
+              const tableGroup = kbSource === "tables" && block.type === "table";
+              const lastTable = tableGroup && !section.blocks.slice(index + 1).some((item) => item.type === "table");
               const diagramCount = section.blocks.filter((item) => item.type === "diagram").length;
               const layoutDiagrams = (activeTemplate?.blocks ?? []).filter((item) => item.type === "diagram").length;
               return (
                 <div key={`${docId}-${activeId}-${index}-${revision}`} className="space-y-2">
+                  {tableGroup && block.type === "table" && (
+                    <div className="flex flex-wrap items-center gap-2">
+                      {block.kb_table_id ? (
+                        <p className="text-sm mr-auto">
+                          <span className="font-semibold">Table Name:</span> <span className="font-label">{block.table_name}</span>
+                        </p>
+                      ) : (
+                        <label className="text-sm mr-auto flex items-center gap-2">
+                          <span className="font-semibold whitespace-nowrap">Table Name:</span>
+                          <input
+                            className="field"
+                            aria-label={`Table name ${index + 1}`}
+                            value={block.table_name ?? ""}
+                            readOnly={documentLocked}
+                            placeholder="Name of a new table"
+                            onChange={(event) => {
+                              const blocks = section.blocks.map((item, blockIndex) => (blockIndex === index ? { ...block, table_name: event.target.value } : item));
+                              replaceSection(activeId, { ...section, blocks });
+                            }}
+                          />
+                        </label>
+                      )}
+                      {!documentLocked && block.kb_table_id && (
+                        <button
+                          type="button"
+                          className="btn"
+                          onClick={() => setFieldsFor({ table_id: block.kb_table_id!, label: block.table_name ?? "", present: presentColumns(block) })}
+                        >
+                          <span className="material-symbols-outlined text-sm" aria-hidden="true">
+                            checklist
+                          </span>
+                          Choose fields
+                        </button>
+                      )}
+                      {!documentLocked && (block.kb_table_id || section.blocks.filter((item) => item.type === "table").length > 1) && (
+                        <button type="button" className="btn" aria-label={`Remove table ${block.table_name || index + 1}`} onClick={() => removeTable(index)}>
+                          <span className="material-symbols-outlined text-sm" aria-hidden="true">
+                            close
+                          </span>
+                          Remove table
+                        </button>
+                      )}
+                    </div>
+                  )}
                   <BlockView
                     projectId={projectId}
                     block={block}
@@ -491,6 +583,14 @@ export function WorkspacePage() {
                       replaceSection(activeId, { ...section, blocks });
                     }}
                   />
+                  {lastTable && !documentLocked && (
+                    <button type="button" className="btn" onClick={() => addManualTable(index)}>
+                      <span className="material-symbols-outlined text-sm" aria-hidden="true">
+                        add
+                      </span>
+                      Add table manually
+                    </button>
+                  )}
                   {block.type === "diagram" && !documentLocked && (
                     <div className="flex flex-wrap gap-2">
                       <button type="button" className="btn" onClick={() => insertDiagram(index)}>
@@ -522,6 +622,19 @@ export function WorkspacePage() {
           </div>
         </section>
       </div>
+      {fieldsFor && (
+        <TableFieldsDialog
+          tables={[{ table_id: fieldsFor.table_id, label: fieldsFor.label }]}
+          present={{ [fieldsFor.table_id]: fieldsFor.present }}
+          onClose={() => setFieldsFor(null)}
+          onSubmit={async ([choice]) => {
+            await flushSave();
+            applyServerDocument(
+              await api<Sdd>(`${base}/sections/${activeId}/kb-links`, { method: "POST", body: JSON.stringify(choice) }),
+            );
+          }}
+        />
+      )}
       {sectionDialog && <SectionDialog mode={sectionDialog} onSubmit={saveSection} onClose={() => setSectionDialog(null)} />}
       {fillDialog && (
         <AutoFillDialog
@@ -601,17 +714,14 @@ function BlockView({
           placeholder="Header"
           onChange={(event) => onChange({ ...block, text: event.target.value })}
         />
-        <select
-          className="field w-28 shrink-0"
+        <SelectField
           aria-label="Header size"
-          value={block.level}
+          value={String(block.level)}
           disabled={readOnly}
-          onChange={(event) => onChange({ ...block, level: Number(event.target.value) })}
-        >
-          <option value={1}>Large</option>
-          <option value={2}>Medium</option>
-          <option value={3}>Small</option>
-        </select>
+          className="w-28 shrink-0 [&_button]:w-full"
+          options={[{ value: "1", label: "Large" }, { value: "2", label: "Medium" }, { value: "3", label: "Small" }]}
+          onChange={(value) => onChange({ ...block, level: Number(value) })}
+        />
       </div>
     );
   }
@@ -622,7 +732,15 @@ function BlockView({
     return <ProseEditor value={block.markdown} readOnly={readOnly} onChange={(markdown) => onChange({ ...block, markdown })} />;
   }
   if (block.type === "table") {
-    return <TableGrid columns={block.columns} rows={block.rows} readOnly={readOnly} onChange={(rows) => onChange({ ...block, rows })} />;
+    return (
+      <TableGrid
+        columns={block.columns}
+        rows={block.rows}
+        links={block.links}
+        readOnly={readOnly}
+        onChange={(rows, links) => onChange(links ? { ...block, rows, links } : { ...block, rows })}
+      />
+    );
   }
   return <DiagramBlock block={block} readOnly={readOnly} onChange={onChange} />;
 }

@@ -4,7 +4,7 @@ import { api, formatDate } from "../api";
 import type { Project, Role } from "../types";
 import { ConfirmDialog } from "./ConfirmDialog";
 import { type Column, DataTable } from "./DataTable";
-import { ProjectDialog } from "./ProjectDialog";
+import { ProjectDialog, type ProjectScope } from "./ProjectDialog";
 
 export const PROJECT_PAGE_SIZE = 30;
 
@@ -25,11 +25,11 @@ export function ProjectTable({
   const [deleting, setDeleting] = useState<Project | null>(null);
   const canManageProjects = role === "Analyst";
 
-  async function saveEdit(name: string, description: string) {
+  async function saveEdit(name: string, description: string, scope: ProjectScope) {
     if (!editing) return;
     await api(`/api/projects/${editing.project_id}`, {
       method: "PATCH",
-      body: JSON.stringify({ project_name: name, description }),
+      body: JSON.stringify({ project_name: name, description, countries: scope.countries, systems: scope.systems }),
     });
     setEditing(null);
     onChanged();
@@ -106,6 +106,7 @@ export function ProjectTable({
           submitLabel="Save"
           initialName={editing.project_name}
           initialDescription={editing.description}
+          initialScope={{ countries: editing.countries ?? [], systems: editing.systems ?? [] }}
           onSubmit={saveEdit}
           onClose={() => setEditing(null)}
         />

@@ -92,3 +92,27 @@ def test_dashboard_includes_knowledge_base_stats_by_country(client):
     assert by_country["TH"]["batches"] == 1
     for code in ("SG", "MY", "TH", "VN", "ID"):
         assert code in by_country
+
+
+def test_dashboard_counts_multi_country_and_all_country_items_towards_each_country(client):
+    admin = login(client, "Admin")
+    headers = auth(admin)
+    client.post("/api/systems", json={"system_code": "SPL", "system_name": "SPL", "has_capability": True}, headers=headers)
+    client.post("/api/systems", json={"system_code": "DGE", "system_name": "DGE"}, headers=headers)
+    capability = {"system_code": "SPL", "l1_capability": "Pay", "l2_capability": "Card", "l3_capability": "Auth"}
+    shared = client.post("/api/capabilities", json={**capability, "country": "SG,MY"}, headers=headers)
+    assert shared.status_code == 200, shared.text
+    everywhere = client.post("/api/capabilities", json={**capability, "l3_capability": "Settle", "country": ""}, headers=headers)
+    assert everywhere.status_code == 200, everywhere.text
+    interface = {"interface_name": "Balance", "protocol": "API", "source": "SPL", "destination": "DGE", "country": ""}
+    assert client.post("/api/interfaces/SPL", json=interface, headers=headers).status_code == 200
+
+    rows = client.get("/api/dashboard", headers=headers).json()["kb_by_country"]
+    by_country = {row["country"]: row for row in rows}
+    assert "Unspecified" not in by_country
+    assert not any("," in row["country"] for row in rows)
+    assert by_country["SG"]["capabilities"] == 2  # SG,MY + all countries
+    assert by_country["MY"]["capabilities"] == 2
+    assert by_country["TH"]["capabilities"] == 1  # all countries only
+    for code in ("SG", "MY", "TH", "VN", "ID"):
+        assert by_country[code]["interfaces"] == 1

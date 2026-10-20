@@ -2,6 +2,7 @@ import { useEffect, useState, type FormEvent } from "react";
 import { api, ApiError, formatDateTime } from "../../api";
 import { type Column, DataTable } from "../../components/DataTable";
 import type { AuditEntry } from "../../types";
+import { SelectField } from "../../components/SelectField";
 
 export const AUDIT_PAGE_SIZE = 30;
 
@@ -119,14 +120,15 @@ export function AuditLogPage() {
       <div className="flex flex-wrap items-end gap-3">
         <label className="text-sm">
           <span className="block font-label text-[10px] uppercase text-muted">Action</span>
-          <select className="field mt-1 min-w-[11rem]" value={action} onChange={(event) => setAction(event.target.value)}>
-            <option value="">All actions</option>
-            {actions.map((item) => (
-              <option key={item} value={item}>
-                {words(item)}
-              </option>
-            ))}
-          </select>
+          <div className="mt-1">
+            <SelectField
+              aria-label="Filter by action"
+              value={action}
+              className="min-w-[11rem] [&_button]:w-full"
+              options={[{ value: "", label: "All actions" }, ...actions.map((item) => ({ value: item, label: words(item) }))]}
+              onChange={setAction}
+            />
+          </div>
         </label>
         <label className="text-sm">
           <span className="block font-label text-[10px] uppercase text-muted">From</span>

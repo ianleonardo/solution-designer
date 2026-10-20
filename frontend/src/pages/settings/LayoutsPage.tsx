@@ -4,6 +4,7 @@ import { api, ApiError, formatDate } from "../../api";
 import { ConfirmDialog } from "../../components/ConfirmDialog";
 import { DataTable, type Column } from "../../components/DataTable";
 import type { LayoutDetail, LayoutSummary } from "../../types";
+import { SelectField } from "../../components/SelectField";
 
 export const LAYOUT_PAGE_SIZE = 20;
 
@@ -19,6 +20,7 @@ function LayoutDialog({
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [copyFrom, setCopyFrom] = useState("");
+  const [allowMultiple, setAllowMultiple] = useState(false);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
 
@@ -37,7 +39,7 @@ function LayoutDialog({
     try {
       const created = await api<LayoutDetail>("/api/layouts", {
         method: "POST",
-        body: JSON.stringify({ name: name.trim(), description: description.trim(), copy_from: copyFrom || null }),
+        body: JSON.stringify({ name: name.trim(), description: description.trim(), copy_from: copyFrom || null, allow_multiple: allowMultiple }),
       });
       onCreated(created);
     } catch (err) {
@@ -60,14 +62,22 @@ function LayoutDialog({
         </label>
         <label className="block mb-4">
           <span className="font-label text-[10px] uppercase text-muted">Start from</span>
-          <select className="field mt-1" aria-label="Start from" value={copyFrom} onChange={(event) => setCopyFrom(event.target.value)}>
-            <option value="">Empty layout</option>
-            {layouts.map((layout) => (
-              <option key={layout.layout_id} value={layout.layout_id}>
-                Copy of {layout.name}
-              </option>
-            ))}
-          </select>
+          <div className="mt-1">
+            <SelectField
+              aria-label="Start from"
+              value={copyFrom}
+              className="w-full [&_button]:w-full [&_button]:max-w-none"
+              options={[{ value: "", label: "Empty layout" }, ...layouts.map((layout) => ({ value: layout.layout_id, label: `Copy of ${layout.name}` }))]}
+              onChange={setCopyFrom}
+            />
+          </div>
+        </label>
+        <label className="flex items-start gap-2 mb-4 text-sm">
+          <input type="checkbox" className="mt-0.5" aria-label="Allow multiple per project" checked={allowMultiple} onChange={(event) => setAllowMultiple(event.target.checked)} />
+          <span>
+            Allow multiple per project
+            <span className="block text-xs text-muted">A project can add this document more than once, each copy with its own name.</span>
+          </span>
         </label>
         {error && <p className="text-alert mb-3">{error}</p>}
         <div className="flex justify-end gap-2">
@@ -104,6 +114,12 @@ export function LayoutsPage() {
       ),
     },
     { key: "description", header: "Description", sortValue: (row) => row.description, render: (row) => <span className="text-muted">{row.description}</span> },
+    {
+      key: "per-project",
+      header: "Per project",
+      sortValue: (row) => (row.allow_multiple ? "Multiple" : "Single"),
+      render: (row) => (row.allow_multiple ? "Multiple" : "Single"),
+    },
     { key: "sections", header: "Sections", sortValue: (row) => row.section_count, render: (row) => row.section_count },
     { key: "used", header: "Used by", sortValue: (row) => row.document_count, render: (row) => `${row.document_count} document${row.document_count === 1 ? "" : "s"}` },
     { key: "updated", header: "Updated", sortValue: (row) => row.updated_at, render: (row) => formatDate(row.updated_at) },

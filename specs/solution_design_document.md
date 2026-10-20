@@ -138,21 +138,13 @@
 ---
 
 ## Inventory of Test Cases
-*<<Document all new/amended/deleted test cases here for each sprint post Test phase if the application is onboarded in VAL. Test Manager ensures that the data is updated in VAL and also documented here. If the list of testcases are many, they can be attached as an excel file>>*
+*<<List one row per test case. Give the serial number, test case ID, test type, test case description, and acceptance criteria. Test type must be one of Progression, Regression, Negative testing, or Non-functional.>>*
 
-### <Sprint 1>
-| No | App Name | Action | VAL ID |
-|---|---|---|---|
-| 1 | SPL | (New/Existing/Delete) | <ID> |
-| 2 | | | |
-| 3 | | | |
-
-### <Sprint 2>
-| No | App Name | Action | VAL ID |
-|---|---|---|---|
-| 1 | IDB | (New/Existing/Delete) | <ID> |
-| 2 | | | |
-| 3 | | | |
+| SN | Test Case ID | Test Type | Test Case Description | Acceptance Criteria |
+|---|---|---|---|---|
+| 1 | | | | |
+| 2 | | | | |
+| 3 | | | | |
 
 ---
 
@@ -264,7 +256,7 @@
 ## End to End Systems Timeout
 *<<Document below information related to UAT, PROD Timeout setting between source and destination systems for End-to-End use cases>>*
 
-| Use Cases (Related to project) | Systems In Sequence Flow and Timeout Settings (seconds) | | | | | | |
-|---|---|---|---|---|---|---|---|
-| Client Details Validation & Signature decryption (pre-login) | TMRW | <<Timeout Setting>> | SPL | <<Timeout Setting>> | WAM | | |
-| Get Eligible Accounts for Payment (post-login) | TMRW | <<Timeout Setting>> | SPL | <<Timeout Setting>> | DGE | <<Timeout Setting>> | PIB-DB |
+| Use Cases (Related to project) | Systems In Sequence Flow | Timeout Settings (seconds) |
+|---|---|---|
+| Client Details Validation & Signature decryption (pre-login) | TMRW | <<Timeout Setting>> |
+| Get Eligible Accounts for Payment (post-login) | TMRW | <<Timeout Setting>> |

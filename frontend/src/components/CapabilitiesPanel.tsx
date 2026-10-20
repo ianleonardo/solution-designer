@@ -15,6 +15,7 @@ import type {
   SystemRecord,
 } from "../types";
 import { ConfirmDialog } from "./ConfirmDialog";
+import { LinkPickerDialog, type LinkPickerRow } from "./LinkPickerDialog";
 import { FileDrop } from "./FileDrop";
 import { MermaidPreview } from "./DiagramBlock";
 import { SequenceDiagramsDialog, type SequenceDiagram } from "./SequenceDiagramsDialog";
@@ -193,6 +194,13 @@ function UploadCapabilitiesDialog({
 }
 
 type LinkKind = "interfaces" | "tables" | "batches" | "reports";
+
+const PICKER_COLUMNS: Record<LinkKind, string[]> = {
+  interfaces: ["Interface Name", "Country", "Channel", "Protocol", "Source → Destination"],
+  tables: ["Table", "Country", "Database", "Schema", "Description"],
+  batches: ["Batch Name", "Country", "System", "Type", "Description"],
+  reports: ["Report Name", "Country", "System", "Report Code", "Description"],
+};
 
 function itemMatchesCountries(applicable: string, unrestricted: boolean, itemCountry: string) {
   const codes = (value: string) =>
@@ -381,7 +389,7 @@ function CapabilityFormDialog({
     }
   }
 
-  async function applyLink(kind: LinkKind, id: string) {
+  async function applyLinks(kind: LinkKind, ids: string[]) {
     if (!allCountries && !countryValue) {
       throw new ApiError(400, "Choose All countries or at least one country before linking.");
     }
@@ -390,12 +398,19 @@ function CapabilityFormDialog({
         method: "PATCH",
         body: JSON.stringify({ country: countryValue }),
       });
-      const saved = await linkOne(kind, id, savedId);
-      applyRecord(saved);
-      onSaved(saved);
+      let saved: KbCapabilityRecord | null = null;
+      try {
+        for (const id of ids) saved = await linkOne(kind, id, savedId);
+      } finally {
+        // show whatever was linked, even if a later item failed
+        if (saved) {
+          applyRecord(saved);
+          onSaved(saved);
+        }
+      }
       return;
     }
-    setPending((current) => (current.some((item) => item.kind === kind && item.id === id) ? current : [...current, { kind, id }]));
+    setPending((current) => [...current, ...ids.filter((id) => !current.some((item) => item.kind === kind && item.id === id)).map((id) => ({ kind, id }))]);
   }
 
   async function unlink() {
@@ -416,7 +431,7 @@ function CapabilityFormDialog({
     setInspect(null);
   }
 
-  const pickerOptions = useMemo(() => {
+  const pickerRows = useMemo((): LinkPickerRow[] => {
     if (!picker) return [];
     const linkedIds = new Set([
       ...(picker === "interfaces" ? (links.interfaces || []).map((row) => row.interface_id) : []),
@@ -429,21 +444,37 @@ function CapabilityFormDialog({
     if (picker === "interfaces") {
       return catalog.interfaces
         .filter((row) => matches(row.country) && !linkedIds.has(row.interface_id))
-        .map((row) => ({ id: row.interface_id, label: `${applicableFor(row.country)} · ${row.channel} · ${row.interface_name}` }));
+        .map((row) => ({
+          id: row.interface_id,
+          label: row.interface_name,
+          cells: [row.interface_name, applicableFor(row.country), row.channel, row.protocol, [row.source, row.destination].filter(Boolean).join(" → ")],
+        }));
     }
     if (picker === "tables") {
       return catalog.tables
         .filter((row) => matches(row.country) && !linkedIds.has(row.table_id))
-        .map((row) => ({ id: row.table_id, label: `${row.country} · ${row.database_name}.${row.schema_name}.${row.table_name}` }));
+        .map((row) => ({
+          id: row.table_id,
+          label: `${row.database_name}.${row.schema_name}.${row.table_name}`,
+          cells: [row.table_name, row.country, row.database_name, row.schema_name, row.description],
+        }));
     }
     if (picker === "batches") {
       return catalog.batches
         .filter((row) => matches(row.country) && !linkedIds.has(row.batch_id))
-        .map((row) => ({ id: row.batch_id, label: `${row.country} · ${row.system_code} · ${row.batch_name}` }));
+        .map((row) => ({
+          id: row.batch_id,
+          label: row.batch_name,
+          cells: [row.batch_name, row.country, row.system_code, row.batch_type, row.description],
+        }));
     }
     return catalog.reports
       .filter((row) => matches(row.country) && !linkedIds.has(row.report_id))
-      .map((row) => ({ id: row.report_id, label: `${row.country} · ${row.system_code} · ${row.report_name}` }));
+      .map((row) => ({
+        id: row.report_id,
+        label: row.report_name,
+        cells: [row.report_name, row.country, row.system_code, row.report_code, row.description],
+      }));
   }, [picker, links, pending, catalog, countryValue, allCountries]);
 
   function linkRows(kind: LinkKind): { id: string; label: string; onOpen: () => void }[] {
@@ -695,10 +726,12 @@ function CapabilityFormDialog({
       )}
       {picker && (
         <LinkPickerDialog
-          title={`Link ${{ interfaces: "interface", tables: "table", batches: "batch", reports: "report" }[picker]}`}
+          title={`Link ${{ interfaces: "interfaces", tables: "tables", batches: "batches", reports: "reports" }[picker]}`}
+          noun={picker}
           country={applicableFor(countryValue)}
-          options={pickerOptions}
-          onPick={(id) => applyLink(picker, id)}
+          columns={PICKER_COLUMNS[picker]}
+          rows={pickerRows}
+          onPick={(ids) => applyLinks(picker, ids)}
           onClose={() => setPicker(null)}
         />
       )}
@@ -742,85 +775,10 @@ function CapabilityFormDialog({
           title="Unlink item"
           message={`Remove the link to “${unlinking.name}”? The catalogue item itself is kept.`}
           confirmLabel="Unlink"
-          onConfirm={() => void unlink()}
+          onConfirm={unlink}
           onClose={() => setUnlinking(null)}
         />
       )}
-    </div>
-  );
-}
-
-function LinkPickerDialog({
-  title,
-  country,
-  options,
-  onPick,
-  onClose,
-}: {
-  title: string;
-  country: string;
-  options: { id: string; label: string }[];
-  onPick: (id: string) => Promise<void>;
-  onClose: () => void;
-}) {
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState("");
-  const [choice, setChoice] = useState(options[0]?.id ?? "");
-  const optionKey = options.map((item) => item.id).join("|");
-
-  useEffect(() => {
-    setChoice(options[0]?.id ?? "");
-  }, [optionKey]);
-
-  async function submit(event: FormEvent) {
-    event.preventDefault();
-    if (!choice) {
-      setError("Select an item.");
-      return;
-    }
-    setBusy(true);
-    setError("");
-    try {
-      await onPick(choice);
-      onClose();
-    } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Could not link the item");
-      setBusy(false);
-    }
-  }
-
-  return (
-    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-4" role="presentation" onMouseDown={(e) => e.target === e.currentTarget && !busy && onClose()}>
-      <form role="dialog" aria-modal="true" aria-label={title} className="w-full max-w-md rounded-lg border border-hairline bg-panel p-6 shadow-xl space-y-3" onSubmit={(e) => void submit(e)}>
-        <h2 className="font-headline text-lg font-semibold">{title}</h2>
-        <p className="text-sm text-muted">Applicable for {country}.</p>
-        {options.length === 0 ? (
-          <p className="text-sm text-muted">No items in {country} left to link.</p>
-        ) : (
-          <label className="block">
-            <span className="font-label text-[10px] uppercase text-muted">Item</span>
-            <div className="mt-1">
-              <SelectField
-                aria-label="Link item"
-                value={choice}
-                disabled={busy}
-                className="w-full [&_button]:w-full [&_button]:max-w-none"
-                options={options.map((item) => ({ value: item.id, label: item.label }))}
-                onChange={setChoice}
-              />
-            </div>
-          </label>
-        )}
-        {error && <p className="text-alert text-sm">{error}</p>}
-        <div className="flex justify-end gap-2">
-          <button type="button" className="btn" disabled={busy} onClick={onClose}>
-            Cancel
-          </button>
-          <button type="submit" className="btn btn-primary" disabled={busy || options.length === 0}>
-            Link
-          </button>
-        </div>
-      </form>
     </div>
   );
 }

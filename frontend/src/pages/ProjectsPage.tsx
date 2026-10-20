@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { api, ApiError } from "../api";
 import { useAuth } from "../auth";
-import { ProjectDialog } from "../components/ProjectDialog";
+import { ProjectDialog, type ProjectScope } from "../components/ProjectDialog";
 import { ProjectTable } from "../components/ProjectTable";
 import type { Project } from "../types";
 
@@ -21,10 +21,10 @@ export function ProjectsPage() {
     load();
   }, []);
 
-  async function createProject(name: string, description: string) {
+  async function createProject(name: string, description: string, scope: ProjectScope) {
     const created = await api<Project>("/api/projects", {
       method: "POST",
-      body: JSON.stringify({ project_name: name, description }),
+      body: JSON.stringify({ project_name: name, description, countries: scope.countries, systems: scope.systems }),
     });
     navigate(`/projects/${created.project_id}`);
   }

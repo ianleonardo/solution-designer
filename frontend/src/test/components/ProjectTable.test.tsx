@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { Project } from "../../types";
@@ -68,7 +68,12 @@ describe("ProjectTable", () => {
   });
 
   it("edits the name and description in a dialog", async () => {
-    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({}), { status: 200, headers: { "Content-Type": "application/json" } }));
+    const fetchMock = vi.fn(async (url: string) =>
+      new Response(JSON.stringify(url === "/api/catalogs" ? { countries: ["SG", "MY"] } : url === "/api/systems" ? [] : {}), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
     vi.stubGlobal("fetch", fetchMock);
     vi.stubGlobal("localStorage", { getItem: () => null, setItem: () => undefined, removeItem: () => undefined });
     const onChanged = vi.fn();
@@ -79,12 +84,12 @@ describe("ProjectTable", () => {
     expect(dialog).toBeTruthy();
     fireEvent.change(screen.getByLabelText("Project name"), { target: { value: "FD Vietnam" } });
     fireEvent.change(screen.getByLabelText("Project description"), { target: { value: "Updated" } });
+    fireEvent.click(await within(dialog).findByRole("checkbox", { name: "Country MY" }));
     fireEvent.click(screen.getByRole("button", { name: "Save" }));
 
     await waitFor(() => expect(onChanged).toHaveBeenCalled());
-    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    const [url, init] = (fetchMock.mock.calls as unknown as [string, RequestInit | undefined][]).find(([, options]) => options?.method === "PATCH")!;
     expect(url).toBe("/api/projects/p1");
-    expect(init.method).toBe("PATCH");
-    expect(JSON.parse(String(init.body))).toEqual({ project_name: "FD Vietnam", description: "Updated" });
+    expect(JSON.parse(String(init?.body))).toEqual({ project_name: "FD Vietnam", description: "Updated", countries: ["MY"], systems: [] });
   });
 });

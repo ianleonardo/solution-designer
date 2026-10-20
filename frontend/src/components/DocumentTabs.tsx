@@ -2,19 +2,35 @@ import { useEffect, useState } from "react";
 import { ApiError } from "../api";
 import type { LayoutSummary, ProjectDocument } from "../types";
 import { ConfirmDialog } from "./ConfirmDialog";
+import { SelectField } from "./SelectField";
+
+/** The name a new copy gets when none is typed: the layout name, then "Name 2", "Name 3"... */
+export function suggestedDocumentName(layoutName: string, documents: ProjectDocument[]) {
+  const taken = new Set(documents.map((item) => item.name.toLowerCase()));
+  if (!taken.has(layoutName.toLowerCase())) return layoutName;
+  let number = 2;
+  while (taken.has(`${layoutName} ${number}`.toLowerCase())) number += 1;
+  return `${layoutName} ${number}`;
+}
 
 function AddDocumentDialog({
   layouts,
+  documents,
   onAdd,
   onClose,
 }: {
   layouts: LayoutSummary[];
-  onAdd: (layoutId: string) => Promise<void>;
+  documents: ProjectDocument[];
+  onAdd: (layoutId: string, title: string) => Promise<void>;
   onClose: () => void;
 }) {
   const [layoutId, setLayoutId] = useState(layouts[0]?.layout_id ?? "");
+  const [title, setTitle] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const layout = layouts.find((item) => item.layout_id === layoutId);
+  const copies = documents.filter((item) => item.layout_id === layoutId).length;
+  const suggestion = layout ? suggestedDocumentName(layout.name, documents) : "";
   useEffect(() => {
     function onKey(event: KeyboardEvent) {
       if (event.key === "Escape") onClose();
@@ -33,7 +49,7 @@ function AddDocumentDialog({
           event.preventDefault();
           setBusy(true);
           setError("");
-          onAdd(layoutId).catch((err: unknown) => {
+          onAdd(layoutId, layout?.allow_multiple ? title.trim() : "").catch((err: unknown) => {
             setError(err instanceof ApiError ? err.message : "Could not add the document");
             setBusy(false);
           });
@@ -43,16 +59,46 @@ function AddDocumentDialog({
         {layouts.length === 0 ? (
           <p className="text-muted mb-4">This project already has every available document.</p>
         ) : (
-          <label className="block mb-4">
-            <span className="font-label text-[10px] uppercase text-muted">Document type</span>
-            <select className="field mt-1" aria-label="Document type" value={layoutId} onChange={(event) => setLayoutId(event.target.value)}>
-              {layouts.map((layout) => (
-                <option key={layout.layout_id} value={layout.layout_id}>
-                  {layout.name}
-                </option>
-              ))}
-            </select>
-          </label>
+          <>
+            <label className="block mb-4">
+              <span className="font-label text-[10px] uppercase text-muted">Document type</span>
+              <div className="mt-1">
+                <SelectField
+                  aria-label="Document type"
+                  value={layoutId}
+                  className="w-full [&_button]:w-full [&_button]:max-w-none"
+                  options={layouts.map((item) => ({
+                    value: item.layout_id,
+                    label: item.name,
+                    hint: item.allow_multiple ? "Can be added more than once" : undefined,
+                  }))}
+                  onChange={(value) => {
+                    setLayoutId(value);
+                    setTitle("");
+                  }}
+                />
+              </div>
+            </label>
+            {layout?.allow_multiple && (
+              <label className="block mb-4">
+                <span className="font-label text-[10px] uppercase text-muted">Document name</span>
+                <input
+                  className="field mt-1"
+                  aria-label="Document name"
+                  value={title}
+                  maxLength={100}
+                  placeholder={suggestion}
+                  onChange={(event) => setTitle(event.target.value)}
+                />
+                <span className="mt-1 block text-xs text-muted">
+                  {copies > 0
+                    ? `This project already has ${copies} of this document. Name this one so its tab is easy to tell apart.`
+                    : "Optional. This document can be added more than once, so a name helps tell the copies apart."}{" "}
+                  Leave blank to use “{suggestion}”.
+                </span>
+              </label>
+            )}
+          </>
         )}
         {error && <p className="text-alert mb-3">{error}</p>}
         <div className="flex justify-end gap-2">
@@ -78,13 +124,13 @@ export function DocumentTabs({
   layouts: LayoutSummary[];
   canManage: boolean;
   onSelect: (documentId: string) => void;
-  onAdd: (layoutId: string) => Promise<void>;
+  onAdd: (layoutId: string, title: string) => Promise<void>;
   onRemove: (document: ProjectDocument) => Promise<void>;
 }) {
   const [adding, setAdding] = useState(false);
   const [removing, setRemoving] = useState<ProjectDocument | null>(null);
   const used = new Set(documents.map((item) => item.layout_id));
-  const available = layouts.filter((layout) => !used.has(layout.layout_id) && layout.section_count > 0);
+  const available = layouts.filter((layout) => layout.section_count > 0 && (layout.allow_multiple || !used.has(layout.layout_id)));
   const active = documents.find((item) => item.document_id === activeId);
 
   return (
@@ -99,6 +145,7 @@ export function DocumentTabs({
               role="tab"
               aria-selected={selected}
               className={`px-3 py-2 text-sm border-b-2 -mb-px ${selected ? "border-[var(--accent,currentColor)] font-semibold" : "border-transparent text-muted hover:text-inherit"}`}
+              title={item.layout_name && item.layout_name !== item.name ? item.layout_name : undefined}
               onClick={() => onSelect(item.document_id)}
             >
               {item.name}
@@ -122,9 +169,10 @@ export function DocumentTabs({
       {adding && (
         <AddDocumentDialog
           layouts={available}
+          documents={documents}
           onClose={() => setAdding(false)}
-          onAdd={async (layoutId) => {
-            await onAdd(layoutId);
+          onAdd={async (layoutId, title) => {
+            await onAdd(layoutId, title);
             setAdding(false);
           }}
         />

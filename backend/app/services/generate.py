@@ -3,7 +3,16 @@ import re
 
 from app import db
 from app.config import DIAGRAM_RULES, GENERATION_RULES
-from app.content import diagram_block, diagram_groups, header_block, image_block, number_rows
+from app.content import (
+    diagram_block,
+    diagram_groups,
+    header_block,
+    image_block,
+    is_repeating_table_slot,
+    number_rows,
+    serial_column,
+    table_block,
+)
 from app.services import llm
 
 
@@ -45,6 +54,37 @@ def _first_text(block: dict, *names: str) -> str:
     return ""
 
 
+def _keep_linked_rows(columns: list[str], generated: list[list[str]], previous: dict | None) -> dict:
+    """Rows linked to the Knowledge Base survive auto fill; generated rows that repeat one of them are dropped."""
+    links = (previous or {}).get("links") or []
+    old_rows = (previous or {}).get("rows") or []
+    linked = [(list(old_rows[i]), link) for i, link in enumerate(links) if link and i < len(old_rows)]
+    if not linked:
+        return {"type": "table", "columns": columns, "rows": number_rows(columns, generated or [[""] * len(columns)])}
+    serial = serial_column(columns)
+
+    def signature(row: list[str]) -> str:
+        return "|".join(str(cell).strip().lower() for position, cell in enumerate(row) if position != serial and str(cell).strip())
+
+    seen = {signature(row) for row, _ in linked}
+    first_cells = {
+        str(row[link["owned"][0]]).strip().lower() for row, link in linked if link.get("owned") and link["owned"][0] < len(row)
+    }
+    extra = []
+    for row in generated:
+        key = signature(row)
+        if not key or key in seen:
+            continue
+        lead = next((str(cell).strip().lower() for position, cell in enumerate(row) if position != serial and str(cell).strip()), "")
+        if lead in first_cells:
+            continue
+        extra.append(row)
+    rows = [row for row, _ in linked] + extra
+    if not rows:
+        return {"type": "table", "columns": columns, "rows": number_rows(columns, [[""] * len(columns)])}
+    return table_block(columns, rows, {**(previous or {}), "links": [link for _, link in linked] + [None] * len(extra)})
+
+
 def _apply(schema_blocks: list[dict], payload: dict, max_words: int, existing: list[dict] | None = None) -> list[dict]:
     incoming = [block for block in payload.get("blocks") or [] if isinstance(block, dict)]
     pools: dict[str, list] = {}
@@ -54,6 +94,7 @@ def _apply(schema_blocks: list[dict], payload: dict, max_words: int, existing: l
     for block in existing or []:
         if isinstance(block, dict) and block.get("type") in STATIC_BLOCKS:
             kept.setdefault(block["type"], []).append(block)
+    existing_tables = [block for block in existing or [] if isinstance(block, dict) and block.get("type") == "table"]
     groups = diagram_groups(existing)
     group_index = 0
     result = []
@@ -96,9 +137,16 @@ def _apply(schema_blocks: list[dict], payload: dict, max_words: int, existing: l
                 if len(cells) < len(columns):
                     cells.extend([""] * (len(columns) - len(cells)))
                 rows.append(cells[: len(columns)])
-            if not rows:
-                rows = [[""] * len(columns)]
-            result.append({"type": "table", "columns": columns, "rows": number_rows(columns, rows)})
+            previous = existing_tables.pop(0) if existing_tables else None
+            if is_repeating_table_slot(schema_blocks, index) and previous is not None:
+                slot = [previous, *existing_tables]
+                existing_tables = []
+                if any(block.get("kb_table_id") or any(block.get("links") or []) for block in slot):
+                    # tables picked from the Knowledge Base stay as the analyst chose them
+                    result.extend(table_block(columns, block.get("rows") or [[""] * len(columns)], block) for block in slot)
+                    index += 1
+                    continue
+            result.append(_keep_linked_rows(columns, rows, previous))
         index += 1
     for group in groups[group_index:]:
         for extra in group:
@@ -129,11 +177,20 @@ def _reference_context(project_id: str | None, query: str, baselines: list[dict]
 
 
 def _project_context(project_id: str | None) -> str:
-    row = db.fetchone("SELECT project_name, description FROM projects WHERE project_id = ?", [project_id]) if project_id else None
+    row = (
+        db.fetchone("SELECT project_name, description, countries, systems FROM projects WHERE project_id = ?", [project_id])
+        if project_id
+        else None
+    )
     if not row:
         return ""
     description = " ".join(str(row.get("description") or "").split())
-    return f"PROJECT: {row['project_name']}\nPROJECT_DESCRIPTION: {description or 'None given.'}\n"
+    countries = str(row.get("countries") or "").replace(",", ", ") or "All countries"
+    systems = str(row.get("systems") or "").replace(",", ", ") or "All systems"
+    return (
+        f"PROJECT: {row['project_name']}\nPROJECT_DESCRIPTION: {description or 'None given.'}\n"
+        f"PROJECT_COUNTRIES: {countries}\nPROJECT_SYSTEMS: {systems}\n"
+    )
 
 
 def generate_section(

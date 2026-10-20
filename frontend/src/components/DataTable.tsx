@@ -1,4 +1,5 @@
 import { ReactNode, useEffect, useMemo, useState } from "react";
+import { SelectField } from "./SelectField";
 
 export type Column<T> = {
   key: string;
@@ -184,21 +185,15 @@ export function DataTable<T>({
           {pageSizes && (
             <label className="flex shrink-0 items-center gap-2 whitespace-nowrap">
               <span>Rows per page</span>
-              <select
-                className="field"
+              <SelectField
                 aria-label="Rows per page"
-                value={size}
-                onChange={(event) => {
-                  setChosenSize(Number(event.target.value));
+                value={String(size)}
+                options={pageSizes.map((option) => ({ value: String(option), label: String(option) }))}
+                onChange={(value) => {
+                  setChosenSize(Number(value));
                   setPage(1);
                 }}
-              >
-                {pageSizes.map((option) => (
-                  <option key={option} value={option}>
-                    {option}
-                  </option>
-                ))}
-              </select>
+              />
             </label>
           )}
           <span>

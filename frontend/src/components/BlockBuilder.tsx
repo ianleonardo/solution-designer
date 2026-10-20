@@ -1,6 +1,7 @@
 import { useRef, useState, type DragEvent } from "react";
 import { moveItem } from "../tableRows";
-import type { BlockSpec } from "../types";
+import type { BlockSpec, KbSource } from "../types";
+import { SelectField } from "./SelectField";
 
 const LABELS: Record<BlockSpec["type"], string> = {
   header: "Header",
@@ -63,17 +64,40 @@ export function BlockBuilder({ blocks, onChange }: { blocks: BlockSpec[]; onChan
               </label>
               <label className="block w-28 text-sm">
                 Size
-                <select className="field mt-1" aria-label={`Block ${index + 1} header size`} value={block.level} onChange={(event) => update(index, { ...block, level: Number(event.target.value) })}>
-                  <option value={1}>Large</option>
-                  <option value={2}>Medium</option>
-                  <option value={3}>Small</option>
-                </select>
+                <div className="mt-1">
+                  <SelectField
+                    aria-label={`Block ${index + 1} header size`}
+                    value={String(block.level)}
+                    className="w-full [&_button]:w-full [&_button]:max-w-none"
+                    options={[{ value: "1", label: "Large" }, { value: "2", label: "Medium" }, { value: "3", label: "Small" }]}
+                    onChange={(value) => update(index, { ...block, level: Number(value) })}
+                  />
+                </div>
               </label>
             </div>
           )}
           {block.type === "prose" && <p className="text-xs text-muted">Free text. The model writes it from the section prompt.</p>}
           {block.type === "table" && (
             <div className="space-y-1">
+              <label className="block text-sm mb-2">
+                Fill from Knowledge Base
+                <div className="mt-1">
+                  <SelectField
+                    aria-label={`Block ${index + 1} Knowledge Base source`}
+                    value={block.source ?? ""}
+                    className="w-full max-w-xs [&_button]:w-full"
+                    options={[
+                      { value: "", label: "No (typed rows only)" },
+                      { value: "capabilities", label: "Capabilities" },
+                      { value: "interfaces", label: "Interfaces" },
+                      { value: "reports", label: "Reports" },
+                      { value: "tables", label: "Tables (one field table per database table)" },
+                    ]}
+                    onChange={(value) => update(index, { ...block, source: value as KbSource | "" })}
+                  />
+                </div>
+                <span className="mt-1 block text-xs text-muted">Columns are matched to Knowledge Base fields by their names, for example “L1 Capability” or “Source System”.</span>
+              </label>
               <p className="text-sm">Columns</p>
               {block.columns.map((column, columnIndex) => (
                 <div

@@ -176,11 +176,50 @@ describe("TableGrid", () => {
     expect(container.querySelector('td[data-serial="true"]')?.textContent).toBe("1");
   });
 
+  it("offers the test type choices in a dropdown", () => {
+    const onChange = vi.fn();
+    render(
+      <TableGrid
+        columns={["SN", "Test Type"]}
+        rows={[["1", ""]]}
+        onChange={onChange}
+        readOnly={false}
+      />,
+    );
+    fireEvent.click(screen.getByLabelText("Test Type row 1"));
+    fireEvent.click(screen.getByRole("option", { name: "Negative testing" }));
+    expect(onChange).toHaveBeenCalledWith([["1", "Negative testing"]]);
+    expect(screen.queryByLabelText("Test Type row 1")?.tagName).not.toBe("TEXTAREA");
+  });
+
   it("fills a short row when one of its cells is edited", () => {
     const onChange = vi.fn();
     render(<TableGrid columns={["A", "B"]} rows={[["x"]]} onChange={onChange} readOnly={false} />);
     fireEvent.focus(screen.getByLabelText("B row 1"));
     fireEvent.change(screen.getByLabelText("B row 1"), { target: { value: "y" } });
     expect(onChange).toHaveBeenCalledWith([["x", "y"]]);
+  });
+
+  it("keeps Knowledge Base links with their rows and shows each row's state", () => {
+    const onChange = vi.fn();
+    const link = (id: string, state: "ok" | "changed" | "deleted") => ({ kind: "capability" as const, id, owned: [1], values: { "1": id }, state });
+    render(
+      <TableGrid
+        columns={["SN", "Name"]}
+        rows={[["1", "A"], ["2", "typed"], ["3", "C"]]}
+        links={[link("a", "ok"), null, link("c", "changed")]}
+        onChange={onChange}
+        readOnly={false}
+      />,
+    );
+    expect(screen.getByRole("img", { name: /Row 1: Filled from the Knowledge Base/ })).toBeTruthy();
+    expect(screen.getByRole("img", { name: /Row 3: Changed in the Knowledge Base/ })).toBeTruthy();
+    expect(screen.queryByRole("img", { name: /Row 2:/ })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Delete row 1" }));
+    const [rows, links] = onChange.mock.calls.at(-1)!;
+    expect(rows).toEqual([["1", "typed"], ["2", "C"]]);
+    expect(links.map((item: { id: string } | null) => item?.id ?? null)).toEqual([null, "c"]);
+    fireEvent.click(screen.getByRole("button", { name: "Add row" }));
+    expect(onChange.mock.calls.at(-1)![1]).toHaveLength(4);
   });
 });

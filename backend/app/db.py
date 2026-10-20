@@ -73,6 +73,55 @@ def fetchone(sql: str, params: list | None = None) -> dict | None:
     return rows[0] if rows else None
 
 
+# A project may hold several documents of one layout when the layout allows it, so there is no
+# UNIQUE (project_id, layout_id). `title` names a copy; empty means "use the layout name".
+PROJECT_DOCUMENTS_DDL = """
+        CREATE TABLE IF NOT EXISTS {table} (
+            document_id VARCHAR PRIMARY KEY,
+            project_id VARCHAR NOT NULL,
+            layout_id VARCHAR NOT NULL,
+            title VARCHAR NOT NULL DEFAULT '',
+            content_json VARCHAR NOT NULL,
+            status VARCHAR NOT NULL,
+            last_modified TIMESTAMP NOT NULL,
+            generated_at TIMESTAMP,
+            submitted_by VARCHAR,
+            approved_by VARCHAR,
+            approved_at TIMESTAMP,
+            created_at TIMESTAMP NOT NULL,
+            structure_json VARCHAR
+        )
+"""
+
+
+def _rebuild_project_documents_without_unique() -> None:
+    """Older databases have UNIQUE (project_id, layout_id); DuckDB cannot drop it in place, so copy the table."""
+    assert _conn is not None
+    unique = _conn.execute(
+        "SELECT count(*) FROM duckdb_constraints() WHERE table_name = 'project_documents' AND constraint_type = 'UNIQUE'"
+    ).fetchone()[0]
+    if not unique:
+        return
+    columns = [
+        row[0]
+        for row in _conn.execute(
+            "SELECT column_name FROM information_schema.columns WHERE table_name = 'project_documents' ORDER BY ordinal_position"
+        ).fetchall()
+    ]
+    column_list = ", ".join(columns)
+    _conn.execute("BEGIN TRANSACTION")
+    try:
+        _conn.execute("DROP TABLE IF EXISTS project_documents_rebuild")
+        _conn.execute(PROJECT_DOCUMENTS_DDL.format(table="project_documents_rebuild"))
+        _conn.execute(f"INSERT INTO project_documents_rebuild ({column_list}) SELECT {column_list} FROM project_documents")
+        _conn.execute("DROP TABLE project_documents")
+        _conn.execute("ALTER TABLE project_documents_rebuild RENAME TO project_documents")
+        _conn.execute("COMMIT")
+    except Exception:
+        _conn.execute("ROLLBACK")
+        raise
+
+
 def _migrate() -> None:
     statements = [
         """
@@ -90,6 +139,8 @@ def _migrate() -> None:
             project_id VARCHAR PRIMARY KEY,
             project_name VARCHAR NOT NULL,
             description VARCHAR NOT NULL DEFAULT '',
+            countries VARCHAR NOT NULL DEFAULT '',
+            systems VARCHAR NOT NULL DEFAULT '',
             owner_id VARCHAR NOT NULL,
             status VARCHAR NOT NULL,
             created_at TIMESTAMP NOT NULL,
@@ -129,27 +180,12 @@ def _migrate() -> None:
             name VARCHAR NOT NULL,
             description VARCHAR NOT NULL DEFAULT '',
             is_system BOOLEAN NOT NULL DEFAULT FALSE,
+            allow_multiple BOOLEAN NOT NULL DEFAULT FALSE,
             created_at TIMESTAMP NOT NULL,
             updated_at TIMESTAMP NOT NULL
         )
         """,
-        """
-        CREATE TABLE IF NOT EXISTS project_documents (
-            document_id VARCHAR PRIMARY KEY,
-            project_id VARCHAR NOT NULL,
-            layout_id VARCHAR NOT NULL,
-            content_json VARCHAR NOT NULL,
-            status VARCHAR NOT NULL,
-            last_modified TIMESTAMP NOT NULL,
-            generated_at TIMESTAMP,
-            submitted_by VARCHAR,
-            approved_by VARCHAR,
-            approved_at TIMESTAMP,
-            created_at TIMESTAMP NOT NULL,
-            structure_json VARCHAR,
-            UNIQUE (project_id, layout_id)
-        )
-        """,
+        PROJECT_DOCUMENTS_DDL.format(table="project_documents"),
         """
         CREATE TABLE IF NOT EXISTS rag_inventory (
             rag_id VARCHAR PRIMARY KEY,
@@ -422,6 +458,11 @@ def _ensure_project_description() -> None:
     }
     if "description" not in columns:
         _conn.execute("ALTER TABLE projects ADD COLUMN description VARCHAR DEFAULT ''")
+    # Project scope: comma lists of country and system codes; empty means every country / system.
+    for name in ("countries", "systems"):
+        if name not in columns:
+            _conn.execute(f"ALTER TABLE projects ADD COLUMN {name} VARCHAR DEFAULT ''")
+            _conn.execute(f"UPDATE projects SET {name} = '' WHERE {name} IS NULL")
 
 
 def _ensure_columns() -> None:
@@ -449,6 +490,27 @@ def _ensure_columns() -> None:
     }
     if "structure_json" not in document_columns:
         _conn.execute("ALTER TABLE project_documents ADD COLUMN structure_json VARCHAR")
+    _rebuild_project_documents_without_unique()
+    document_columns = {
+        row[0]
+        for row in _conn.execute(
+            "SELECT column_name FROM information_schema.columns WHERE table_name = 'project_documents'"
+        ).fetchall()
+    }
+    if "title" not in document_columns:
+        _conn.execute("ALTER TABLE project_documents ADD COLUMN title VARCHAR DEFAULT ''")
+        _conn.execute("UPDATE project_documents SET title = '' WHERE title IS NULL")
+    layout_columns = {
+        row[0]
+        for row in _conn.execute(
+            "SELECT column_name FROM information_schema.columns WHERE table_name = 'document_layouts'"
+        ).fetchall()
+    }
+    if "allow_multiple" not in layout_columns:
+        _conn.execute("ALTER TABLE document_layouts ADD COLUMN allow_multiple BOOLEAN DEFAULT FALSE")
+        _conn.execute("UPDATE document_layouts SET allow_multiple = FALSE WHERE allow_multiple IS NULL")
+        # seeded default: a project can hold several Interface Specifications documents
+        _conn.execute("UPDATE document_layouts SET allow_multiple = TRUE WHERE layout_id = ?", [INTERFACE_LAYOUT_ID])
     for table in ("systems", "interfaces"):
         present = {
             row[0]
@@ -633,16 +695,16 @@ def _seed_llm_providers() -> None:
     )
 
 
-def _ensure_layout(layout_id: str, name: str, description: str) -> bool:
+def _ensure_layout(layout_id: str, name: str, description: str, allow_multiple: bool = False) -> bool:
     """Create a system layout row if missing. Returns True when it was created."""
     if fetchone("SELECT layout_id FROM document_layouts WHERE layout_id = ?", [layout_id]):
         return False
     exec_sql(
         """
-        INSERT INTO document_layouts (layout_id, name, description, is_system, created_at, updated_at)
-        VALUES (?, ?, ?, TRUE, ?, ?)
+        INSERT INTO document_layouts (layout_id, name, description, is_system, allow_multiple, created_at, updated_at)
+        VALUES (?, ?, ?, TRUE, ?, ?, ?)
         """,
-        [layout_id, name, description, _now(), _now()],
+        [layout_id, name, description, allow_multiple, _now(), _now()],
     )
     return True
 
@@ -689,9 +751,9 @@ def default_section_prompt(document_name: str, name: str, hint: str) -> str:
     return prompt
 
 
-def _seed_code_layout(layout_id: str, name: str, description: str, sections: list[dict]) -> None:
+def _seed_code_layout(layout_id: str, name: str, description: str, sections: list[dict], allow_multiple: bool = False) -> None:
     """Seed a built-in layout defined in seed_layouts.py (only when the layout does not exist yet)."""
-    if not _ensure_layout(layout_id, name, description):
+    if not _ensure_layout(layout_id, name, description, allow_multiple):
         return
     used: set[str] = set()
 
@@ -730,7 +792,7 @@ def _seed_code_layout(layout_id: str, name: str, description: str, sections: lis
 
 
 def _seed_interface_layout() -> None:
-    _seed_code_layout(INTERFACE_LAYOUT_ID, INTERFACE_LAYOUT_NAME, INTERFACE_LAYOUT_DESCRIPTION, INTERFACE_SECTIONS)
+    _seed_code_layout(INTERFACE_LAYOUT_ID, INTERFACE_LAYOUT_NAME, INTERFACE_LAYOUT_DESCRIPTION, INTERFACE_SECTIONS, allow_multiple=True)
 
 
 def _seed_fmea_layout() -> None:
@@ -769,6 +831,248 @@ def _backfill_structures() -> None:
             "UPDATE project_documents SET structure_json = ? WHERE document_id = ?",
             [json.dumps(layout_snapshot(row["layout_id"])), row["document_id"]],
         )
+
+
+def _is_redundant_intro_header(block: dict) -> bool:
+    """The header block the Interface and FMEA layouts once put in Introduction; the section title already says it."""
+    return block.get("type") == "header" and str(block.get("text") or "").strip().lower() in {"", "introduction"}
+
+
+def _drop_intro_header_blocks() -> None:
+    """Remove that header block (and its Large/Medium/Small size picker) from the layouts and their documents."""
+    for layout_id in (INTERFACE_LAYOUT_ID, FMEA_LAYOUT_ID):
+        template_id = f"{layout_id}--introduction"
+        row = fetchone("SELECT schema_json FROM layout_templates WHERE template_id = ?", [template_id])
+        if row is not None:
+            schema = json.loads(row["schema_json"]) if isinstance(row["schema_json"], str) else row["schema_json"]
+            blocks = (schema or {}).get("blocks") or []
+            kept = [block for block in blocks if not _is_redundant_intro_header(block)]
+            if len(kept) != len(blocks):
+                exec_sql(
+                    "UPDATE layout_templates SET schema_json = ?, content_kind = ? WHERE template_id = ?",
+                    [json.dumps({**schema, "blocks": kept}), kind_from_blocks(kept), template_id],
+                )
+        for document in fetchall(
+            "SELECT document_id, content_json, structure_json FROM project_documents WHERE layout_id = ?", [layout_id]
+        ):
+            content = json.loads(document["content_json"]) if document["content_json"] else None
+            section = ((content or {}).get("sections") or {}).get(template_id)
+            content_changed = False
+            if section and any(_is_redundant_intro_header(block) for block in section.get("blocks") or []):
+                section["blocks"] = [block for block in section["blocks"] if not _is_redundant_intro_header(block)]
+                content_changed = True
+            structure = json.loads(document["structure_json"]) if document.get("structure_json") else None
+            structure_changed = False
+            for entry in structure or []:
+                if entry.get("template_id") != template_id:
+                    continue
+                schema = entry.get("schema_json") or {}
+                blocks = schema.get("blocks") or []
+                kept = [block for block in blocks if not _is_redundant_intro_header(block)]
+                if len(kept) != len(blocks):
+                    entry["schema_json"] = {**schema, "blocks": kept}
+                    entry["content_kind"] = kind_from_blocks(kept)
+                    structure_changed = True
+            if content_changed:
+                exec_sql("UPDATE project_documents SET content_json = ? WHERE document_id = ?", [json.dumps(content), document["document_id"]])
+            if structure_changed:
+                exec_sql("UPDATE project_documents SET structure_json = ? WHERE document_id = ?", [json.dumps(structure), document["document_id"]])
+
+
+TEST_CASE_SECTION = "inventory-of-test-cases"
+SPRINT_SECTIONS = ("sprint-1", "sprint-2")
+OLD_TEST_CASE_COLUMNS = ["No", "App Name", "Action", "VAL ID"]
+
+
+def _schema_dict(value) -> dict:
+    if isinstance(value, str):
+        return json.loads(value) if value else {}
+    return value or {}
+
+
+def _table_column_sets(schema: dict) -> list[list]:
+    return [list(block.get("columns") or []) for block in (schema.get("blocks") or []) if block.get("type") == "table"]
+
+
+def _test_case_inventory_is_old(schema: dict, section_ids: set[str]) -> bool:
+    if section_ids & set(SPRINT_SECTIONS):
+        return True
+    return any(columns == OLD_TEST_CASE_COLUMNS for columns in _table_column_sets(schema))
+
+
+def _migrate_test_case_inventory() -> None:
+    """Replace the sprint tables with the single test-case inventory table, including its prompt."""
+    fresh = next((item for item in parse_template(template_path()) if item["template_id"] == TEST_CASE_SECTION), None)
+    if fresh is None:
+        return
+    row = fetchone(
+        "SELECT schema_json FROM layout_templates WHERE template_id = ? AND layout_id = ?",
+        [TEST_CASE_SECTION, SDD_LAYOUT_ID],
+    )
+    children = fetchall(
+        "SELECT template_id FROM layout_templates WHERE parent_id = ? AND layout_id = ?",
+        [TEST_CASE_SECTION, SDD_LAYOUT_ID],
+    )
+    child_ids = {item["template_id"] for item in children}
+    if row is not None and _test_case_inventory_is_old(_schema_dict(row["schema_json"]), child_ids):
+        exec_sql(
+            """
+            UPDATE layout_templates
+            SET schema_json = ?, hint = ?, system_prompt = ?, content_kind = ?
+            WHERE template_id = ? AND layout_id = ?
+            """,
+            [
+                json.dumps(fresh["schema_json"]),
+                fresh["hint"],
+                fresh["system_prompt"],
+                fresh["content_kind"],
+                TEST_CASE_SECTION,
+                SDD_LAYOUT_ID,
+            ],
+        )
+        exec_sql(
+            "DELETE FROM layout_templates WHERE template_id IN (?, ?) AND parent_id = ?",
+            [*SPRINT_SECTIONS, TEST_CASE_SECTION],
+        )
+    from app.content import blocks_from_schema
+    from app.missing import evaluate_missing
+
+    blank_blocks = blocks_from_schema(fresh["schema_json"]["blocks"])
+    for document in fetchall("SELECT document_id, content_json, structure_json FROM project_documents WHERE layout_id = ?", [SDD_LAYOUT_ID]):
+        structure = json.loads(document["structure_json"]) if document.get("structure_json") else None
+        if not isinstance(structure, list):
+            continue
+        ids = {entry.get("template_id") for entry in structure}
+        parent = next((entry for entry in structure if entry.get("template_id") == TEST_CASE_SECTION), None)
+        if parent is None or not _test_case_inventory_is_old(_schema_dict(parent.get("schema_json")), ids):
+            continue
+        kept = [entry for entry in structure if entry.get("template_id") not in SPRINT_SECTIONS]
+        for entry in kept:
+            if entry.get("template_id") != TEST_CASE_SECTION:
+                continue
+            entry["schema_json"] = fresh["schema_json"]
+            entry["hint"] = fresh["hint"]
+            entry["system_prompt"] = fresh["system_prompt"]
+            entry["content_kind"] = fresh["content_kind"]
+        content = json.loads(document["content_json"]) if document.get("content_json") else {"sections": {}}
+        sections = content.setdefault("sections", {})
+        for section_id in SPRINT_SECTIONS:
+            sections.pop(section_id, None)
+        section = sections.get(TEST_CASE_SECTION)
+        if isinstance(section, dict):
+            section["blocks"] = json.loads(json.dumps(blank_blocks))
+        else:
+            sections[TEST_CASE_SECTION] = {
+                "template_id": TEST_CASE_SECTION,
+                "title": fresh["section_name"],
+                "blocks": json.loads(json.dumps(blank_blocks)),
+                "missing": [],
+            }
+        content = evaluate_missing(content)
+        exec_sql(
+            "UPDATE project_documents SET content_json = ?, structure_json = ? WHERE document_id = ?",
+            [json.dumps(content), json.dumps(kept), document["document_id"]],
+        )
+
+
+LONG_TEST_TYPE = "Test Type (Progression/Regression/Negative testing/Non-functional)"
+
+
+def _rename_column_list(columns: list) -> tuple[list, bool]:
+    if LONG_TEST_TYPE not in columns:
+        return columns, False
+    return ["Test Type" if item == LONG_TEST_TYPE else item for item in columns], True
+
+
+def _rename_test_type_blocks(blocks: list) -> bool:
+    changed = False
+    for block in blocks:
+        if not isinstance(block, dict) or block.get("type") != "table":
+            continue
+        columns, renamed = _rename_column_list(list(block.get("columns") or []))
+        if renamed:
+            block["columns"] = columns
+            changed = True
+    return changed
+
+
+def _rename_test_type_column() -> None:
+    """Shorten the Test Type header. Cell values stay in place; the editor offers them as a dropdown."""
+    row = fetchone(
+        "SELECT schema_json FROM layout_templates WHERE template_id = ? AND layout_id = ?",
+        [TEST_CASE_SECTION, SDD_LAYOUT_ID],
+    )
+    if row is not None:
+        schema = _schema_dict(row["schema_json"])
+        if _rename_test_type_blocks(schema.get("blocks") or []):
+            exec_sql(
+                "UPDATE layout_templates SET schema_json = ? WHERE template_id = ? AND layout_id = ?",
+                [json.dumps(schema), TEST_CASE_SECTION, SDD_LAYOUT_ID],
+            )
+    for document in fetchall("SELECT document_id, content_json, structure_json FROM project_documents WHERE layout_id = ?", [SDD_LAYOUT_ID]):
+        structure = json.loads(document["structure_json"]) if document.get("structure_json") else None
+        content = json.loads(document["content_json"]) if document.get("content_json") else None
+        structure_changed = False
+        for entry in structure or []:
+            schema = entry.get("schema_json") or {}
+            if _rename_test_type_blocks(schema.get("blocks") or []):
+                entry["schema_json"] = schema
+                structure_changed = True
+        content_changed = False
+        if isinstance(content, dict):
+            for section in (content.get("sections") or {}).values():
+                if isinstance(section, dict) and _rename_test_type_blocks(section.get("blocks") or []):
+                    content_changed = True
+        if structure_changed or content_changed:
+            exec_sql(
+                "UPDATE project_documents SET content_json = ?, structure_json = ? WHERE document_id = ?",
+                [
+                    json.dumps(content) if content_changed and content is not None else document["content_json"],
+                    json.dumps(structure) if structure_changed and structure is not None else document["structure_json"],
+                    document["document_id"],
+                ],
+            )
+
+
+# Tables that can be filled from the Knowledge Base, by section. Only set where a table has no `source` yet,
+# so an admin who clears it in the layout editor keeps that choice.
+KB_TABLE_SOURCES = {
+    "inventory-of-capabilities": "capabilities",
+    "interfaces-summary": "interfaces",
+    "interfaces-details": "interfaces",
+    "inventory-of-reports": "reports",
+    "new-updated-tables": "tables",
+    f"{INTERFACE_LAYOUT_ID}--interface-summary": "interfaces",
+}
+
+
+def _with_kb_source(schema: dict, source: str) -> dict | None:
+    blocks = (schema or {}).get("blocks") or []
+    first = next((block for block in blocks if block.get("type") == "table"), None)
+    if first is None or "source" in first:
+        return None
+    first["source"] = source
+    return schema
+
+
+def _seed_kb_sources() -> None:
+    for template_id, source in KB_TABLE_SOURCES.items():
+        row = fetchone("SELECT schema_json FROM layout_templates WHERE template_id = ?", [template_id])
+        if row is None:
+            continue
+        schema = json.loads(row["schema_json"]) if isinstance(row["schema_json"], str) else row["schema_json"]
+        updated = _with_kb_source(schema, source)
+        if updated is not None:
+            exec_sql("UPDATE layout_templates SET schema_json = ? WHERE template_id = ?", [json.dumps(updated), template_id])
+    for document in fetchall("SELECT document_id, structure_json FROM project_documents WHERE structure_json IS NOT NULL"):
+        structure = json.loads(document["structure_json"])
+        changed = False
+        for entry in structure:
+            source = KB_TABLE_SOURCES.get(entry.get("template_id"))
+            if source and _with_kb_source(entry.get("schema_json") or {}, source) is not None:
+                changed = True
+        if changed:
+            exec_sql("UPDATE project_documents SET structure_json = ? WHERE document_id = ?", [json.dumps(structure), document["document_id"]])
 
 
 def _migrate_seed_login_ids() -> None:
@@ -848,6 +1152,10 @@ def _seed() -> None:
     _seed_fmea_layout()
     _migrate_documents()
     _backfill_structures()
+    _drop_intro_header_blocks()
+    _seed_kb_sources()
+    _migrate_test_case_inventory()
+    _rename_test_type_column()
     if fetchone("SELECT settings_id FROM app_settings WHERE settings_id = 'default'") is None:
         exec_sql(
             """

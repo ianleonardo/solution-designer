@@ -21,7 +21,13 @@ def list_projects(user: dict = Depends(current_user)):
 
 @router.post("/projects")
 def create_project(body: dict, user: dict = Depends(current_user)):
-    return projects.create_project(user, str(body.get("project_name") or ""), str(body.get("description") or ""))
+    return projects.create_project(
+        user,
+        str(body.get("project_name") or ""),
+        str(body.get("description") or ""),
+        body.get("countries"),
+        body.get("systems"),
+    )
 
 
 @router.get("/projects/{project_id}")
@@ -39,6 +45,8 @@ def update_project(project_id: str, body: dict, user: dict = Depends(current_use
         project_id,
         None if name is None else str(name),
         None if description is None else str(description),
+        body.get("countries"),
+        body.get("systems"),
     )
 
 

@@ -26,7 +26,8 @@ test("adds each kind of block with sensible defaults", () => {
 test("edits table columns and header settings", () => {
   render(<Harness initial={[{ type: "header", text: "", level: 1 }, { type: "table", columns: ["A"] }]} />);
   fireEvent.change(screen.getByLabelText("Block 1 header text"), { target: { value: "Overview" } });
-  fireEvent.change(screen.getByLabelText("Block 1 header size"), { target: { value: "3" } });
+  fireEvent.click(screen.getByRole("button", { name: "Block 1 header size" }));
+  fireEvent.click(screen.getByRole("option", { name: "Small" }));
   fireEvent.click(screen.getByRole("button", { name: "Add column" }));
   fireEvent.change(screen.getByLabelText("Block 2 column 2"), { target: { value: "B" } });
   expect(latest[0]).toEqual({ type: "header", text: "Overview", level: 3 });

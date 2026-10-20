@@ -1,6 +1,8 @@
 import { useState } from "react";
 import { Link, Outlet, useNavigate } from "react-router-dom";
 import { useAuth } from "../auth";
+import { AnimatedLogo } from "./AnimatedLogo";
+import { AnimatedWordmark } from "./AnimatedWordmark";
 import { THEME_LABELS, themeIcon, useTheme } from "../theme";
 import { ChatWidget } from "./ChatWidget";
 import { SideNav } from "./SideNav";
@@ -21,12 +23,11 @@ export function Shell() {
             <span className="material-symbols-outlined">menu</span>
           </button>
           <Link to="/" className="flex items-center gap-2">
-            <span className="h-8 w-8 rounded bg-cobalt text-on-cobalt flex items-center justify-center">
-              <span className="material-symbols-outlined">hub</span>
+            <span className="h-8 w-8 shrink-0 flex items-center justify-center">
+              <AnimatedLogo className="h-full w-full" />
             </span>
             <span className="font-wordmark text-xl font-bold leading-8 tracking-tight whitespace-nowrap sm:text-[32px]" data-testid="wordmark">
-              <span>Spec</span>
-              <span className="text-accent">Forge</span>
+              <AnimatedWordmark />
             </span>
           </Link>
         </div>

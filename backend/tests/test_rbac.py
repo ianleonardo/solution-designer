@@ -1,4 +1,3 @@
-import pytest
 from tests.conftest import auth, login
 
 
@@ -16,14 +15,9 @@ def test_reader_cannot_create_and_project_has_one_document_per_layout(client):
 
     rows = db.fetchall("SELECT document_id FROM project_documents WHERE project_id = ?", [project_id])
     assert len(rows) == 1
-    with pytest.raises(Exception):
-        db.exec_sql(
-            """
-            INSERT INTO project_documents (document_id, project_id, layout_id, content_json, status, last_modified, created_at)
-            VALUES ('second', ?, 'sdd', '{}', 'draft', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
-            """,
-            [project_id],
-        )
+    # one-per-project is now a layout setting enforced by the app (the SDD is always single)
+    second = client.post(f"/api/projects/{project_id}/documents", json={"layout_id": "sdd"}, headers=auth(writer))
+    assert second.status_code == 400
     rows = db.fetchall("SELECT document_id FROM project_documents WHERE project_id = ?", [project_id])
     assert len(rows) == 1
 

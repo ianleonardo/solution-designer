@@ -517,16 +517,16 @@ function ColumnFormDialog({
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
           <label className="block">
             <span className="font-label text-[10px] uppercase text-muted">Is Null</span>
-            <select
-              className="field mt-1"
-              aria-label="Is Null"
-              value={isNull}
-              disabled={busy}
-              onChange={(event) => setIsNull(event.target.value)}
-            >
-              <option value="N">N</option>
-              <option value="Y">Y</option>
-            </select>
+            <div className="mt-1">
+              <SelectField
+                aria-label="Is Null"
+                value={isNull}
+                disabled={busy}
+                className="w-full [&_button]:w-full [&_button]:max-w-none"
+                options={[{ value: "N", label: "N" }, { value: "Y", label: "Y" }]}
+                onChange={setIsNull}
+              />
+            </div>
           </label>
           <label className="block">
             <span className="font-label text-[10px] uppercase text-muted">Primary key</span>

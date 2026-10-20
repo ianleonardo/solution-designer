@@ -1,4 +1,4 @@
-"""Project documents: each project holds one document per layout (SDD, Interface Specifications, ...)."""
+"""Project documents: one per layout, or several when the layout allows multiple (SDD, Interface Specifications, ...)."""
 
 import json
 import uuid
@@ -9,10 +9,10 @@ from app.config import CONTENT_AUTHORS
 from app.content import blank_content, sanitize_content
 from app.errors import AppError
 from app.missing import evaluate_missing
-from app.services import gcs
+from app.services import gcs, kb_links
 
 _SELECT = """
-    SELECT d.*, l.name AS name
+    SELECT d.*, COALESCE(NULLIF(trim(d.title), ''), l.name) AS name, l.name AS layout_name
     FROM project_documents d JOIN document_layouts l ON l.layout_id = d.layout_id
 """
 
@@ -84,7 +84,8 @@ def payload(row: dict, with_templates: bool = False) -> dict:
         "project_id": row["project_id"],
         "layout_id": row["layout_id"],
         "name": row["name"],
-        "content_json": sanitize_content(content, templates),
+        "layout_name": row["layout_name"],
+        "content_json": kb_links.annotate(sanitize_content(content, templates)),
         "last_modified": row["last_modified"],
         "generated_at": row["generated_at"],
     }
@@ -107,7 +108,7 @@ def touch_project(project_id: str) -> None:
     db.exec_sql("UPDATE projects SET last_modified = ? WHERE project_id = ?", [_now(), project_id])
 
 
-def create_blank(project_id: str, layout_id: str, now: datetime | None = None) -> str:
+def create_blank(project_id: str, layout_id: str, now: datetime | None = None, title: str = "") -> str:
     templates = db.layout_snapshot(layout_id)
     if not templates:
         raise AppError(400, "That layout has no sections yet")
@@ -116,25 +117,48 @@ def create_blank(project_id: str, layout_id: str, now: datetime | None = None) -
     db.exec_sql(
         """
         INSERT INTO project_documents (
-            document_id, project_id, layout_id, content_json, status, last_modified, generated_at,
+            document_id, project_id, layout_id, title, content_json, status, last_modified, generated_at,
             submitted_by, approved_by, approved_at, created_at, structure_json
-        ) VALUES (?, ?, ?, ?, 'draft', ?, NULL, NULL, NULL, NULL, ?, ?)
+        ) VALUES (?, ?, ?, ?, ?, 'draft', ?, NULL, NULL, NULL, NULL, ?, ?)
         """,
-        [document_id, project_id, layout_id, json.dumps(blank_content(templates)), moment, moment, json.dumps(templates)],
+        [document_id, project_id, layout_id, title, json.dumps(blank_content(templates)), moment, moment, json.dumps(templates)],
     )
     return document_id
 
 
-def create_document(user: dict, project_id: str, layout_id: str) -> dict:
+def _document_title(project_id: str, layout: dict, title: str) -> str:
+    """The stored title for a new copy. Empty means the tab shows the layout name; extra copies need a distinct name."""
+    cleaned = " ".join((title or "").split())
+    if len(cleaned) > 100:
+        raise AppError(400, "Document name must be 100 characters or fewer")
+    taken = {
+        row["name"].lower()
+        for row in db.fetchall(f"{_SELECT} WHERE d.project_id = ?", [project_id])
+    }
+    if not cleaned:
+        if layout["name"].lower() not in taken:
+            return ""
+        number = 2
+        while f"{layout['name']} {number}".lower() in taken:
+            number += 1
+        return f"{layout['name']} {number}"
+    if cleaned.lower() in taken:
+        raise AppError(400, "This project already has a document with that name")
+    return "" if cleaned == layout["name"] else cleaned
+
+
+def create_document(user: dict, project_id: str, layout_id: str, title: str = "") -> dict:
     _ensure(user, CONTENT_AUTHORS)
     require_project(project_id)
-    if db.fetchone("SELECT layout_id FROM document_layouts WHERE layout_id = ?", [layout_id]) is None:
+    layout = db.fetchone("SELECT layout_id, name, allow_multiple FROM document_layouts WHERE layout_id = ?", [layout_id])
+    if layout is None:
         raise AppError(404, "Layout not found")
-    if db.fetchone(
+    existing = db.fetchone(
         "SELECT document_id FROM project_documents WHERE project_id = ? AND layout_id = ?", [project_id, layout_id]
-    ):
+    )
+    if existing and not layout["allow_multiple"]:
         raise AppError(400, "This project already has that document")
-    document_id = create_blank(project_id, layout_id)
+    document_id = create_blank(project_id, layout_id, title=_document_title(project_id, layout, title))
     touch_project(project_id)
     gcs.upload_db()
     return payload(document_row(project_id, document_id), with_templates=True)

@@ -15,11 +15,12 @@ const doc = (id: string, layout: string, name: string): ProjectDocument => ({
   templates: [],
 });
 
-const layout = (id: string, name: string, sections = 3): LayoutSummary => ({
+const layout = (id: string, name: string, sections = 3, allowMultiple = false): LayoutSummary => ({
   layout_id: id,
   name,
   description: "",
   is_system: false,
+  allow_multiple: allowMultiple,
   section_count: sections,
   document_count: 0,
   created_at: "",
@@ -58,10 +59,12 @@ test("adding offers only layouts that are unused and have sections", async () =>
   const props = setup();
   fireEvent.click(screen.getByRole("button", { name: /Add document/ }));
   const dialog = screen.getByRole("dialog", { name: "Add document" });
-  const options = within(dialog).getAllByRole("option").map((option) => option.textContent);
-  expect(options).toEqual(["Runbook"]);
+  fireEvent.click(within(dialog).getByRole("button", { name: "Document type" }));
+  expect(screen.getAllByRole("option")).toHaveLength(1);
+  expect(screen.getByRole("option", { name: /Runbook/ })).toBeTruthy();
+  fireEvent.click(screen.getByRole("option", { name: /Runbook/ }));
   fireEvent.click(within(dialog).getByRole("button", { name: "Add" }));
-  await waitFor(() => expect(props.onAdd).toHaveBeenCalledWith("run"));
+  await waitFor(() => expect(props.onAdd).toHaveBeenCalledWith("run", ""));
   await waitFor(() => expect(screen.queryByRole("dialog", { name: "Add document" })).toBeNull());
 });
 
@@ -79,4 +82,28 @@ test("viewers cannot add or remove, and a single document cannot be removed", ()
   cleanup();
   setup({ documents: [doc("d1", "sdd", "Solution Design Document")] });
   expect(screen.queryByLabelText(/^Remove /)).toBeNull();
+});
+
+test("a layout that allows multiple stays on offer and asks for a name for the copy", async () => {
+  const props = setup({
+    layouts: [layout("sdd", "Solution Design Document"), layout("ifc", "Interface Specifications Document", 3, true)],
+  });
+  fireEvent.click(screen.getByRole("button", { name: /Add document/ }));
+  const dialog = screen.getByRole("dialog", { name: "Add document" });
+  const name = within(dialog).getByRole("textbox", { name: "Document name" }) as HTMLInputElement;
+  expect(name.placeholder).toBe("Interface Specifications Document 2");
+  expect(within(dialog).getByText(/already has 1 of this document/)).toBeTruthy();
+  fireEvent.change(name, { target: { value: "Payments interfaces" } });
+  fireEvent.click(within(dialog).getByRole("button", { name: "Add" }));
+  await waitFor(() => expect(props.onAdd).toHaveBeenCalledWith("ifc", "Payments interfaces"));
+});
+
+test("single-document layouts already in the project are not offered and ask no name", () => {
+  setup({ layouts: [layout("ifc", "Interface Specifications Document"), layout("run", "Runbook")] });
+  fireEvent.click(screen.getByRole("button", { name: /Add document/ }));
+  const dialog = screen.getByRole("dialog", { name: "Add document" });
+  expect(within(dialog).queryByRole("textbox", { name: "Document name" })).toBeNull();
+  fireEvent.click(within(dialog).getByRole("button", { name: "Document type" }));
+  expect(screen.getAllByRole("option")).toHaveLength(1);
+  expect(screen.getByRole("option", { name: /Runbook/ })).toBeTruthy();
 });

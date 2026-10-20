@@ -81,6 +81,9 @@ def render_markdown(project_name: str, templates: list[dict], content: dict) -> 
                     lines.append("")
             elif block.get("type") == "table":
                 columns = block.get("columns") or []
+                if block.get("table_name"):
+                    lines.append(f"**Table Name:** {block['table_name']}")
+                    lines.append("")
                 lines.append(f"| {_cells(columns)} |")
                 lines.append(f"| {_cells(['---'] * len(columns))} |")
                 for row in block.get("rows") or []:
@@ -180,6 +183,8 @@ def _render_html(
                 parts.append(_html_text(str(block["markdown"])))
             elif block.get("type") == "table":
                 columns = block.get("columns") or []
+                if block.get("table_name"):
+                    parts.append(f"<p><strong>Table Name:</strong> {html.escape(str(block['table_name']))}</p>")
                 parts.append("<table><thead><tr>")
                 parts.extend(f"<th>{html.escape(column)}</th>" for column in columns)
                 parts.append("</tr></thead><tbody>")

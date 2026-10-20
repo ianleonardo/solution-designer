@@ -54,9 +54,9 @@ function setup(role: Role, path = "/projects/p1") {
       ]),
     ],
     layouts: [
-      { layout_id: "sdd", name: "Solution Design Document", description: "", is_system: true, section_count: 5, document_count: 1, created_at: "", updated_at: "" },
-      { layout_id: "ifc", name: "Interface Specifications Document", description: "", is_system: true, section_count: 5, document_count: 1, created_at: "", updated_at: "" },
-      { layout_id: "run", name: "Runbook", description: "", is_system: false, section_count: 2, document_count: 0, created_at: "", updated_at: "" },
+      { layout_id: "sdd", name: "Solution Design Document", description: "", is_system: true, allow_multiple: false, section_count: 5, document_count: 1, created_at: "", updated_at: "" },
+      { layout_id: "ifc", name: "Interface Specifications Document", description: "", is_system: true, allow_multiple: false, section_count: 5, document_count: 1, created_at: "", updated_at: "" },
+      { layout_id: "run", name: "Runbook", description: "", is_system: false, allow_multiple: false, section_count: 2, document_count: 0, created_at: "", updated_at: "" },
     ],
     references: [],
   };
@@ -180,7 +180,9 @@ test("adds a document from an unused layout and opens it", async () => {
   await screen.findByRole("tablist", { name: "Documents" });
   fireEvent.click(screen.getByRole("button", { name: /Add document/ }));
   const dialog = screen.getByRole("dialog", { name: "Add document" });
-  expect(within(dialog).getAllByRole("option").map((option) => option.textContent)).toEqual(["Runbook"]);
+  fireEvent.click(within(dialog).getByRole("button", { name: "Document type" }));
+  expect(screen.getAllByRole("option")).toHaveLength(1);
+  fireEvent.click(screen.getByRole("option", { name: /Runbook/ }));
   fireEvent.click(within(dialog).getByRole("button", { name: "Add" }));
   expect(await screen.findByRole("heading", { name: "Operations" })).toBeTruthy();
   const post = calls.find((call) => call.url === "/api/projects/p1/documents" && call.method === "POST")!;
@@ -292,9 +294,10 @@ test("section settings send the changed blocks and prompt", async () => {
 
 test("the header size can be changed in the document and is saved", async () => {
   setup("Analyst", "/projects/p1/documents/d2");
-  const size = (await screen.findByLabelText("Header size")) as HTMLSelectElement;
-  expect(size.value).toBe("1");
-  fireEvent.change(size, { target: { value: "3" } });
+  const size = await screen.findByRole("button", { name: "Header size" });
+  expect(size.textContent).toContain("Large");
+  fireEvent.click(size);
+  fireEvent.click(screen.getByRole("option", { name: "Small" }));
   await waitFor(() => expect(calls.some((call) => call.method === "PUT")).toBe(true), { timeout: 3000 });
   const put = calls.find((call) => call.method === "PUT")!;
   expect(JSON.parse(put.body).content_json.sections.intro.blocks[0]).toMatchObject({ text: "Interfaces", level: 3 });
@@ -302,7 +305,7 @@ test("the header size can be changed in the document and is saved", async () => 
 
 test("viewers cannot change the header size", async () => {
   setup("Viewer", "/projects/p1/documents/d2");
-  expect(((await screen.findByLabelText("Header size")) as HTMLSelectElement).disabled).toBe(true);
+  expect(((await screen.findByRole("button", { name: "Header size" })) as HTMLButtonElement).disabled).toBe(true);
 });
 
 test("a writer auto fills one section with an extra instruction", async () => {

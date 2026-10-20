@@ -1,4 +1,5 @@
 import { ReactNode, useEffect, useState } from "react";
+import { SelectField } from "./SelectField";
 
 export const KB_PAGE_SIZES = [25, 50, 100] as const;
 export const KB_PAGE_SIZE = KB_PAGE_SIZES[0];
@@ -34,18 +35,12 @@ export function TablePager({ paging, pageSizes = KB_PAGE_SIZES }: { paging: Page
     <div className="flex flex-wrap items-center justify-between gap-3 px-3 py-2 text-sm text-muted" aria-label="Pagination">
       <label className="flex shrink-0 items-center gap-2 whitespace-nowrap">
         <span>Rows per page</span>
-        <select
-          className="field"
+        <SelectField
           aria-label="Rows per page"
-          value={paging.pageSize}
-          onChange={(event) => paging.setPageSize(Number(event.target.value))}
-        >
-          {pageSizes.map((size) => (
-            <option key={size} value={size}>
-              {size}
-            </option>
-          ))}
-        </select>
+          value={String(paging.pageSize)}
+          options={pageSizes.map((size) => ({ value: String(size), label: String(size) }))}
+          onChange={(value) => paging.setPageSize(Number(value))}
+        />
       </label>
       <span>
         {paging.start + 1}-{paging.end} of {paging.total}

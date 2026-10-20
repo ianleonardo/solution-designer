@@ -89,8 +89,9 @@ describe("AuditLogPage", () => {
   it("asks the API again when a filter changes", async () => {
     const fetchMock = setup([entry(1)]);
     await screen.findByText("Create project: Project 1");
+    fireEvent.click(screen.getByRole("button", { name: "Filter by action" }));
     await waitFor(() => expect(screen.getByRole("option", { name: "Delete user" })).toBeTruthy());
-    fireEvent.change(screen.getByLabelText("Action"), { target: { value: "delete_user" } });
+    fireEvent.click(screen.getByRole("option", { name: "Delete user" }));
     expect((screen.getByLabelText("From") as HTMLInputElement).placeholder).toBe("DD/MM/YYYY");
     expect((screen.getByLabelText("To") as HTMLInputElement).placeholder).toBe("DD/MM/YYYY");
     fireEvent.change(screen.getByLabelText("From"), { target: { value: "01/10/2026" } });
@@ -99,7 +100,7 @@ describe("AuditLogPage", () => {
       expect(fetchMock.mock.calls.some((call) => String(call[0]).includes("action=delete_user") && String(call[0]).includes("since=2026-10-01") && String(call[0]).includes("until=2026-10-14"))).toBe(true),
     );
     fireEvent.click(screen.getByRole("button", { name: "Clear filters" }));
-    await waitFor(() => expect((screen.getByLabelText("Action") as HTMLSelectElement).value).toBe(""));
+    await waitFor(() => expect(screen.getByRole("button", { name: "Filter by action" }).textContent).toContain("All actions"));
   });
 
   it("purges the dates chosen in the dialog", async () => {

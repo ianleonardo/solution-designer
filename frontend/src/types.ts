@@ -1,10 +1,33 @@
 export type Role = "Admin" | "Analyst" | "Viewer";
 
+/** Where a table row came from in the Knowledge Base. `state` is worked out on each load and never saved. */
+export type KbLink = {
+  kind: "capability" | "interface" | "report" | "column";
+  id: string;
+  owned: number[];
+  values: Record<string, string>;
+  table_id?: string;
+  state?: "ok" | "changed" | "deleted";
+};
+
+export type KbSource = "capabilities" | "interfaces" | "reports" | "tables";
+
+export type TableBlock = {
+  type: "table";
+  columns: string[];
+  rows: string[][];
+  /** One entry per row: the Knowledge Base item it was filled from, or null for a typed row. */
+  links?: (KbLink | null)[];
+  /** New/Updated Tables: the database table this field list belongs to. */
+  table_name?: string;
+  kb_table_id?: string;
+};
+
 export type Block =
   | { type: "header"; text: string; level: number }
   | { type: "image"; url: string; caption: string; alt: string }
   | { type: "prose"; markdown: string }
-  | { type: "table"; columns: string[]; rows: string[][] }
+  | TableBlock
   /** `sequence` only picks the starter text of a new diagram; any Mermaid can be written in the block. */
   | { type: "diagram"; sequence: boolean; mermaid: string };
 
@@ -22,7 +45,9 @@ export type Sdd = {
   document_id: string;
   project_id: string;
   layout_id: string;
+  /** The document's own name, or the layout name when it has none. */
   name: string;
+  layout_name?: string;
   content_json: { sections: Record<string, Section> };
   last_modified: string;
   generated_at: string | null;
@@ -47,6 +72,9 @@ export type Project = {
   project_id: string;
   project_name: string;
   description: string;
+  /** Scope codes; empty means all countries / all systems. */
+  countries?: string[];
+  systems?: string[];
   owner_id: string;
   owner_name: string;
   owner_role: Role;
@@ -71,7 +99,7 @@ export type ProjectDocument = Sdd & { templates: Template[] };
 export type BlockSpec =
   | { type: "header"; text: string; level: number }
   | { type: "prose" }
-  | { type: "table"; columns: string[]; rows?: string[][] }
+  | { type: "table"; columns: string[]; rows?: string[][]; source?: KbSource | "" }
   | { type: "image"; caption: string }
   | { type: "diagram"; sequence: boolean };
 
@@ -80,6 +108,8 @@ export type LayoutSummary = {
   name: string;
   description: string;
   is_system: boolean;
+  /** When true a project can hold several documents of this layout. */
+  allow_multiple: boolean;
   section_count: number;
   document_count: number;
   created_at: string;

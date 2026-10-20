@@ -9,6 +9,7 @@ const layout = (id: string, name: string, extra: Partial<LayoutSummary> = {}): L
   name,
   description: `${name} description`,
   is_system: false,
+  allow_multiple: false,
   section_count: 3,
   document_count: 0,
   created_at: "2026-01-01T00:00:00Z",
@@ -82,11 +83,12 @@ test("add layout creates it and opens the editor", async () => {
   fireEvent.click(screen.getByRole("button", { name: /Add layout/ }));
   const dialog = screen.getByRole("dialog", { name: "Add layout" });
   fireEvent.change(within(dialog).getByLabelText("Document name"), { target: { value: "Runbook" } });
-  fireEvent.change(within(dialog).getByLabelText("Start from"), { target: { value: "interface-spec" } });
+  fireEvent.click(within(dialog).getByRole("button", { name: "Start from" }));
+  fireEvent.click(screen.getByRole("option", { name: /Copy of Interface/ }));
   fireEvent.click(within(dialog).getByRole("button", { name: "Create layout" }));
   await waitFor(() => expect(screen.getByTestId("where").textContent).toBe("/settings/layouts/runbook"));
   const post = calls.find((call) => call.method === "POST")!;
-  expect(JSON.parse(post.body)).toEqual({ name: "Runbook", description: "", copy_from: "interface-spec" });
+  expect(JSON.parse(post.body)).toEqual({ name: "Runbook", description: "", copy_from: "interface-spec", allow_multiple: false });
 });
 
 test("delete asks for confirmation", async () => {

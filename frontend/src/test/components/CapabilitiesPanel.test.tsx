@@ -256,19 +256,58 @@ test("shows table columns and offers tables, batches and reports for the selecte
   fireEvent.click(screen.getByRole("button", { name: /Add capability/ }));
   const add = screen.getByRole("dialog", { name: "Add capability" });
   fireEvent.click(within(add).getByRole("button", { name: "Add tables" }));
-  const tablePicker = await screen.findByRole("dialog", { name: "Link table" });
-  expect(await within(tablePicker).findByText("SG · PIB.DBO.ACCT")).toBeTruthy();
-  expect(within(tablePicker).queryByText("MY · PIB.DBO.LOAN")).toBeNull();
+  const tablePicker = await screen.findByRole("dialog", { name: "Link tables" });
+  expect(await within(tablePicker).findByText("ACCT")).toBeTruthy();
+  expect(within(tablePicker).queryByText("LOAN")).toBeNull();
   fireEvent.click(within(tablePicker).getByRole("button", { name: "Cancel" }));
 
   fireEvent.click(within(add).getByRole("button", { name: "Add batches" }));
-  const batchPicker = await screen.findByRole("dialog", { name: "Link batch" });
-  expect(await within(batchPicker).findByText("SG · SPL · Nightly SG")).toBeTruthy();
-  expect(within(batchPicker).queryByText("MY · SPL · Nightly MY")).toBeNull();
+  const batchPicker = await screen.findByRole("dialog", { name: "Link batches" });
+  expect(await within(batchPicker).findByText("Nightly SG")).toBeTruthy();
+  expect(within(batchPicker).queryByText("Nightly MY")).toBeNull();
   fireEvent.click(within(batchPicker).getByRole("button", { name: "Cancel" }));
 
   fireEvent.click(within(add).getByRole("button", { name: "Add reports" }));
-  const reportPicker = await screen.findByRole("dialog", { name: "Link report" });
-  expect(await within(reportPicker).findByText("SG · SPL · SG Daily")).toBeTruthy();
-  expect(within(reportPicker).queryByText("MY · SPL · MY Daily")).toBeNull();
+  const reportPicker = await screen.findByRole("dialog", { name: "Link reports" });
+  expect(await within(reportPicker).findByText("SG Daily")).toBeTruthy();
+  expect(within(reportPicker).queryByText("MY Daily")).toBeNull();
+});
+
+test("link picker is a searchable table that links several items at once", async () => {
+  const batch = (batch_id: string, batch_name: string, country = "SG") => ({
+    batch_id, country, system_code: "SPL", batch_name, batch_type: "incoming", frequency: "", frequency_other: "",
+    to_from_systems: "", description: "", batch_filename: "", file_layout: "", created_at: "", last_modified: "",
+  });
+  vi.stubGlobal("localStorage", { getItem: () => JSON.stringify({ role_name: "Analyst", username: "a" }) });
+  vi.stubGlobal(
+    "fetch",
+    vi.fn().mockImplementation((url: string) => {
+      if (url === "/api/catalogs") return Promise.resolve(json({ countries: ["SG", "MY"], databases: [], interface_channels: ["EAI"] }));
+      if (url === "/api/systems")
+        return Promise.resolve(json([{ system_code: "SPL", system_name: "SPL Core", description: "", upstreams: "", downstreams: "", has_batch: false, has_report: false, has_capability: true }]));
+      if (url === "/api/capabilities") return Promise.resolve(json([capability]));
+      if (url === "/api/batches")
+        return Promise.resolve(json([batch("b1", "Nightly GL"), batch("b2", "Nightly Cards"), batch("b3", "Month-end Close"), batch("b4", "Nightly MY", "MY")]));
+      return Promise.resolve(json([]));
+    }),
+  );
+  renderPanel();
+  await waitFor(() => expect(screen.getByText("Payments")).toBeTruthy());
+  fireEvent.click(screen.getByRole("button", { name: /Add capability/ }));
+  const add = screen.getByRole("dialog", { name: "Add capability" });
+  fireEvent.click(within(add).getByRole("button", { name: "Add batches" }));
+  const picker = await screen.findByRole("dialog", { name: "Link batches" });
+  expect(await within(picker).findByText("Month-end Close")).toBeTruthy();
+  expect(within(picker).queryByText("Nightly MY")).toBeNull();
+
+  fireEvent.change(within(picker).getByRole("searchbox", { name: "Search batches" }), { target: { value: "nightly" } });
+  expect(within(picker).queryByText("Month-end Close")).toBeNull();
+  fireEvent.click(within(picker).getByRole("checkbox", { name: "Select all 2 shown" }));
+  expect(within(picker).getByText("2 of 3 shown · 2 selected")).toBeTruthy();
+  fireEvent.click(within(picker).getByRole("button", { name: "Link 2 selected" }));
+
+  await waitFor(() => expect(screen.queryByRole("dialog", { name: "Link batches" })).toBeNull());
+  expect(within(add).getByText("SPL · Nightly GL")).toBeTruthy();
+  expect(within(add).getByText("SPL · Nightly Cards")).toBeTruthy();
+  expect(within(add).queryByText("SPL · Month-end Close")).toBeNull();
 });

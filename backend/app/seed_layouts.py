@@ -29,7 +29,7 @@ INTERFACE_SECTIONS: list[dict] = [
     _section(
         "Introduction",
         "Explain why this document exists and what it covers.",
-        [{"type": "header", "text": "Introduction", "level": 1}, _prose()],
+        [_prose()],
         [
             _section("Purpose", "State the purpose of the interface specification and its intended audience.", [_prose()]),
             _section("Scope", "Describe which interfaces, systems and environments are in and out of scope.", [_prose()]),
@@ -171,7 +171,7 @@ FMEA_SECTIONS: list[dict] = [
     _section(
         "Introduction",
         "Explain why this FMEA is done and what it covers.",
-        [{"type": "header", "text": "Introduction", "level": 1}, _prose()],
+        [_prose()],
         [
             _section("Purpose", "State why this FMEA is done and which decisions it supports, such as go-live readiness.", [_prose()]),
             _section(

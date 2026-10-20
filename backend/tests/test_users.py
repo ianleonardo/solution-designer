@@ -103,6 +103,7 @@ def test_active_directory_user_has_no_stored_password(client, monkeypatch):
         seen["password"] = password
         if password != "DirectorySecret1":
             raise AppError(401, "Invalid login ID or password")
+        return "Ada Lovelace"
 
     monkeypatch.setattr("app.services.ldap_auth.authenticate", fake)
     admin = login(client, "Admin")
@@ -126,6 +127,7 @@ def test_active_directory_user_has_no_stored_password(client, monkeypatch):
     signed_in = client.post("/api/auth/login", json={"login_id": "ada", "password": "DirectorySecret1"})
     assert signed_in.status_code == 200, signed_in.text
     assert seen == {"login_id": "ada", "password": "DirectorySecret1"}
+    assert signed_in.json()["user"]["username"] == "Ada Lovelace"
     local_again = client.patch(
         f"/api/users/{user_id}",
         json={"username": "Ada", "role_name": "Analyst", "auth_provider": "local"},
@@ -144,6 +146,7 @@ def test_active_directory_user_has_no_stored_password(client, monkeypatch):
 
 def test_ldap_user_requires_the_directory_to_be_configured(client, monkeypatch):
     monkeypatch.delenv("LDAP_URL", raising=False)
+    monkeypatch.delenv("LDAP_HOST", raising=False)
     admin = login(client, "Admin")
     created = client.post(
         "/api/users",
@@ -151,7 +154,7 @@ def test_ldap_user_requires_the_directory_to_be_configured(client, monkeypatch):
         headers=auth(admin),
     )
     assert created.status_code == 400
-    assert "LDAP_URL" in created.json()["detail"]
+    assert "LDAP_HOST" in created.json()["detail"]
 
 
 def test_non_admin_cannot_manage_users(client):

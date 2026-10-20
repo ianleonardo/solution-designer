@@ -48,11 +48,19 @@ def authenticate(login_id: str, password: str) -> dict:
     if row is None:
         raise AppError(401, "Invalid login ID or password")
     if (row.get("auth_provider") or "local") == "ldap":
-        ldap_auth.authenticate(row["email"], password)
+        display_name = ldap_auth.authenticate(row["email"], password).strip()[:100]
+        if display_name and display_name != row["username"]:
+            db.exec_sql("UPDATE users SET username = ? WHERE user_id = ?", [display_name, row["user_id"]])
+            gcs.upload_db()
+            row = db.fetchone("SELECT * FROM users WHERE user_id = ?", [row["user_id"]])
         return public_user(row)
     if not _password_matches(row["password_hash"], password):
         raise AppError(401, "Invalid login ID or password")
     return public_user(row)
+
+
+def _codes(value) -> list[str]:
+    return [part.strip() for part in str(value or "").split(",") if part.strip()]
 
 
 def project_row(row: dict) -> dict:
@@ -60,6 +68,8 @@ def project_row(row: dict) -> dict:
         "project_id": row["project_id"],
         "project_name": row["project_name"],
         "description": row.get("description") or "",
+        "countries": _codes(row.get("countries")),
+        "systems": _codes(row.get("systems")),
         "owner_id": row["owner_id"],
         "owner_name": row.get("owner_name"),
         "owner_role": row.get("owner_role"),
@@ -101,36 +111,52 @@ def _rag_country(parsed) -> str:
 
 
 def _kb_counts_by_country() -> list[dict]:
-    """Per-country counts for capabilities, interfaces, tables, batches and reports."""
+    """Per-country counts for capabilities, interfaces, tables, batches and reports.
+
+    An item's country may be one code, a comma list ("SG,MY") or empty / "ALL" meaning every country.
+    A list counts once towards each listed country; an all-country item counts once towards every country.
+    """
+    catalog = list(kb_countries())
+    lookup = {code.lower(): code for code in catalog}
     counts: dict[str, dict[str, int]] = {}
 
-    def bump(country: str, field: str, amount: int = 1) -> None:
-        key = country or "Unspecified"
-        row = counts.setdefault(
-            key,
-            {"country": key, "capabilities": 0, "interfaces": 0, "tables": 0, "batches": 0, "reports": 0},
+    def row_for(country: str) -> dict[str, int]:
+        return counts.setdefault(
+            country,
+            {"country": country, "capabilities": 0, "interfaces": 0, "tables": 0, "batches": 0, "reports": 0},
         )
-        row[field] += amount
 
-    for country in kb_countries():
-        bump(country, "capabilities", 0)
+    for country in catalog:
+        row_for(country)
 
-    for row in db.fetchall("SELECT country, COUNT(*) AS c FROM interfaces GROUP BY country"):
-        bump(str(row["country"] or "Unspecified"), "interfaces", int(row["c"]))
-    for row in db.fetchall("SELECT country, COUNT(*) AS c FROM kb_tables GROUP BY country"):
-        bump(str(row["country"] or "Unspecified"), "tables", int(row["c"]))
-    for row in db.fetchall("SELECT country, COUNT(*) AS c FROM kb_reports GROUP BY country"):
-        bump(str(row["country"] or "Unspecified"), "reports", int(row["c"]))
-    for row in db.fetchall("SELECT country, COUNT(*) AS c FROM kb_batches GROUP BY country"):
-        bump(str(row["country"] or "Unspecified"), "batches", int(row["c"]))
-    for row in db.fetchall("SELECT country, COUNT(*) AS c FROM kb_capabilities GROUP BY country"):
-        bump(str(row["country"] or "Unspecified"), "capabilities", int(row["c"]))
+    def targets(raw) -> list[str]:
+        codes = []
+        for part in str(raw or "").split(","):
+            code = part.strip()
+            if not code:
+                continue
+            if code.lower() == "all":
+                return catalog
+            normalised = lookup.get(code.lower(), code.upper())
+            if normalised not in codes:
+                codes.append(normalised)
+        return codes or catalog
 
-    catalog = list(kb_countries())
+    sources = {
+        "capabilities": "kb_capabilities",
+        "interfaces": "interfaces",
+        "tables": "kb_tables",
+        "batches": "kb_batches",
+        "reports": "kb_reports",
+    }
+    for field, table in sources.items():
+        for item in db.fetchall(f"SELECT country, COUNT(*) AS c FROM {table} GROUP BY country"):
+            for country in targets(item["country"]):
+                row_for(country)[field] += int(item["c"])
+
     catalog_set = set(catalog)
-    ordered = [counts[c] for c in catalog if c in counts]
     extras = sorted((counts[c] for c in counts if c not in catalog_set), key=lambda item: item["country"])
-    return ordered + extras
+    return [counts[c] for c in catalog] + extras
 
 
 def dashboard() -> dict:
@@ -164,10 +190,38 @@ def _clean_description(description: str) -> str:
     return cleaned
 
 
-def create_project(user: dict, name: str, description: str = "") -> dict:
+def _clean_scope(values, allowed: set[str], label: str) -> str:
+    """A comma list of known codes, in the order given. Empty means the project covers all of them."""
+    if values is None:
+        return ""
+    if isinstance(values, str):
+        values = values.split(",")
+    lookup = {code.lower(): code for code in allowed}
+    result: list[str] = []
+    for value in values:
+        code = str(value or "").strip()
+        if not code:
+            continue
+        known = lookup.get(code.lower())
+        if known is None:
+            raise AppError(400, f"Unknown {label}: {code}")
+        if known not in result:
+            result.append(known)
+    return ",".join(result)
+
+
+def _known_systems() -> set[str]:
+    return {row["system_code"] for row in db.fetchall("SELECT system_code FROM systems")}
+
+
+def create_project(
+    user: dict, name: str, description: str = "", countries: list[str] | None = None, systems: list[str] | None = None
+) -> dict:
     _ensure(user, CONTENT_AUTHORS)
     cleaned = name.strip()
     summary = _clean_description(description)
+    country_scope = _clean_scope(countries, set(kb_countries()), "country")
+    system_scope = _clean_scope(systems, _known_systems(), "system")
     if not cleaned:
         raise AppError(400, "Project name is required")
     if len(cleaned) > 200:
@@ -176,17 +230,26 @@ def create_project(user: dict, name: str, description: str = "") -> dict:
     now = _now()
     db.exec_sql(
         """
-        INSERT INTO projects (project_id, project_name, description, owner_id, status, created_at, last_modified)
-        VALUES (?, ?, ?, ?, 'draft', ?, ?)
+        INSERT INTO projects (
+            project_id, project_name, description, countries, systems, owner_id, status, created_at, last_modified
+        )
+        VALUES (?, ?, ?, ?, ?, ?, 'draft', ?, ?)
         """,
-        [project_id, cleaned, summary, user["user_id"], now, now],
+        [project_id, cleaned, summary, country_scope, system_scope, user["user_id"], now, now],
     )
     documents.create_blank(project_id, SDD_LAYOUT_ID, now)
     gcs.upload_db()
     return project_row(_require_project(project_id))
 
 
-def update_project(user: dict, project_id: str, name: str | None = None, description: str | None = None) -> dict:
+def update_project(
+    user: dict,
+    project_id: str,
+    name: str | None = None,
+    description: str | None = None,
+    countries: list[str] | None = None,
+    systems: list[str] | None = None,
+) -> dict:
     _ensure(user, CONTENT_AUTHORS)
     _require_project(project_id)
     assignments = ["last_modified = ?"]
@@ -202,6 +265,12 @@ def update_project(user: dict, project_id: str, name: str | None = None, descrip
     if description is not None:
         assignments.append("description = ?")
         params.append(_clean_description(description))
+    if countries is not None:
+        assignments.append("countries = ?")
+        params.append(_clean_scope(countries, set(kb_countries()), "country"))
+    if systems is not None:
+        assignments.append("systems = ?")
+        params.append(_clean_scope(systems, _known_systems(), "system"))
     params.append(project_id)
     db.exec_sql(
         f"UPDATE projects SET {', '.join(assignments)} WHERE project_id = ?",
@@ -481,7 +550,7 @@ def create_user(actor: dict, login_id: str, password: str, role_name: str, usern
         if password.strip():
             raise AppError(400, "Active Directory users sign in through LDAP. Do not set a password.")
         if not ldap_auth.configured():
-            raise AppError(400, "LDAP is not configured. Set LDAP_URL in the environment.")
+            raise AppError(400, "LDAP is not configured. Set LDAP_HOST in the environment.")
         hashed = UNUSABLE_PASSWORD
     else:
         if len(password) < 8:
@@ -530,7 +599,7 @@ def update_user(actor: dict, user_id: str, username: str, role_name: str, passwo
         if new_password:
             raise AppError(400, "Active Directory users sign in through LDAP. Do not set a password.")
         if not ldap_auth.configured():
-            raise AppError(400, "LDAP is not configured. Set LDAP_URL in the environment.")
+            raise AppError(400, "LDAP is not configured. Set LDAP_HOST in the environment.")
         db.exec_sql(
             "UPDATE users SET username = ?, role_name = ?, auth_provider = ?, password_hash = ? WHERE user_id = ?",
             [cleaned, role_name, provider, UNUSABLE_PASSWORD, user_id],

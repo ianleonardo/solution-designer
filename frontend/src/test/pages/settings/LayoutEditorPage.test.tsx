@@ -28,6 +28,7 @@ beforeEach(() => {
   detail = {
     layout_id: "runbook",
     name: "Runbook",
+    allow_multiple: false,
     description: "Ops",
     is_system: false,
     section_count: 3,
@@ -71,6 +72,10 @@ beforeEach(() => {
       if (url.endsWith("/templates") && method === "POST") {
         const values = JSON.parse(body);
         return new Response(JSON.stringify(template("runbook--new", values.section_name, 300, values.parent_id)), { status: 200 });
+      }
+      if (url === "/api/layouts/runbook" && method === "PUT") {
+        detail = { ...detail, ...JSON.parse(body) };
+        return new Response(JSON.stringify(detail), { status: 200 });
       }
       if (method === "DELETE") return new Response(JSON.stringify({ ok: true }), { status: 200 });
       return new Response(JSON.stringify(detail), { status: 200 });
@@ -233,4 +238,16 @@ test("deleting a section asks for confirmation", async () => {
   fireEvent.click(within(screen.getByRole("alertdialog")).getByRole("button", { name: "Delete" }));
   await waitFor(() => expect(calls.some((call) => call.method === "DELETE" && call.url === "/api/templates/runbook--intro")).toBe(true));
   await waitFor(() => expect(screen.queryByRole("button", { name: "Scope" })).toBeNull());
+});
+
+test("a layout can be set to allow several documents per project", async () => {
+  renderPage();
+  const box = (await screen.findByRole("checkbox", { name: "Allow multiple per project" })) as HTMLInputElement;
+  expect(box.checked).toBe(false);
+  fireEvent.click(box);
+  fireEvent.click(screen.getByRole("button", { name: "Save details" }));
+  await waitFor(() => expect(calls.some((call) => call.method === "PUT" && call.url === "/api/layouts/runbook")).toBe(true));
+  const put = calls.find((call) => call.method === "PUT" && call.url === "/api/layouts/runbook")!;
+  expect(JSON.parse(put.body)).toMatchObject({ name: "Runbook", allow_multiple: true });
+  await waitFor(() => expect((screen.getByRole("checkbox", { name: "Allow multiple per project" }) as HTMLInputElement).checked).toBe(true));
 });

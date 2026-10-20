@@ -54,7 +54,11 @@ def list_layouts(user: dict = Depends(current_user)):
 @router.post("/layouts")
 def create_layout(body: dict, user: dict = Depends(require_admin)):
     return layouts.create_layout(
-        user, str(body.get("name") or ""), str(body.get("description") or ""), body.get("copy_from") or None
+        user,
+        str(body.get("name") or ""),
+        str(body.get("description") or ""),
+        body.get("copy_from") or None,
+        bool(body.get("allow_multiple")),
     )
 
 
@@ -66,7 +70,10 @@ def get_layout(layout_id: str, user: dict = Depends(require_admin)):
 
 @router.put("/layouts/{layout_id}")
 def update_layout(layout_id: str, body: dict, user: dict = Depends(require_admin)):
-    return layouts.update_layout(user, layout_id, body.get("name"), body.get("description"))
+    allow_multiple = body.get("allow_multiple")
+    return layouts.update_layout(
+        user, layout_id, body.get("name"), body.get("description"), None if allow_multiple is None else bool(allow_multiple)
+    )
 
 
 @router.delete("/layouts/{layout_id}")

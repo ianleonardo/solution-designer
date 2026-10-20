@@ -10,6 +10,14 @@ def _project(client, token, name="Docs"):
     return client.post("/api/projects", json={"project_name": name}, headers=auth(token)).json()["project_id"]
 
 
+def _with_intro_header():
+    """Give the Interface layout's Introduction a header block again, for tests about header behaviour."""
+    db.exec_sql(
+        "UPDATE layout_templates SET schema_json = ?, content_kind = 'prose' WHERE template_id = 'interface-spec--introduction'",
+        [json.dumps({"blocks": [{"type": "header", "text": "Introduction", "level": 1}, {"type": "prose"}]})],
+    )
+
+
 def _add_interface(client, token, project_id):
     response = client.post(f"/api/projects/{project_id}/documents", json={"layout_id": "interface-spec"}, headers=auth(token))
     assert response.status_code == 200, response.text
@@ -25,8 +33,11 @@ def test_new_project_has_an_sdd_and_can_add_an_interface_document(client):
     assert created["name"] == "Interface Specifications Document"
     assert any(item["section_name"] == "Message Format" for item in created["templates"])
     assert "interface-spec--message-format" in created["content_json"]["sections"]
-    duplicate = client.post(f"/api/projects/{project_id}/documents", json={"layout_id": "interface-spec"}, headers=auth(writer))
-    assert duplicate.status_code == 400
+    duplicate = client.post(f"/api/projects/{project_id}/documents", json={"layout_id": "fmea"}, headers=auth(writer))
+    assert duplicate.status_code == 200
+    again = client.post(f"/api/projects/{project_id}/documents", json={"layout_id": "fmea"}, headers=auth(writer))
+    assert again.status_code == 400  # FMEA is one per project
+    assert "already has that document" in again.text
     unknown = client.post(f"/api/projects/{project_id}/documents", json={"layout_id": "nope"}, headers=auth(writer))
     assert unknown.status_code == 404
     reader = login(client, "Read")
@@ -139,6 +150,7 @@ def test_generation_for_a_document_uses_its_layout_and_keeps_static_blocks(clien
     monkeypatch.setattr("app.services.llm.complete", fake_complete)
     writer = login(client, "Write")
     project_id = _project(client, writer)
+    _with_intro_header()
     interface = _add_interface(client, writer, project_id)
     base = f"/api/projects/{project_id}/documents/{interface['document_id']}"
     sections = interface["content_json"]["sections"]
@@ -167,6 +179,7 @@ def test_generation_for_a_document_uses_its_layout_and_keeps_static_blocks(clien
 def test_export_renders_headers_and_inlines_images(client):
     writer = login(client, "Write")
     project_id = _project(client, writer, "Exports")
+    _with_intro_header()
     interface = _add_interface(client, writer, project_id)
     upload = client.post(f"/api/projects/{project_id}/images", files={"file": ("ctx.png", PNG, "image/png")}, headers=auth(writer))
     assert upload.status_code == 200, upload.text
@@ -242,3 +255,188 @@ def test_deleting_a_project_removes_documents_and_images(client):
     from app.services import images
 
     assert not images._folder(project_id).exists()
+
+
+def test_interface_documents_can_be_added_several_times_with_distinct_names(client):
+    writer = login(client, "Write")
+    project_id = _project(client, writer)
+    url = f"/api/projects/{project_id}/documents"
+    first = _add_interface(client, writer, project_id)
+    assert first["name"] == "Interface Specifications Document"
+    second = client.post(url, json={"layout_id": "interface-spec"}, headers=auth(writer)).json()
+    assert second["name"] == "Interface Specifications Document 2"  # unnamed copies are numbered
+    named = client.post(url, json={"layout_id": "interface-spec", "title": "  Payments   interfaces "}, headers=auth(writer)).json()
+    assert named["name"] == "Payments interfaces"
+    assert named["layout_name"] == "Interface Specifications Document"
+    clash = client.post(url, json={"layout_id": "interface-spec", "title": "payments INTERFACES"}, headers=auth(writer))
+    assert clash.status_code == 400
+    listed = client.get(url, headers=auth(writer)).json()
+    assert [item["name"] for item in listed] == [
+        "Solution Design Document",
+        "Interface Specifications Document",
+        "Interface Specifications Document 2",
+        "Payments interfaces",
+    ]
+    assert len({item["document_id"] for item in listed}) == 4
+    # each copy keeps its own content
+    sections = second["content_json"]["sections"]
+    sections["interface-spec--purpose"]["blocks"][0]["markdown"] = "Only in copy 2"
+    client.put(f"{url}/{second['document_id']}", json={"content_json": {"sections": sections}}, headers=auth(writer))
+    reloaded = {item["document_id"]: item for item in client.get(url, headers=auth(writer)).json()}
+    assert reloaded[first["document_id"]]["content_json"]["sections"]["interface-spec--purpose"]["blocks"][0]["markdown"] == ""
+
+
+def test_allow_multiple_is_a_layout_setting(client):
+    admin = auth(login(client, "Admin"))
+    writer = login(client, "Write")
+    layouts = {item["layout_id"]: item for item in client.get("/api/layouts", headers=admin).json()}
+    assert layouts["interface-spec"]["allow_multiple"] is True
+    assert layouts["fmea"]["allow_multiple"] is False
+    assert layouts["sdd"]["allow_multiple"] is False
+    assert client.put("/api/layouts/sdd", json={"allow_multiple": True}, headers=admin).status_code == 400
+
+    turned_on = client.put("/api/layouts/fmea", json={"allow_multiple": True}, headers=admin)
+    assert turned_on.status_code == 200 and turned_on.json()["allow_multiple"] is True
+    project_id = _project(client, writer)
+    for _ in range(2):
+        assert client.post(f"/api/projects/{project_id}/documents", json={"layout_id": "fmea"}, headers=auth(writer)).status_code == 200
+    blocked = client.put("/api/layouts/fmea", json={"allow_multiple": False}, headers=admin)
+    assert blocked.status_code == 400 and "more than one" in blocked.text
+
+    created = client.post("/api/layouts", json={"name": "Runbook", "allow_multiple": True}, headers=admin).json()
+    assert created["allow_multiple"] is True
+
+
+def test_old_databases_lose_the_one_document_per_layout_constraint(tmp_path, monkeypatch):
+    import duckdb
+
+    path = tmp_path / "solutioncrafter.duckdb"
+    old = duckdb.connect(str(path))
+    old.execute(
+        """
+        CREATE TABLE project_documents (
+            document_id VARCHAR PRIMARY KEY, project_id VARCHAR NOT NULL, layout_id VARCHAR NOT NULL,
+            content_json VARCHAR NOT NULL, status VARCHAR NOT NULL, last_modified TIMESTAMP NOT NULL,
+            generated_at TIMESTAMP, submitted_by VARCHAR, approved_by VARCHAR, approved_at TIMESTAMP,
+            created_at TIMESTAMP NOT NULL, structure_json VARCHAR, UNIQUE (project_id, layout_id)
+        )
+        """
+    )
+    old.execute(
+        "INSERT INTO project_documents VALUES ('d1', 'p1', 'interface-spec', '{}', 'draft', now(), NULL, NULL, NULL, NULL, now(), '[]')"
+    )
+    old.close()
+    monkeypatch.setattr(db, "_conn", duckdb.connect(str(path)))
+    db._migrate()
+    db._ensure_project_description()
+    db._ensure_columns()
+    conn = db._conn
+    assert conn.execute(
+        "SELECT count(*) FROM duckdb_constraints() WHERE table_name = 'project_documents' AND constraint_type = 'UNIQUE'"
+    ).fetchone()[0] == 0
+    assert conn.execute("SELECT document_id, title FROM project_documents").fetchall() == [("d1", "")]
+    conn.execute(
+        "INSERT INTO project_documents (document_id, project_id, layout_id, content_json, status, last_modified, created_at) "
+        "VALUES ('d2', 'p1', 'interface-spec', '{}', 'draft', now(), now())"
+    )
+    conn.close()
+
+
+def test_test_case_inventory_migration_replaces_sprint_tables(client):
+    writer = login(client, "Write")
+    project_id = _project(client, writer)
+    document_id = client.get(f"/api/projects/{project_id}/documents", headers=auth(writer)).json()[0]["document_id"]
+    old_table = {"type": "table", "columns": ["No", "App Name", "Action", "VAL ID"], "rows": [["1", "SPL", "New", "V1"]]}
+    db.exec_sql(
+        """
+        UPDATE layout_templates
+        SET schema_json = ?, hint = ?, system_prompt = ?, content_kind = 'prose'
+        WHERE template_id = 'inventory-of-test-cases'
+        """,
+        [json.dumps({"blocks": [{"type": "prose"}]}), "Group by sprint", "Write sprints"],
+    )
+    db.insert_template(
+        "sdd",
+        {
+            "template_id": "sprint-1",
+            "parent_id": "inventory-of-test-cases",
+            "section_name": "Sprint 1",
+            "sequence_order": 1401,
+            "system_prompt": "Sprint one",
+            "temperature": 0.2,
+            "max_words": 2000,
+            "content_kind": "table",
+            "schema_json": {"blocks": [old_table]},
+            "hint": "",
+        },
+    )
+    row = db.fetchone("SELECT content_json, structure_json FROM project_documents WHERE document_id = ?", [document_id])
+    content = json.loads(row["content_json"])
+    content["sections"]["sprint-1"] = {"template_id": "sprint-1", "title": "Sprint 1", "blocks": [old_table], "missing": []}
+    structure = json.loads(row["structure_json"])
+    structure.append(
+        {
+            "template_id": "sprint-1",
+            "parent_id": "inventory-of-test-cases",
+            "section_name": "Sprint 1",
+            "schema_json": {"blocks": [old_table]},
+            "system_prompt": "Sprint one",
+            "hint": "",
+            "content_kind": "table",
+        }
+    )
+    db.exec_sql(
+        "UPDATE project_documents SET content_json = ?, structure_json = ? WHERE document_id = ?",
+        [json.dumps(content), json.dumps(structure), document_id],
+    )
+
+    db._migrate_test_case_inventory()
+
+    layout = db.fetchone("SELECT schema_json, system_prompt, hint FROM layout_templates WHERE template_id = 'inventory-of-test-cases'")
+    columns = json.loads(layout["schema_json"])["blocks"][0]["columns"]
+    assert columns[0] == "SN" and columns[2].startswith("Test Type")
+    assert "sprint" not in layout["system_prompt"].lower()
+    assert "Progression" in layout["system_prompt"]
+    assert db.fetchone("SELECT template_id FROM layout_templates WHERE template_id = 'sprint-1'") is None
+    saved = db.fetchone("SELECT content_json, structure_json FROM project_documents WHERE document_id = ?", [document_id])
+    saved_content = json.loads(saved["content_json"])
+    assert "sprint-1" not in saved_content["sections"]
+    assert saved_content["sections"]["inventory-of-test-cases"]["blocks"][0]["columns"] == columns
+    saved_structure = json.loads(saved["structure_json"])
+    assert all(item["template_id"] != "sprint-1" for item in saved_structure)
+    parent = next(item for item in saved_structure if item["template_id"] == "inventory-of-test-cases")
+    assert parent["system_prompt"] == layout["system_prompt"]
+
+
+def test_long_test_type_header_is_shortened_without_clearing_rows(client):
+    writer = login(client, "Write")
+    project_id = _project(client, writer)
+    document_id = client.get(f"/api/projects/{project_id}/documents", headers=auth(writer)).json()[0]["document_id"]
+    long_name = "Test Type (Progression/Regression/Negative testing/Non-functional)"
+    columns = ["SN", "Test Case ID", long_name, "Test Case Description", "Acceptance Criteria"]
+    row = db.fetchone("SELECT content_json, structure_json FROM project_documents WHERE document_id = ?", [document_id])
+    content = json.loads(row["content_json"])
+    content["sections"]["inventory-of-test-cases"]["blocks"] = [
+        {"type": "table", "columns": columns, "rows": [["1", "TC-1", "Regression", "Checks login", "User is signed in"]]}
+    ]
+    structure = json.loads(row["structure_json"])
+    for entry in structure:
+        if entry["template_id"] == "inventory-of-test-cases":
+            entry["schema_json"] = {"blocks": [{"type": "table", "columns": columns, "rows": [["1", "", "", "", ""]]}]}
+    db.exec_sql(
+        "UPDATE layout_templates SET schema_json = ? WHERE template_id = 'inventory-of-test-cases'",
+        [json.dumps({"blocks": [{"type": "table", "columns": columns}]})],
+    )
+    db.exec_sql(
+        "UPDATE project_documents SET content_json = ?, structure_json = ? WHERE document_id = ?",
+        [json.dumps(content), json.dumps(structure), document_id],
+    )
+
+    db._rename_test_type_column()
+
+    layout = json.loads(db.fetchone("SELECT schema_json FROM layout_templates WHERE template_id = 'inventory-of-test-cases'")["schema_json"])
+    assert layout["blocks"][0]["columns"][2] == "Test Type"
+    saved = json.loads(db.fetchone("SELECT content_json FROM project_documents WHERE document_id = ?", [document_id])["content_json"])
+    table = saved["sections"]["inventory-of-test-cases"]["blocks"][0]
+    assert table["columns"][2] == "Test Type"
+    assert table["rows"][0][2] == "Regression"
