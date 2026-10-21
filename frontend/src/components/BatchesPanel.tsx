@@ -10,11 +10,17 @@ import { appliesToCountry, countryLabel } from "../countries";
 import { SelectField } from "./SelectField";
 import { SortHeader, sortRows, toggleColumnSort, type ColumnSort } from "./SortHeader";
 import { PageSlice } from "./TablePager";
+import { can } from "../permissions";
 
 const BATCH_TYPE_OPTIONS = [
   { value: "incoming", label: "Incoming" },
   { value: "outgoing", label: "Outgoing" },
+  { value: "transaction", label: "Transaction" },
 ];
+
+function batchTypeLabel(value: string) {
+  return BATCH_TYPE_OPTIONS.find((item) => item.value === value)?.label ?? value;
+}
 
 function UploadBatchesDialog({
   countries,
@@ -66,7 +72,9 @@ function UploadBatchesDialog({
       <form role="dialog" aria-modal="true" aria-label="Upload batches" className="w-full max-w-lg rounded-lg border border-hairline bg-panel p-6 shadow-xl space-y-4" onSubmit={(e) => void submit(e)}>
         <div>
           <h2 className="font-headline text-xl font-semibold">Upload Batches</h2>
-          <p className="text-xs text-muted mt-1">Excel (.xlsx) with columns: BATCH_NAME, BATCH_TYPE, TO_FROM_SYSTEMS, DESCRIPTION, BATCH_FILENAME, FILE_LAYOUT. BATCH_TYPE must be incoming or outgoing. TO_FROM_SYSTEMS is comma-separated system codes.</p>
+          <p className="text-xs text-muted mt-1">
+            Excel (.xlsx) with columns: BATCH_NAME, BATCH_TYPE, TO_FROM_SYSTEMS, DESCRIPTION, FREQUENCY, BATCH_FILENAME, FILE_LAYOUT. BATCH_TYPE must be incoming, outgoing, or transaction. TO_FROM_SYSTEMS is comma-separated system codes. FREQUENCY is comma-separated: Adhoc, Daily, Weekly, Monthly, Quarterly, or Other. Write Other as Other: note. Leave FREQUENCY empty when it does not apply.
+          </p>
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <label className="block">
@@ -293,14 +301,14 @@ function BatchFormDialog({
   );
 }
 
-function BatchDetailDialog({ batch, onClose }: { batch: KbBatchRecord; onClose: () => void }) {
+export function BatchDetailDialog({ batch, onClose, layerClass = "z-50" }: { batch: KbBatchRecord; onClose: () => void; layerClass?: string }) {
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" role="presentation" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
+    <div className={`fixed inset-0 ${layerClass} flex items-center justify-center bg-black/50 p-4`} role="presentation" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
       <div role="dialog" aria-modal="true" aria-label={`Batch ${batch.batch_name}`} className="w-full max-w-3xl max-h-[85vh] flex flex-col rounded-lg border border-hairline bg-panel shadow-xl">
         <div className="flex items-start justify-between gap-3 border-b border-hairline p-5">
           <div className="min-w-0">
             <div className="font-label text-[11px] uppercase text-muted">
-              {batch.country} · {batch.system_code} · {batch.batch_type === "outgoing" ? "Outgoing" : batch.batch_type === "incoming" ? "Incoming" : batch.batch_type}
+              {batch.country} · {batch.system_code} · {batchTypeLabel(batch.batch_type)}
               {frequencyText(batch.frequency, batch.frequency_other) ? ` · ${frequencyText(batch.frequency, batch.frequency_other)}` : ""}
             </div>
             <h2 className="font-headline text-xl font-semibold mt-0.5">{batch.batch_name}</h2>
@@ -326,11 +334,37 @@ function BatchDetailDialog({ batch, onClose }: { batch: KbBatchRecord; onClose: 
   );
 }
 
+export function BatchDetailsDialog({ batchId, onClose, layerClass = "z-50" }: { batchId: string; onClose: () => void; layerClass?: string }) {
+  const [batch, setBatch] = useState<KbBatchRecord | null>(null);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    api<KbBatchRecord>(`/api/batches/${encodeURIComponent(batchId)}`)
+      .then(setBatch)
+      .catch((err: unknown) => setError(err instanceof ApiError ? err.message : "Could not load batch"));
+  }, [batchId]);
+
+  if (!batch) {
+    return (
+      <div className={`fixed inset-0 ${layerClass} flex items-center justify-center bg-black/50 p-4`} role="presentation" onMouseDown={(event) => event.target === event.currentTarget && onClose()}>
+        <div role="dialog" aria-modal="true" aria-label="Batch details" className="w-full max-w-lg rounded-lg border border-hairline bg-panel p-6 shadow-xl">
+          <p className={error ? "text-alert text-sm" : "text-muted"}>{error || "Loading…"}</p>
+          <div className="flex justify-end pt-3">
+            <button type="button" className="btn" onClick={onClose}>Close</button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+  return <BatchDetailDialog batch={batch} onClose={onClose} layerClass={layerClass} />;
+}
+
 type Group = { key: string; country: string; system: string; batches: KbBatchRecord[] };
 
 export function BatchesPanel() {
   const auth = useOptionalAuth();
-  const canEdit = auth?.user?.role_name !== "Viewer";
+  // Without a signed-in user (component previews) editing stays on, as before.
+  const canEdit = !auth?.user || can(auth.user, "knowledge", "write");
   const [searchParams] = useSearchParams();
   const [batches, setBatches] = useState<KbBatchRecord[]>([]);
   const [countries, setCountries] = useState<string[]>(["SG", "MY", "TH", "VN", "ID"]);
@@ -536,7 +570,7 @@ export function BatchesPanel() {
                         </button>
                       </td>
                       <td className="py-2.5 px-3 text-muted cursor-pointer" onClick={() => setInspecting(row)}>
-                        {row.batch_type === "outgoing" ? "Outgoing" : row.batch_type === "incoming" ? "Incoming" : row.batch_type}
+                        {batchTypeLabel(row.batch_type)}
                       </td>
                       <td className="py-2.5 px-3 text-muted cursor-pointer" onClick={() => setInspecting(row)}>
                         {frequencyText(row.frequency, row.frequency_other) || "—"}

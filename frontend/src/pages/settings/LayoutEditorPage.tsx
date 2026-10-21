@@ -7,6 +7,8 @@ import { ConfirmDialog } from "../../components/ConfirmDialog";
 import type { BlockSpec, LayoutDetail, LayoutTemplate } from "../../types";
 import { applyMove, applyReparent, byOrder, descendantIds, MAX_SECTION_DEPTH, toStructure, type DropSpot, type SectionNode } from "./layoutStructure";
 import { sectionDepth } from "../../structure";
+import { useOptionalAuth } from "../../auth";
+import { can } from "../../permissions";
 
 function errorText(err: unknown, fallback: string) {
   return err instanceof ApiError ? err.message : fallback;
@@ -121,6 +123,9 @@ function formFor(template: LayoutTemplate): SectionForm {
 }
 
 export function LayoutEditorPage() {
+  const auth = useOptionalAuth();
+  // Settings read: the page is shown but cannot be changed.
+  const canWrite = !auth?.user || can(auth.user, "settings", "write");
   const { layoutId = "" } = useParams();
   const [layout, setLayout] = useState<LayoutDetail | null>(null);
   const [selectedId, setSelectedId] = useState("");
@@ -227,7 +232,7 @@ export function LayoutEditorPage() {
     return (
       <div
         key={id}
-        draggable
+        draggable={canWrite}
         onDragStart={(event) => {
           draggedId.current = id;
           setDragId(id);
@@ -278,7 +283,9 @@ export function LayoutEditorPage() {
       {error && <p className="text-alert">{error}</p>}
       {notice && <p className="text-muted" role="status">{notice}</p>}
 
+      {!canWrite && <p className="text-sm text-muted">View only. Your role can see this layout but not change it.</p>}
       <form aria-label="Layout details" className="bg-panel border border-hairline rounded-lg p-4 grid gap-3 md:grid-cols-[1fr_2fr_auto_auto] items-end" onSubmit={(event) => void saveDetails(event)}>
+        <fieldset disabled={!canWrite} className="contents">
         <label className="block text-sm">
           Document name
           <input className="field mt-1" aria-label="Layout name" value={details.name} maxLength={100} onChange={(event) => setDetails({ ...details, name: event.target.value })} />
@@ -300,13 +307,14 @@ export function LayoutEditorPage() {
           />
           Allow multiple per project
         </label>
-        <button type="submit" className="btn btn-primary" disabled={!details.name.trim()}>Save details</button>
+        {canWrite && <button type="submit" className="btn btn-primary" disabled={!details.name.trim()}>Save details</button>}
+        </fieldset>
       </form>
 
       <div className="grid gap-4 lg:grid-cols-[320px_1fr]">
         <aside className="bg-panel border border-hairline rounded-lg p-3 space-y-2" aria-label="Sections">
           <p className="text-xs text-muted">Drag a section to reorder it among its siblings, or drop it on another section to nest it there. Documents already created keep their own structure.</p>
-          <div className="flex flex-wrap gap-2">
+          {canWrite && <div className="flex flex-wrap gap-2">
             <button type="button" className="btn" onClick={() => setAdding({ parentId: null })}>
               <span className="material-symbols-outlined">add</span>
               Add section
@@ -320,7 +328,7 @@ export function LayoutEditorPage() {
               <span className="material-symbols-outlined">subdirectory_arrow_right</span>
               Add sub-section
             </button>
-          </div>
+          </div>}
           {structure.length === 0 ? (
             <p className="text-muted text-sm">This layout has no sections yet.</p>
           ) : (
@@ -330,9 +338,10 @@ export function LayoutEditorPage() {
 
         {selected && form ? (
           <form aria-label="Section settings" className="bg-panel border border-hairline rounded-lg p-4 space-y-4" onSubmit={(event) => void saveSection(event)}>
+            <fieldset disabled={!canWrite} className="space-y-4 min-w-0">
             <div className="flex items-center justify-between gap-2">
               <h2 className="font-headline text-lg font-semibold">{selected.section_name}</h2>
-              <button type="button" className="btn btn-danger" onClick={() => setRemoving(selected)}>
+              <button type="button" className={`btn btn-danger ${canWrite ? "" : "hidden"}`} onClick={() => setRemoving(selected)}>
                 <span className="material-symbols-outlined">delete</span>
                 Delete section
               </button>
@@ -379,7 +388,8 @@ export function LayoutEditorPage() {
                 />
               </label>
             </div>
-            <button type="submit" className="btn btn-primary" disabled={!form.name.trim() || form.blocks.length === 0}>Save section</button>
+            {canWrite && <button type="submit" className="btn btn-primary" disabled={!form.name.trim() || form.blocks.length === 0}>Save section</button>}
+            </fieldset>
           </form>
         ) : (
           <div className="bg-panel border border-hairline rounded-lg p-4 text-muted">Select a section to edit, or add one.</div>

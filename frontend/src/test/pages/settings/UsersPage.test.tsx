@@ -43,7 +43,7 @@ describe("UsersPage", () => {
     fireEvent.click(screen.getAllByRole("button", { name: "Add user" })[1]);
     await waitFor(() => expect(screen.getByText("Lee")).toBeTruthy());
     const post = fetchMock.mock.calls.find((call) => (call[1] as RequestInit | undefined)?.method === "POST");
-    expect(JSON.parse(String((post?.[1] as RequestInit).body))).toEqual({ login_id: "lee", username: "Lee", password: "Password123!", role_name: "Viewer" });
+    expect(JSON.parse(String((post?.[1] as RequestInit).body))).toEqual({ login_id: "lee", username: "Lee", password: "Password123!", role_id: "viewer" });
   });
 
   it.each(["ian chen", "ian.chen", "ian@bank.com", "ian_1", "ab"])("rejects the Login ID %j without calling the API", async (value) => {
@@ -79,7 +79,7 @@ describe("UsersPage", () => {
     await waitFor(() => expect(screen.getByText("Maya K")).toBeTruthy());
     const patch = fetchMock.mock.calls.find((call) => (call[1] as RequestInit | undefined)?.method === "PATCH");
     expect(patch?.[0]).toBe("/api/users/u2");
-    expect(JSON.parse(String((patch?.[1] as RequestInit).body))).toEqual({ username: "Maya K", role_name: "Viewer", password: "NewPassword1" });
+    expect(JSON.parse(String((patch?.[1] as RequestInit).body))).toEqual({ username: "Maya K", role_id: "viewer", password: "NewPassword1" });
   });
 
   it("creates an Active Directory user without a password", async () => {
@@ -101,7 +101,7 @@ describe("UsersPage", () => {
     expect(JSON.parse(String((post?.[1] as RequestInit).body))).toEqual({
       login_id: "ada",
       username: "Ada",
-      role_name: "Analyst",
+      role_id: "analyst",
       auth_provider: "ldap",
     });
     expect(screen.getByText("Active Directory")).toBeTruthy();

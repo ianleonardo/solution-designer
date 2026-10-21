@@ -505,3 +505,9 @@ input.no-spinner {
   .sf-word, .sf-forge { animation: none; background-position: 200% 0, 0 0; }
   .sf-embers { display: none; }
 }
+
+/* Resizable popups (see resizableDialogs.ts): keep the native corner grip visible above rounded corners. */
+[data-resizable]::-webkit-resizer {
+  background: linear-gradient(135deg, transparent 50%, var(--line) 50%, var(--line) 60%, transparent 60%, transparent 70%, var(--line) 70%, var(--line) 80%, transparent 80%);
+  border-bottom-right-radius: 0.75rem;
+}

@@ -130,6 +130,7 @@ test("upload dialog asks for country, system and excel", async () => {
   await waitFor(() => expect(screen.getByRole("button", { name: /Upload$/ })).toBeTruthy());
   fireEvent.click(screen.getByRole("button", { name: /Upload$/ }));
   const dialog = screen.getByRole("dialog", { name: "Upload batches" });
+  expect(within(dialog).getByText(/FREQUENCY is comma-separated/)).toBeTruthy();
   expect(within(dialog).getByLabelText("Country")).toBeTruthy();
   expect(within(dialog).getByLabelText("System")).toBeTruthy();
   expect(within(dialog).getByLabelText("Excel file")).toBeTruthy();

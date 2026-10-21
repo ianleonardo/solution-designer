@@ -5,6 +5,7 @@ import json
 from app import cache, db
 from app.content import KB_SOURCES
 from app.errors import AppError
+from app.permissions import require
 from app.services import gcs
 from app.template_parser import slugify
 
@@ -17,8 +18,7 @@ SDD_LAYOUT_ID = "sdd"
 
 
 def _admin(user: dict) -> None:
-    if user["role_name"] != "Admin":
-        raise AppError(403, "Forbidden")
+    require(user, "settings", "write")
 
 
 def admin_template(row: dict) -> dict:

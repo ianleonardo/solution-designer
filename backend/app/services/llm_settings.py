@@ -5,6 +5,7 @@ import os
 from app import cache, db
 from app.crypto import decrypt, encrypt
 from app.errors import AppError
+from app.permissions import require
 from app.services import gcs
 from app.services.llm_adapters import ADAPTERS, LLMAdapter, ProviderConfig, build_adapter
 
@@ -144,5 +145,4 @@ def _reindex_if_needed() -> None:
 
 
 def _require_admin(user: dict) -> None:
-    if user["role_name"] != "Admin":
-        raise AppError(403, "Forbidden")
+    require(user, "settings", "write")

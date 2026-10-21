@@ -4,12 +4,13 @@ import { api, ApiError, type RowError } from "../api";
 import { useOptionalAuth } from "../auth";
 import type { Catalogs, KbReportRecord, SystemRecord } from "../types";
 import { ConfirmDialog } from "./ConfirmDialog";
-import { FrequencyField, frequencyText, selectedFrequencies } from "./FrequencyField";
+import { FrequencyField, REPORT_FREQUENCY_CHOICES, frequencyText, selectedFrequencies } from "./FrequencyField";
 import { FileDrop } from "./FileDrop";
 import { appliesToCountry, countryLabel } from "../countries";
 import { SelectField } from "./SelectField";
 import { SortHeader, sortRows, toggleColumnSort, type ColumnSort } from "./SortHeader";
 import { PageSlice } from "./TablePager";
+import { can } from "../permissions";
 
 function UploadReportsDialog({
   countries,
@@ -61,7 +62,9 @@ function UploadReportsDialog({
       <form role="dialog" aria-modal="true" aria-label="Upload reports" className="w-full max-w-lg rounded-lg border border-hairline bg-panel p-6 shadow-xl space-y-4" onSubmit={(e) => void submit(e)}>
         <div>
           <h2 className="font-headline text-xl font-semibold">Upload Reports</h2>
-          <p className="text-xs text-muted mt-1">Excel (.xlsx) with columns: REPORT_ID, REPORT_NAME, REPORT_DESCRIPTION, REPORT_LAYOUT.</p>
+          <p className="text-xs text-muted mt-1">
+            Excel (.xlsx) with columns: REPORT_ID, REPORT_NAME, REPORT_DESCRIPTION, FREQUENCY, REPORT_LAYOUT. FREQUENCY is comma-separated: Adhoc, Daily, Weekly, Monthly, Quarterly, or Other. Write Other as Other: note. Leave FREQUENCY empty when it does not apply.
+          </p>
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <label className="block">
@@ -142,7 +145,7 @@ function ReportFormDialog({
   const [system, setSystem] = useState(report?.system_code ?? systems[0]?.system_code ?? "");
   const [code, setCode] = useState(report?.report_code ?? "");
   const [name, setName] = useState(report?.report_name ?? "");
-  const [frequency, setFrequency] = useState(selectedFrequencies(report?.frequency));
+  const [frequency, setFrequency] = useState(selectedFrequencies(report?.frequency, REPORT_FREQUENCY_CHOICES));
   const [frequencyOther, setFrequencyOther] = useState(report?.frequency_other ?? "");
   const [description, setDescription] = useState(report?.description ?? "");
   const [layout, setLayout] = useState(report?.layout ?? "");
@@ -237,6 +240,7 @@ function ReportFormDialog({
           <input className="field mt-1" aria-label="Report name" value={name} required disabled={busy} onChange={(e) => setName(e.target.value)} />
         </label>
         <FrequencyField
+          choices={REPORT_FREQUENCY_CHOICES}
           selected={frequency}
           other={frequencyOther}
           disabled={busy}
@@ -267,9 +271,9 @@ function ReportFormDialog({
   );
 }
 
-function ReportLayoutDialog({ report, onClose }: { report: KbReportRecord; onClose: () => void }) {
+export function ReportLayoutDialog({ report, onClose, layerClass = "z-50" }: { report: KbReportRecord; onClose: () => void; layerClass?: string }) {
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" role="presentation" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
+    <div className={`fixed inset-0 ${layerClass} flex items-center justify-center bg-black/50 p-4`} role="presentation" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
       <div role="dialog" aria-modal="true" aria-label={`Report ${report.report_name}`} className="w-full max-w-3xl max-h-[85vh] flex flex-col rounded-lg border border-hairline bg-panel shadow-xl">
         <div className="flex items-start justify-between gap-3 border-b border-hairline p-5">
           <div className="min-w-0">
@@ -278,8 +282,8 @@ function ReportLayoutDialog({ report, onClose }: { report: KbReportRecord; onClo
               {report.report_code ? ` · ${report.report_code}` : ""}
             </div>
             <h2 className="font-headline text-xl font-semibold mt-0.5">{report.report_name}</h2>
-            {frequencyText(report.frequency, report.frequency_other) && (
-              <p className="text-sm mt-1">Frequency: {frequencyText(report.frequency, report.frequency_other)}</p>
+            {frequencyText(report.frequency, report.frequency_other, REPORT_FREQUENCY_CHOICES) && (
+              <p className="text-sm mt-1">Frequency: {frequencyText(report.frequency, report.frequency_other, REPORT_FREQUENCY_CHOICES)}</p>
             )}
             <p className="text-sm text-muted mt-1">{report.description || "No description."}</p>
           </div>
@@ -296,11 +300,37 @@ function ReportLayoutDialog({ report, onClose }: { report: KbReportRecord; onClo
   );
 }
 
+export function ReportDetailsDialog({ reportId, onClose, layerClass = "z-50" }: { reportId: string; onClose: () => void; layerClass?: string }) {
+  const [report, setReport] = useState<KbReportRecord | null>(null);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    api<KbReportRecord>(`/api/reports/${encodeURIComponent(reportId)}`)
+      .then(setReport)
+      .catch((err: unknown) => setError(err instanceof ApiError ? err.message : "Could not load report"));
+  }, [reportId]);
+
+  if (!report) {
+    return (
+      <div className={`fixed inset-0 ${layerClass} flex items-center justify-center bg-black/50 p-4`} role="presentation" onMouseDown={(event) => event.target === event.currentTarget && onClose()}>
+        <div role="dialog" aria-modal="true" aria-label="Report details" className="w-full max-w-lg rounded-lg border border-hairline bg-panel p-6 shadow-xl">
+          <p className={error ? "text-alert text-sm" : "text-muted"}>{error || "Loading…"}</p>
+          <div className="flex justify-end pt-3">
+            <button type="button" className="btn" onClick={onClose}>Close</button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+  return <ReportLayoutDialog report={report} onClose={onClose} layerClass={layerClass} />;
+}
+
 type Group = { key: string; country: string; system: string; reports: KbReportRecord[] };
 
 export function ReportsPanel() {
   const auth = useOptionalAuth();
-  const canEdit = auth?.user?.role_name !== "Viewer";
+  // Without a signed-in user (component previews) editing stays on, as before.
+  const canEdit = !auth?.user || can(auth.user, "knowledge", "write");
   const [searchParams] = useSearchParams();
   const [reports, setReports] = useState<KbReportRecord[]>([]);
   const [countries, setCountries] = useState<string[]>(["SG", "MY", "TH", "VN", "ID"]);
@@ -378,7 +408,7 @@ export function ReportsPanel() {
       if (row.system_code !== systemFilter) continue;
       if (
         needle &&
-        !`${row.report_code} ${row.report_name} ${frequencyText(row.frequency, row.frequency_other)} ${row.description} ${row.layout} ${row.country} ${row.system_code}`
+        !`${row.report_code} ${row.report_name} ${frequencyText(row.frequency, row.frequency_other, REPORT_FREQUENCY_CHOICES)} ${row.description} ${row.layout} ${row.country} ${row.system_code}`
           .toLowerCase()
           .includes(needle)
       ) {
@@ -472,7 +502,7 @@ export function ReportsPanel() {
               </div>
               <PageSlice
                 rows={sortRows(group.reports, sort, (row) => {
-                  if (sort?.key === "frequency") return frequencyText(row.frequency, row.frequency_other);
+                  if (sort?.key === "frequency") return frequencyText(row.frequency, row.frequency_other, REPORT_FREQUENCY_CHOICES);
                   if (sort?.key === "report_code") return row.report_code;
                   return row.report_name;
                 })}
@@ -508,7 +538,7 @@ export function ReportsPanel() {
                         </button>
                       </td>
                       <td className="py-2.5 px-3 text-muted cursor-pointer" onClick={() => setInspecting(row)}>
-                        {frequencyText(row.frequency, row.frequency_other) || "—"}
+                        {frequencyText(row.frequency, row.frequency_other, REPORT_FREQUENCY_CHOICES) || "—"}
                       </td>
                       <td className="py-2.5 px-3 text-muted cursor-pointer" onClick={() => setInspecting(row)}>
                         {row.description || "—"}

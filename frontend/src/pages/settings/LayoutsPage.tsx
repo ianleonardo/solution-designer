@@ -5,6 +5,8 @@ import { ConfirmDialog } from "../../components/ConfirmDialog";
 import { DataTable, type Column } from "../../components/DataTable";
 import type { LayoutDetail, LayoutSummary } from "../../types";
 import { SelectField } from "../../components/SelectField";
+import { useOptionalAuth } from "../../auth";
+import { can } from "../../permissions";
 
 export const LAYOUT_PAGE_SIZE = 20;
 
@@ -91,6 +93,9 @@ function LayoutDialog({
 
 export function LayoutsPage() {
   const navigate = useNavigate();
+  const auth = useOptionalAuth();
+  // Settings read: the page is shown but cannot be changed.
+  const canWrite = !auth?.user || can(auth.user, "settings", "write");
   const [layouts, setLayouts] = useState<LayoutSummary[]>([]);
   const [error, setError] = useState("");
   const [adding, setAdding] = useState(false);
@@ -128,10 +133,16 @@ export function LayoutsPage() {
       header: "Actions",
       render: (row) => (
         <div className="flex gap-1">
-          <button type="button" className="icon-btn" aria-label={`Edit ${row.name}`} title="Edit layout" onClick={() => navigate(`/settings/layouts/${row.layout_id}`)}>
-            <span className="material-symbols-outlined">edit</span>
+          <button
+            type="button"
+            className="icon-btn"
+            aria-label={`${canWrite ? "Edit" : "View"} ${row.name}`}
+            title={canWrite ? "Edit layout" : "View layout"}
+            onClick={() => navigate(`/settings/layouts/${row.layout_id}`)}
+          >
+            <span className="material-symbols-outlined">{canWrite ? "edit" : "visibility"}</span>
           </button>
-          {!row.is_system && (
+          {canWrite && !row.is_system && (
             <button type="button" className="icon-btn icon-btn-danger" aria-label={`Delete ${row.name}`} title="Delete layout" onClick={() => setRemoving(row)}>
               <span className="material-symbols-outlined">delete</span>
             </button>
@@ -158,10 +169,12 @@ export function LayoutsPage() {
         searchLabel="Search layouts"
         searchPlaceholder="Search layouts"
         toolbar={
-          <button type="button" className="btn btn-primary" onClick={() => setAdding(true)}>
-            <span className="material-symbols-outlined">add</span>
-            Add layout
-          </button>
+          canWrite ? (
+            <button type="button" className="btn btn-primary" onClick={() => setAdding(true)}>
+              <span className="material-symbols-outlined">add</span>
+              Add layout
+            </button>
+          ) : undefined
         }
       />
       {adding && (

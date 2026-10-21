@@ -130,20 +130,45 @@ test("edits a system without letting the code change", async () => {
   expect(screen.queryByRole("dialog")).toBeNull();
 });
 
-test("deletes after confirmation and shows why a delete is refused", async () => {
+test("warns with everything a system delete removes and needs the code typed", async () => {
   let refuse = true;
-  mockFetch([system("SPL"), system("DGE")], (_url, init) => {
+  const fetchMock = mockFetch([system("SPL"), system("DGE")], (url, init) => {
+    if (url.endsWith("/delete-impact"))
+      return json({
+        system_code: "SPL",
+        system_name: "SPL name",
+        capabilities: [{ capability_id: "c1", country: "SG", l1_capability: "Pay", l2_capability: "Card", l3_capability: "Auth" }],
+        batches: [{ batch_id: "b1", country: "SG", batch_name: "Nightly" }],
+        reports: [],
+        interfaces_kept: [{ interface_id: "i1", channel: "PIB", interface_name: "Balance" }],
+        unlinked_tables: [{ table_id: "t1", database_name: "PIB", schema_name: "DBO", table_name: "ACCT" }],
+        systems_referencing: [],
+        batches_referencing: [],
+        projects_in_scope: ["Cards"],
+      });
     if (init?.method !== "DELETE") return undefined;
-    if (refuse) return json({ detail: "SPL is used by interfaces in: PIB. Upload a new file without it first." }, 409);
+    if (refuse) return json({ detail: "Something went wrong" }, 400);
     return json({ ok: true });
   });
   render(<SystemsPanel />);
   await waitFor(() => expect(screen.getByText("SPL name")).toBeTruthy());
   fireEvent.click(screen.getByRole("button", { name: "Delete SPL" }));
-  fireEvent.click(within(screen.getByRole("alertdialog")).getByRole("button", { name: "Delete" }));
-  await waitFor(() => expect(screen.getByText(/used by interfaces in: PIB/)).toBeTruthy());
+  const dialog = await screen.findByRole("alertdialog", { name: "Delete system SPL" });
+  expect(await within(dialog).findByText("Pay › Card › Auth (SG)")).toBeTruthy();
+  expect(within(dialog).getByText("Nightly (SG)")).toBeTruthy();
+  expect(within(dialog).getByText("PIB.DBO.ACCT")).toBeTruthy();
+  expect(within(dialog).getByText("Balance (PIB)")).toBeTruthy();
+  expect(within(dialog).getByText("Cards")).toBeTruthy();
+  const confirm = within(dialog).getByRole("button", { name: "Delete SPL and 2 items" }) as HTMLButtonElement;
+  expect(confirm.disabled).toBe(true);
+  fireEvent.change(within(dialog).getByLabelText("Type the system code to confirm"), { target: { value: "spl" } });
+  expect(confirm.disabled).toBe(false);
+  fireEvent.click(confirm);
+  await waitFor(() => expect(within(dialog).getByText("Something went wrong")).toBeTruthy());
   expect(screen.getByText("SPL name")).toBeTruthy();
   refuse = false;
-  fireEvent.click(within(screen.getByRole("alertdialog")).getByRole("button", { name: "Delete" }));
+  fireEvent.click(within(dialog).getByRole("button", { name: "Delete SPL and 2 items" }));
   await waitFor(() => expect(screen.queryByText("SPL name")).toBeNull());
+  const call = fetchMock.mock.calls.find((item) => (item[1] as RequestInit | undefined)?.method === "DELETE")!;
+  expect(call[0]).toBe("/api/systems/SPL?confirm=spl");
 });

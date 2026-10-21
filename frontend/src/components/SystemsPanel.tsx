@@ -2,17 +2,19 @@ import { useEffect, useState } from "react";
 import { api, ApiError, type RowError } from "../api";
 import { useOptionalAuth } from "../auth";
 import type { SystemRecord } from "../types";
-import { ConfirmDialog } from "./ConfirmDialog";
+import { DeleteSystemDialog } from "./DeleteSystemDialog";
 import { FileDrop } from "./FileDrop";
 import { type Column, DataTable } from "./DataTable";
 import { KB_PAGE_SIZES } from "./TablePager";
 import { SystemDialog } from "./SystemDialog";
+import { can } from "../permissions";
 
 export const SYSTEMS_PAGE_SIZE = 25;
 
 export function SystemsPanel() {
   const auth = useOptionalAuth();
-  const canEdit = auth?.user?.role_name !== "Viewer";
+  // Without a signed-in user (component previews) editing stays on, as before.
+  const canEdit = !auth?.user || can(auth.user, "knowledge", "write");
   const [items, setItems] = useState<SystemRecord[]>([]);
   const [dialog, setDialog] = useState<{ system?: SystemRecord } | null>(null);
   const [deleting, setDeleting] = useState<SystemRecord | null>(null);
@@ -48,9 +50,8 @@ export function SystemsPanel() {
     }
   }
 
-  async function remove() {
+  function removed() {
     if (!deleting) return;
-    await api(`/api/systems/${encodeURIComponent(deleting.system_code)}`, { method: "DELETE" });
     const code = deleting.system_code;
     setItems((current) => current.filter((item) => item.system_code !== code));
     setDeleting(null);
@@ -140,7 +141,7 @@ export function SystemsPanel() {
       />
       {dialog && <SystemDialog system={dialog.system} onSaved={saved} onClose={() => setDialog(null)} />}
       {deleting && (
-        <ConfirmDialog title="Delete system" message={`Delete ${deleting.system_code} (${deleting.system_name})? This cannot be undone.`} onConfirm={remove} onClose={() => setDeleting(null)} />
+        <DeleteSystemDialog system={deleting} onDeleted={removed} onClose={() => setDeleting(null)} />
       )}
     </div>
   );

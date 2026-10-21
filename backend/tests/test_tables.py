@@ -25,7 +25,7 @@ def _upload(client, token, country="SG", database="PIB", schema="", rows=None, n
 
 
 def test_upload_defaults_schema_to_database_defaults_is_null_and_infers_descriptions(client):
-    analyst = login(client, "Analyst")
+    analyst = login(client, "SuperAnalyst")
     res = _upload(
         client,
         analyst,
@@ -54,10 +54,11 @@ def test_upload_defaults_schema_to_database_defaults_is_null_and_infers_descript
 
     detail = client.get(f"/api/tables/{table['table_id']}", headers=auth(analyst)).json()
     cols = {col["column_name"]: col for col in detail["columns"]}
-    assert cols["ACCOUNT_ID"]["is_null"] == "N"
-    assert cols["ACCOUNT_ID"]["primary_key"] == "Y"
+    assert cols["ACCOUNT_ID"]["is_null"] == "Yes"
+    assert cols["ACCOUNT_ID"]["primary_key"] == "Yes"
     assert cols["ACCOUNT_ID"]["description"]
-    assert cols["CUSTOMER_ID"]["is_null"] == "Y"
+    assert cols["CUSTOMER_ID"]["is_null"] == "Yes"
+    assert cols["CUSTOMER_ID"]["primary_key"] == ""
     assert cols["CUSTOMER_ID"]["foreign_key"] == "CUSTOMER.ID"
 
 
@@ -99,7 +100,9 @@ def test_upload_upserts_existing_columns_and_detects_missing_db_columns(client):
     detail = client.get(f"/api/tables/{table_id}", headers=auth(admin)).json()
     cols = {col["column_name"]: col for col in detail["columns"]}
     assert cols["AMOUNT"]["data_type"] == "NUMBER(18,4)"
-    assert cols["AMOUNT"]["is_null"] == "Y"
+    assert cols["AMOUNT"]["is_null"] == "Yes"
+    assert cols["TXN_ID"]["is_null"] == ""
+    assert cols["TXN_ID"]["primary_key"] == "Yes"
     assert "LEGACY_CODE" in cols  # Kept until user chooses to delete
 
     # User chooses to delete the missing column
@@ -143,7 +146,7 @@ def test_upload_rejects_duplicate_table_column_and_missing_required_fields(clien
 
 
 def test_manual_crud_and_role_permissions_for_tables_and_columns(client):
-    analyst = login(client, "Analyst")
+    analyst = login(client, "SuperAnalyst")
     viewer = login(client, "Viewer")
 
     # Viewer cannot create
@@ -185,7 +188,8 @@ def test_manual_crud_and_role_permissions_for_tables_and_columns(client):
     )
     assert col_res.status_code == 200, col_res.text
     col = col_res.json()
-    assert col["is_null"] == "N"
+    assert col["is_null"] == "Yes"
+    assert col["primary_key"] == "Yes"
     assert col["description"]
 
     # Duplicate column rejected
@@ -220,7 +224,7 @@ def test_manual_crud_and_role_permissions_for_tables_and_columns(client):
     )
     assert updated_col.status_code == 200
     assert updated_col.json()["data_type"] == "VARCHAR(64)"
-    assert updated_col.json()["is_null"] == "Y"
+    assert updated_col.json()["is_null"] == "Yes"
 
     assert client.delete(f"/api/tables/{table_id}/columns/{col['column_id']}", headers=auth(analyst)).status_code == 200
     assert client.delete(f"/api/tables/{table_id}", headers=auth(analyst)).status_code == 200
@@ -228,7 +232,7 @@ def test_manual_crud_and_role_permissions_for_tables_and_columns(client):
 
 
 def test_catalogs_endpoint_and_table_compare(client):
-    analyst = login(client, "Analyst")
+    analyst = login(client, "SuperAnalyst")
     catalogs = client.get("/api/catalogs", headers=auth(analyst))
     assert catalogs.status_code == 200
     body = catalogs.json()

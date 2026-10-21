@@ -43,7 +43,12 @@ def _signed_in(scope: Scope) -> dict | None:
     except jwt.PyJWTError:
         return None
     row = db.fetchone(
-        "SELECT user_id, username, email AS login_id, role_name FROM users WHERE user_id = ?", [claims.get("sub")]
+        """
+        SELECT u.user_id, u.username, u.email AS login_id, COALESCE(r.name, u.role_name) AS role_name
+        FROM users u LEFT JOIN roles r ON r.role_id = u.role_name
+        WHERE u.user_id = ?
+        """,
+        [claims.get("sub")],
     )
     return row or {"user_id": claims.get("sub"), "username": None, "login_id": claims.get("login_id"), "role_name": claims.get("role")}
 

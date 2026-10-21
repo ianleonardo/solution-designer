@@ -3,7 +3,7 @@ import io
 from openpyxl import Workbook
 from tests.conftest import auth, login
 
-HEADER = ["L1_CAPABILITY", "L2_CAPABILITY", "L3_CAPABILITY", "DESCRIPTION"]
+HEADER = ["COUNTRY", "L1_CAPABILITY", "L2_CAPABILITY", "L3_CAPABILITY", "DESCRIPTION"]
 
 
 def _excel(rows, header=HEADER) -> bytes:
@@ -31,19 +31,19 @@ def _system(client, token, code="SPL"):
 def test_capabilities_upload_infers_description_and_blocks_rag(client):
     admin = login(client, "Admin")
     _system(client, admin)
-    analyst = login(client, "Analyst")
+    analyst = login(client, "Admin")
     viewer = login(client, "Viewer")
 
     data = _excel(
         [
-            ["Payments", "Card", "Auth", ""],
-            ["Payments", "Card", "Capture", "Take funds"],
+            ["SG", "Payments", "Card", "Auth", ""],
+            ["SG", "Payments", "Card", "Capture", "Take funds"],
         ]
     )
     files = {"file": ("caps.xlsx", data, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")}
     upload = client.post(
         "/api/capabilities/upload",
-        data={"country": "SG", "system": "SPL"},
+        data={"system": "SPL"},
         files=files,
         headers=auth(analyst),
     )
@@ -75,12 +75,12 @@ def test_capabilities_upload_infers_description_and_blocks_rag(client):
 def test_capabilities_require_l1_l2_l3(client):
     admin = login(client, "Admin")
     _system(client, admin)
-    analyst = login(client, "Analyst")
-    data = _excel([["Payments", "", "Auth", "x"]])
+    analyst = login(client, "Admin")
+    data = _excel([["SG", "Payments", "", "Auth", "x"]])
     files = {"file": ("caps.xlsx", data, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")}
     upload = client.post(
         "/api/capabilities/upload",
-        data={"country": "SG", "system": "SPL"},
+        data={"system": "SPL"},
         files=files,
         headers=auth(analyst),
     )
@@ -88,11 +88,52 @@ def test_capabilities_require_l1_l2_l3(client):
     assert client.get("/api/capabilities", headers=auth(analyst)).json() == []
 
 
+def test_capabilities_upload_country_column(client):
+    admin = login(client, "Admin")
+    _system(client, admin)
+    analyst = login(client, "Admin")
+    files = {
+        "file": (
+            "caps.xlsx",
+            _excel(
+                [
+                    ["", "Payments", "Card", "Everywhere", "All"],
+                    ["my, sg", "Payments", "Card", "Regional", "Two"],
+                    ["SG", "Payments", "Card", "Local", "One"],
+                ]
+            ),
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        )
+    }
+    upload = client.post("/api/capabilities/upload", data={"system": "SPL"}, files=files, headers=auth(analyst))
+    assert upload.status_code == 200, upload.text
+    by_l3 = {row["l3_capability"]: row["country"] for row in upload.json()["capabilities"]}
+    assert by_l3["Everywhere"] == ""
+    assert by_l3["Regional"] == "SG,MY"
+    assert by_l3["Local"] == "SG"
+
+    rejected = client.post(
+        "/api/capabilities/upload",
+        data={"system": "SPL"},
+        files={
+            "file": (
+                "bad.xlsx",
+                _excel([["ZZ", "Payments", "Card", "Nope", "x"], ["SG,XX", "Payments", "Card", "Also", "x"]]),
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            )
+        },
+        headers=auth(analyst),
+    )
+    assert rejected.status_code == 400
+    assert {err["field"] for err in rejected.json()["errors"]} == {"COUNTRY"}
+    assert "Nope" not in {row["l3_capability"] for row in client.get("/api/capabilities", headers=auth(analyst)).json()}
+
+
 def test_capabilities_link_interface_and_unlink(client):
     admin = login(client, "Admin")
     _system(client, admin, "SPL")
     _system(client, admin, "DGE")
-    analyst = login(client, "Analyst")
+    analyst = login(client, "Admin")
     created = client.post(
         "/api/capabilities",
         json={
@@ -116,6 +157,7 @@ def test_capabilities_link_interface_and_unlink(client):
         json={
             "country": "SG",
             "interface_name": "Remit",
+            "endpoint": "/remit",
             "description": "d",
             "protocol": "MQ",
             "source": "SPL",
@@ -132,6 +174,7 @@ def test_capabilities_link_interface_and_unlink(client):
     )
     assert linked.status_code == 200, linked.text
     assert linked.json()["interfaces"][0]["interface_name"] == "Remit"
+    assert linked.json()["interfaces"][0]["endpoint"] == "/remit"
 
     unlinked = client.delete(
         f"/api/capabilities/{capability_id}/interfaces/{interface_id}",
@@ -191,7 +234,7 @@ def test_capabilities_accept_system_without_flag(client):
         ).status_code
         == 200
     )
-    analyst = login(client, "Analyst")
+    analyst = login(client, "Admin")
     created = client.post(
         "/api/capabilities",
         json={
@@ -210,7 +253,7 @@ def test_capabilities_accept_system_without_flag(client):
 def test_capability_countries_can_be_all_or_several(client):
     admin = login(client, "Admin")
     _system(client, admin)
-    analyst = login(client, "Analyst")
+    analyst = login(client, "Admin")
     everywhere = client.post(
         "/api/capabilities",
         json={

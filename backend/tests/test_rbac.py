@@ -24,19 +24,21 @@ def test_reader_cannot_create_and_project_has_one_document_per_layout(client):
 
 
 
-def test_admin_cannot_create_edit_or_delete_projects_or_their_documents(client):
+def test_project_readers_cannot_create_edit_or_delete_projects_or_their_documents(client):
     writer = login(client, "Write")
     project_id = client.post("/api/projects", json={"project_name": "Owned"}, headers=auth(writer)).json()["project_id"]
     document = client.get(f"/api/projects/{project_id}/documents", headers=auth(writer)).json()[0]
-    for role in ("Admin", "Read"):
+    for role in ("Read",):
         token = auth(login(client, role))
         assert client.post("/api/projects", json={"project_name": "Nope"}, headers=token).status_code == 403
         assert client.patch(f"/api/projects/{project_id}", json={"project_name": "Renamed"}, headers=token).status_code == 403
         assert client.delete(f"/api/projects/{project_id}", headers=token).status_code == 403
         assert client.post(f"/api/projects/{project_id}/documents", json={"layout_id": "interface-spec"}, headers=token).status_code == 403
         assert client.delete(f"/api/projects/{project_id}/documents/{document['document_id']}", headers=token).status_code == 403
-    # Admin can still see the project.
-    assert client.get(f"/api/projects/{project_id}", headers=auth(login(client, "Admin"))).status_code == 200
+    # The administrator can do everything, including changing projects.
+    admin = auth(login(client, "Admin"))
+    assert client.get(f"/api/projects/{project_id}", headers=admin).status_code == 200
+    assert client.patch(f"/api/projects/{project_id}", json={"project_name": "Renamed"}, headers=admin).status_code == 200
 
 
 def test_there_is_no_approval_workflow_or_status(client):
@@ -52,9 +54,9 @@ def test_there_is_no_approval_workflow_or_status(client):
     assert "pending_approvals" not in client.get("/api/dashboard", headers=auth(writer)).json()
 
 
-def test_only_admin_analyst_and_viewer_roles_exist(client):
+def test_users_need_a_defined_role(client):
     admin = login(client, "Admin")
-    for role in ("Maker", "Checker", "Write", "Read"):
+    for role in ("Nope", "", "approver"):
         response = client.post(
             "/api/users", json={"login_id": "someone", "username": "S", "password": "Password123!", "role_name": role}, headers=auth(admin)
         )
@@ -69,4 +71,4 @@ def test_legacy_roles_are_migrated_to_analyst_and_viewer(client):
     db.exec_sql("UPDATE users SET role_name = 'Read' WHERE user_id = 'user-read'")
     db._migrate_roles()
     roles = {row["user_id"]: row["role_name"] for row in db.fetchall("SELECT user_id, role_name FROM users")}
-    assert roles == {"user-write": "Analyst", "user-admin": "Analyst", "user-read": "Viewer"}
+    assert roles == {"user-write": "analyst", "user-admin": "analyst", "user-read": "viewer"}

@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, expect, test, vi } from "vitest";
 import { ReportsPanel } from "../../components/ReportsPanel";
@@ -128,4 +128,28 @@ test("sorts reports by frequency", async () => {
     .map((node) => node.textContent)
     .filter((name) => name === "Morning Snapshot" || name === "Weekly Close");
   expect(names).toEqual(["Morning Snapshot", "Weekly Close"]);
+});
+
+test("offers Adhoc before Daily and Quarterly before Other", async () => {
+  vi.stubGlobal("localStorage", { getItem: () => JSON.stringify({ role_name: "Analyst", username: "a" }) });
+  vi.stubGlobal(
+    "fetch",
+    vi.fn().mockImplementation((url: string) => {
+      if (url === "/api/catalogs") return Promise.resolve(json({ countries: ["SG"], databases: [], interface_channels: [] }));
+      if (url === "/api/systems")
+        return Promise.resolve(json([{ system_code: "SPL", system_name: "SPL Core", description: "", upstreams: "", downstreams: "", has_batch: false, has_report: true, has_capability: false }]));
+      if (url === "/api/reports") return Promise.resolve(json([]));
+      return Promise.resolve(json([]));
+    }),
+  );
+  render(
+    <MemoryRouter>
+      <ReportsPanel />
+    </MemoryRouter>,
+  );
+  fireEvent.click(await screen.findByRole("button", { name: /Add report/ }));
+  const labels = within(screen.getByRole("dialog", { name: "Add report" }))
+    .getAllByRole("checkbox")
+    .map((node) => node.getAttribute("aria-label"));
+  expect(labels).toEqual(["Adhoc", "Daily", "Weekly", "Monthly", "Quarterly", "Other"]);
 });

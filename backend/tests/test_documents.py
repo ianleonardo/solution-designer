@@ -102,8 +102,8 @@ def test_save_is_scoped_to_the_document_and_sanitised(client):
     assert stored_image["caption"] == "My context"
     sdd = client.get(f"/api/projects/{project_id}/sdd", headers=auth(writer)).json()
     assert "interface-spec--purpose" not in sdd["content_json"]["sections"]
-    admin = login(client, "Admin")
-    assert client.put(url, json={"content_json": {}}, headers=auth(admin)).status_code == 403
+    viewer = login(client, "Read")
+    assert client.put(url, json={"content_json": {}}, headers=auth(viewer)).status_code == 403
 
 
 
@@ -211,7 +211,7 @@ def test_image_upload_rules(client):
     assert bad.status_code == 400
     svg = client.post(url, files={"file": ("x.svg", b"<svg onload=alert(1)>", "image/svg+xml")}, headers=auth(writer))
     assert svg.status_code == 400
-    for role in ("Read", "Admin"):
+    for role in ("Read",):
         denied = client.post(url, files={"file": ("x.png", PNG, "image/png")}, headers=auth(login(client, role)))
         assert denied.status_code == 403
     good = client.post(url, files={"file": ("x.png", PNG, "image/png")}, headers=auth(writer)).json()["url"]

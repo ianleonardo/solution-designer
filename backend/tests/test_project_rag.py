@@ -57,8 +57,7 @@ def test_retrieval_is_scoped_to_the_project(client):
 def test_role_rules_for_references(client):
     writer = login(client, "Write")
     project_id = _project(client, writer)
-    for role in ("Read", "Admin"):
-        assert _upload(client, login(client, role), project_id, "x.md", "text").status_code == 403
+    assert _upload(client, login(client, "Read"), project_id, "x.md", "text").status_code == 403
     uploaded = _upload(client, writer, project_id, "x.md", "text").json()
     assert client.delete(f"/api/projects/{project_id}/references/{uploaded['doc_id']}", headers=auth(login(client, "Read"))).status_code == 403
     assert client.get(f"/api/projects/{project_id}/references", headers=auth(login(client, "Read"))).status_code == 200

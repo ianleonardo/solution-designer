@@ -16,6 +16,7 @@ from app.services import (
     projects,
     reindex,
     reports,
+    roles,
     systems,
     tables,
 )
@@ -156,7 +157,7 @@ def create_user(body: dict, user: dict = Depends(require_admin)):
         user,
         str(body.get("login_id") or body.get("email") or ""),
         str(body.get("password") or ""),
-        str(body.get("role_name") or ""),
+        str(body.get("role_id") or body.get("role_name") or ""),
         str(body.get("username") or ""),
         str(body.get("auth_provider") or "local"),
     )
@@ -169,7 +170,7 @@ def update_user(user_id: str, body: dict, user: dict = Depends(require_admin)):
         user,
         user_id,
         str(body.get("username") or ""),
-        str(body.get("role_name") or ""),
+        str(body.get("role_id") or body.get("role_name") or ""),
         str(body.get("password") or ""),
         None if raw_provider is None else str(raw_provider),
     )
@@ -178,6 +179,32 @@ def update_user(user_id: str, body: dict, user: dict = Depends(require_admin)):
 @router.delete("/users/{user_id}")
 def delete_user(user_id: str, user: dict = Depends(require_admin)):
     projects.delete_user(user, user_id)
+    return {"ok": True}
+
+
+@router.get("/roles")
+def list_roles(user: dict = Depends(require_admin)):
+    return roles.list_roles(user)
+
+
+@router.post("/roles")
+def create_role(body: dict, user: dict = Depends(require_admin)):
+    return roles.create_role(user, body)
+
+
+@router.get("/roles/{role_id}")
+def get_role(role_id: str, user: dict = Depends(require_admin)):
+    return roles.get_role(user, role_id)
+
+
+@router.patch("/roles/{role_id}")
+def update_role(role_id: str, body: dict, user: dict = Depends(require_admin)):
+    return roles.update_role(user, role_id, body)
+
+
+@router.delete("/roles/{role_id}")
+def delete_role(role_id: str, user: dict = Depends(require_admin)):
+    roles.delete_role(user, role_id)
     return {"ok": True}
 
 
@@ -254,10 +281,15 @@ def update_system(system_code: str, body: dict, user: dict = Depends(require_kb_
     return systems.update_system(user, system_code, body)
 
 
+@router.get("/systems/{system_code}/delete-impact")
+def system_delete_impact(system_code: str, user: dict = Depends(current_user)):
+    return systems.delete_impact(user, system_code)
+
+
 @router.delete("/systems/{system_code}")
-def delete_system(system_code: str, user: dict = Depends(require_kb_editor)):
-    systems.delete_system(user, system_code)
-    return {"ok": True}
+def delete_system(system_code: str, confirm: str = "", user: dict = Depends(require_kb_editor)):
+    """Deletes the system and its capabilities, batches and reports (interfaces and tables are kept). `confirm` repeats the code."""
+    return systems.delete_system(user, system_code, confirm)
 
 
 @router.post("/systems/upload")
@@ -500,13 +532,12 @@ def create_capability(body: dict, user: dict = Depends(require_kb_editor)):
 
 @router.post("/capabilities/upload")
 async def upload_capabilities(
-    country: str = Form(""),
     system: str = Form(""),
     file: UploadFile = File(...),
     user: dict = Depends(require_kb_editor),
 ):
     data = await file.read()
-    return capabilities.upload_from_excel(user, country, system, file.filename or "capabilities.xlsx", data)
+    return capabilities.upload_from_excel(user, system, file.filename or "capabilities.xlsx", data)
 
 
 @router.get("/capabilities/{capability_id}")

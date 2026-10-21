@@ -133,7 +133,7 @@ def test_delete_removes_chunks_and_file(client):
 
 
 def test_analyst_can_manage_and_viewer_can_only_view_guidelines(client):
-    analyst = login(client, "Analyst")
+    analyst = login(client, "SuperAnalyst")
     assert client.get("/api/guidelines", headers=auth(analyst)).status_code == 200
     assert _add(client, analyst).status_code == 200
     viewer = login(client, "Viewer")

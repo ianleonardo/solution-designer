@@ -3,13 +3,14 @@ import os
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import FastAPI
+from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 
 from app import cache, db
 from app.audit_middleware import AuditMiddleware
 from app.config import load_dotenv
+from app.deps import enforce_access
 from app.errors import AppError
 from app.routers import admin, chat, projects, sdd
 from app.routers import auth as auth_routes
@@ -58,10 +59,12 @@ def health():
 
 
 app.include_router(auth_routes.router, prefix="/api")
-app.include_router(projects.router, prefix="/api")
-app.include_router(sdd.router, prefix="/api")
-app.include_router(admin.router, prefix="/api")
-app.include_router(chat.router, prefix="/api")
+# Every other route is checked against the user's role: area from the path, read or write from the method.
+guarded = [Depends(enforce_access)]
+app.include_router(projects.router, prefix="/api", dependencies=guarded)
+app.include_router(sdd.router, prefix="/api", dependencies=guarded)
+app.include_router(admin.router, prefix="/api", dependencies=guarded)
+app.include_router(chat.router, prefix="/api", dependencies=guarded)
 
 
 # In the container the built frontend is served from here, so one port serves the app and its API.

@@ -27,11 +27,34 @@ def client(tmp_path, monkeypatch):
 
 
 def _user(role: str) -> dict:
-    alias = {"Write": "Analyst", "Read": "Viewer"}.get(role, role)
+    alias = {
+        "Admin": "administrator",
+        "Administrator": "administrator",
+        "Analyst": "analyst",
+        "Write": "analyst",
+        "Viewer": "viewer",
+        "Read": "viewer",
+    }.get(role, role)
     return next(user for user in DEFAULT_USERS if user["role"] == alias)
 
 
+SUPER_ANALYST = {"login_id": "superanalyst", "password": "SuperPass123!", "username": "Super Analyst"}
+
+
 def login(client: TestClient, role: str) -> str:
+    if role in ("SuperAnalyst", "Super-analyst"):
+        # Not a seeded user: made on first use by the administrator.
+        admin = login(client, "Admin")
+        client.post(
+            "/api/users",
+            json={**SUPER_ANALYST, "role_id": "super-analyst"},
+            headers={"Authorization": f"Bearer {admin}"},
+        )
+        response = client.post(
+            "/api/auth/login", json={"login_id": SUPER_ANALYST["login_id"], "password": SUPER_ANALYST["password"]}
+        )
+        assert response.status_code == 200, response.text
+        return response.json()["access_token"]
     user = _user(role)
     response = client.post("/api/auth/login", json={"login_id": user["login_id"], "password": user["password"]})
     assert response.status_code == 200, response.text

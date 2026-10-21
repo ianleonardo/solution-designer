@@ -7,10 +7,11 @@ from pathlib import Path
 import bcrypt
 
 from app import db
-from app.config import CONTENT_AUTHORS, KB_EDITORS, data_dir, kb_countries
+from app.config import data_dir, kb_countries
 from app.errors import AppError
+from app.permissions import LEGACY_ROLES, require
 from app.seed_layouts import SDD_LAYOUT_ID
-from app.services import documents, files, gcs, images, ldap_auth, layouts, project_rag
+from app.services import documents, files, gcs, images, layouts, ldap_auth, project_rag
 from app.services.files import PREFIX
 
 
@@ -18,17 +19,22 @@ def _now() -> datetime:
     return datetime.now(timezone.utc)
 
 
-def _ensure(user: dict, roles: set[str]) -> None:
-    if user["role_name"] not in roles:
-        raise AppError(403, "Forbidden")
+def _ensure(user: dict, area: str) -> None:
+    require(user, area, "write")
 
 
-def public_user(row: dict) -> dict:
+def _role_names() -> dict[str, str]:
+    return {row["role_id"]: row["name"] for row in db.fetchall("SELECT role_id, name FROM roles")}
+
+
+def public_user(row: dict, names: dict[str, str] | None = None) -> dict:
+    names = names if names is not None else _role_names()
     return {
         "user_id": row["user_id"],
         "username": row["username"],
         "login_id": row["email"],
-        "role_name": row["role_name"],
+        "role_id": row["role_name"],
+        "role_name": names.get(row["role_name"], row["role_name"]),
         "auth_provider": (row.get("auth_provider") or "local"),
         "created_at": row["created_at"],
     }
@@ -81,8 +87,8 @@ def project_row(row: dict) -> dict:
 def list_projects() -> list[dict]:
     rows = db.fetchall(
         """
-        SELECT p.*, u.username AS owner_name, u.role_name AS owner_role
-        FROM projects p JOIN users u ON u.user_id = p.owner_id
+        SELECT p.*, u.username AS owner_name, COALESCE(r.name, u.role_name) AS owner_role
+        FROM projects p JOIN users u ON u.user_id = p.owner_id LEFT JOIN roles r ON r.role_id = u.role_name
         ORDER BY p.last_modified DESC
         """
     )
@@ -172,8 +178,8 @@ def dashboard() -> dict:
 def _require_project(project_id: str) -> dict:
     row = db.fetchone(
         """
-        SELECT p.*, u.username AS owner_name, u.role_name AS owner_role
-        FROM projects p JOIN users u ON u.user_id = p.owner_id
+        SELECT p.*, u.username AS owner_name, COALESCE(r.name, u.role_name) AS owner_role
+        FROM projects p JOIN users u ON u.user_id = p.owner_id LEFT JOIN roles r ON r.role_id = u.role_name
         WHERE p.project_id = ?
         """,
         [project_id],
@@ -217,7 +223,7 @@ def _known_systems() -> set[str]:
 def create_project(
     user: dict, name: str, description: str = "", countries: list[str] | None = None, systems: list[str] | None = None
 ) -> dict:
-    _ensure(user, CONTENT_AUTHORS)
+    _ensure(user, "projects")
     cleaned = name.strip()
     summary = _clean_description(description)
     country_scope = _clean_scope(countries, set(kb_countries()), "country")
@@ -250,7 +256,7 @@ def update_project(
     countries: list[str] | None = None,
     systems: list[str] | None = None,
 ) -> dict:
-    _ensure(user, CONTENT_AUTHORS)
+    _ensure(user, "projects")
     _require_project(project_id)
     assignments = ["last_modified = ?"]
     params: list = [_now()]
@@ -281,7 +287,7 @@ def update_project(
 
 
 def delete_project(user: dict, project_id: str) -> None:
-    _ensure(user, CONTENT_AUTHORS)
+    _ensure(user, "projects")
     _require_project(project_id)
     for row in db.fetchall("SELECT storage_path FROM baseline_docs WHERE project_id = ?", [project_id]):
         path = Path(row["storage_path"])
@@ -328,7 +334,7 @@ def list_baselines(project_id: str) -> list[dict]:
 
 
 def add_baseline(user: dict, project_id: str, filename: str, data: bytes) -> dict:
-    _ensure(user, CONTENT_AUTHORS)
+    _ensure(user, "projects")
     _require_project(project_id)
     text = files.extract_text(filename, data, files.BASELINE_EXTENSIONS)
     doc_id = str(uuid.uuid4())
@@ -360,7 +366,7 @@ def add_baseline(user: dict, project_id: str, filename: str, data: bytes) -> dic
 
 
 def delete_baseline(user: dict, project_id: str, doc_id: str) -> None:
-    _ensure(user, CONTENT_AUTHORS)
+    _ensure(user, "projects")
     row = db.fetchone(
         "SELECT * FROM baseline_docs WHERE project_id = ? AND doc_id = ?",
         [project_id, doc_id],
@@ -431,7 +437,7 @@ def _next_rag_id(inventory_type: str) -> str:
 
 
 def add_rag(user: dict, filename: str, data: bytes, inventory_type: str | None = None) -> list[dict]:
-    _ensure(user, KB_EDITORS)
+    _ensure(user, "knowledge")
     if inventory_type is not None and inventory_type not in files.INVENTORY_TYPES:
         raise AppError(400, "Unknown inventory type")
     if inventory_type == "Guidelines":
@@ -508,7 +514,7 @@ def list_rag() -> list[dict]:
 
 
 def delete_rag(user: dict, rag_id: str) -> None:
-    _ensure(user, KB_EDITORS)
+    _ensure(user, "knowledge")
     row = db.fetchone("SELECT rag_id FROM rag_inventory WHERE rag_id = ?", [rag_id])
     if row is None:
         raise AppError(404, "Inventory record not found")
@@ -517,11 +523,11 @@ def delete_rag(user: dict, rag_id: str) -> None:
 
 
 def list_users(user: dict) -> list[dict]:
-    _ensure(user, {"Admin"})
-    return [public_user(row) for row in db.fetchall("SELECT * FROM users ORDER BY created_at")]
+    require(user, "settings", "read")
+    names = _role_names()
+    return [public_user(row, names) for row in db.fetchall("SELECT * FROM users ORDER BY created_at")]
 
 
-ROLES = {"Admin", "Analyst", "Viewer"}
 LOGIN_ID_PATTERN = re.compile(r"^[A-Za-z0-9]{3,64}$")
 UNUSABLE_PASSWORD = "!"
 
@@ -537,9 +543,8 @@ def _provider(value: str) -> str:
 
 def create_user(actor: dict, login_id: str, password: str, role_name: str, username: str, auth_provider: str = "local") -> dict:
     """The Login ID is a plain ID, not an email (stored in the legacy `email` column)."""
-    _ensure(actor, {"Admin"})
-    if role_name not in ROLES:
-        raise AppError(400, "Unknown role")
+    _ensure(actor, "settings")
+    role_name = _known_role(role_name)
     provider = _provider(auth_provider)
     cleaned = login_id.strip()
     if not LOGIN_ID_PATTERN.fullmatch(cleaned):
@@ -569,8 +574,27 @@ def create_user(actor: dict, login_id: str, password: str, role_name: str, usern
     return public_user(row)
 
 
+def _known_role(value: str) -> str:
+    """The role id for a role id, a role name (any case) or one of the old fixed role names."""
+    text = str(value or "").strip()
+    row = db.fetchone("SELECT role_id FROM roles WHERE role_id = ?", [text]) or db.fetchone(
+        "SELECT role_id FROM roles WHERE lower(name) = lower(?)", [text]
+    )
+    if row is None and text in LEGACY_ROLES:
+        row = db.fetchone("SELECT role_id FROM roles WHERE role_id = ?", [LEGACY_ROLES[text]])
+    if row is None:
+        raise AppError(400, "Unknown role")
+    return row["role_id"]
+
+
+def _manages_settings(role_id: str) -> bool:
+    row = db.fetchone("SELECT settings FROM roles WHERE role_id = ?", [role_id])
+    return bool(row) and row["settings"] == "write"
+
+
 def _admin_count() -> int:
-    row = db.fetchone("SELECT count(*) AS c FROM users WHERE role_name = 'Admin'")
+    """Users whose role can change settings (and so manage users and roles)."""
+    row = db.fetchone("SELECT count(*) AS c FROM users u JOIN roles r ON r.role_id = u.role_name WHERE r.settings = 'write'")
     return row["c"] if row else 0
 
 
@@ -579,19 +603,18 @@ def update_user(actor: dict, user_id: str, username: str, role_name: str, passwo
 
     A blank password is left as it is for a local user. An Active Directory user has no stored password.
     """
-    _ensure(actor, {"Admin"})
+    _ensure(actor, "settings")
     row = db.fetchone("SELECT * FROM users WHERE user_id = ?", [user_id])
     if row is None:
         raise AppError(404, "User not found")
-    if role_name not in ROLES:
-        raise AppError(400, "Unknown role")
+    role_name = _known_role(role_name)
     cleaned = username.strip()
     if not cleaned:
         raise AppError(400, "Name is required")
     if len(cleaned) > 100:
         raise AppError(400, "Name must be 100 characters or fewer")
-    if row["role_name"] == "Admin" and role_name != "Admin" and _admin_count() <= 1:
-        raise AppError(400, "The last admin cannot be demoted")
+    if _manages_settings(row["role_name"]) and not _manages_settings(role_name) and _admin_count() <= 1:
+        raise AppError(400, "The last user who can manage settings cannot lose that role")
     current_provider = (row.get("auth_provider") or "local").strip().lower()
     provider = _provider(auth_provider) if auth_provider is not None else current_provider
     new_password = password.strip()
@@ -624,13 +647,13 @@ def update_user(actor: dict, user_id: str, username: str, role_name: str, passwo
 
 
 def delete_user(actor: dict, user_id: str) -> None:
-    _ensure(actor, {"Admin"})
+    _ensure(actor, "settings")
     if actor["user_id"] == user_id:
         raise AppError(400, "You cannot delete your own account")
     row = db.fetchone("SELECT * FROM users WHERE user_id = ?", [user_id])
     if row is None:
         raise AppError(404, "User not found")
-    if row["role_name"] == "Admin" and _admin_count() <= 1:
-        raise AppError(400, "The last admin cannot be deleted")
+    if _manages_settings(row["role_name"]) and _admin_count() <= 1:
+        raise AppError(400, "The last user who can manage settings cannot be deleted")
     db.exec_sql("DELETE FROM users WHERE user_id = ?", [user_id])
     gcs.upload_db()

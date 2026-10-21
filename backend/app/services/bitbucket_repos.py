@@ -6,8 +6,9 @@ import uuid
 from datetime import datetime, timezone
 
 from app import db
-from app.config import KB_EDITORS, kb_bitbucket_projects
+from app.config import kb_bitbucket_projects
 from app.errors import AppError
+from app.permissions import require
 from app.services import gcs, llm
 
 HEADERS = ("BITBUCKET_PROJECT", "BITBUCKET_REPO_NAME", "DESCRIPTION", "MAIN_COMPONENTS")
@@ -24,8 +25,7 @@ def _now() -> datetime:
 
 
 def _require_editor(user: dict) -> None:
-    if user["role_name"] not in KB_EDITORS:
-        raise AppError(403, "Forbidden")
+    require(user, "knowledge", "write")
 
 
 def _project(value: str) -> str:

@@ -3,7 +3,7 @@ import io
 from openpyxl import Workbook
 from tests.conftest import auth, login
 
-HEADER = ["BATCH_NAME", "BATCH_TYPE", "TO_FROM_SYSTEMS", "DESCRIPTION", "BATCH_FILENAME", "FILE_LAYOUT"]
+HEADER = ["BATCH_NAME", "BATCH_TYPE", "TO_FROM_SYSTEMS", "DESCRIPTION", "FREQUENCY", "BATCH_FILENAME", "FILE_LAYOUT"]
 
 
 def _excel(rows, header=HEADER) -> bytes:
@@ -32,13 +32,13 @@ def test_batches_upload_list_and_detail(client):
     admin = login(client, "Admin")
     _system(client, admin)
     _system(client, admin, "DGE")
-    analyst = login(client, "Analyst")
+    analyst = login(client, "SuperAnalyst")
     viewer = login(client, "Viewer")
 
     data = _excel(
         [
-            ["Nightly Settlement", "incoming", "DGE", "Settle cards", "settle.in", "Col A | Col B"],
-            ["Outbound Feed", "OUTGOING", "DGE, SPL", "Push to partner", "feed.out", "Layout text"],
+            ["Nightly Settlement", "incoming", "DGE", "Settle cards", "adhoc, quarterly", "settle.in", "Col A | Col B"],
+            ["Outbound Feed", "OUTGOING", "DGE, SPL", "Push to partner", "Other: Biweekly", "feed.out", "Layout text"],
         ]
     )
     files = {"file": ("batches.xlsx", data, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")}
@@ -62,6 +62,9 @@ def test_batches_upload_list_and_detail(client):
     assert by_name["Nightly Settlement"]["to_from_systems"] == "DGE"
     assert by_name["Outbound Feed"]["batch_type"] == "outgoing"
     assert by_name["Outbound Feed"]["to_from_systems"] == "DGE, SPL"
+    assert by_name["Nightly Settlement"]["frequency"] == "Adhoc, Quarterly"
+    assert by_name["Outbound Feed"]["frequency"] == "Other"
+    assert by_name["Outbound Feed"]["frequency_other"] == "Biweekly"
 
     first = rows[0]
     detail = client.get(f"/api/batches/{first['batch_id']}", headers=auth(viewer))
@@ -104,17 +107,25 @@ def test_batches_upload_list_and_detail(client):
     )
     assert created.status_code == 200, created.text
     assert created.json()["batch_name"] == "Manual Job"
+
+    posted = client.post(
+        "/api/batches",
+        json={"country": "SG", "system_code": "SPL", "batch_name": "Txn Feed", "batch_type": "Transaction"},
+        headers=auth(analyst),
+    )
+    assert posted.status_code == 200, posted.text
+    assert posted.json()["batch_type"] == "transaction"
     assert created.json()["to_from_systems"] == "DGE"
 
     assert client.delete(f"/api/batches/{first['batch_id']}", headers=auth(analyst)).status_code == 200
-    assert len(client.get("/api/batches", headers=auth(viewer)).json()) == 2
+    assert len(client.get("/api/batches", headers=auth(viewer)).json()) == 3
 
 
 def test_batches_reject_invalid_type(client):
     admin = login(client, "Admin")
     _system(client, admin)
-    analyst = login(client, "Analyst")
-    data = _excel([["Bad Job", "sideways", "", "Nope", "x.dat", "layout"]])
+    analyst = login(client, "SuperAnalyst")
+    data = _excel([["Bad Job", "sideways", "", "Nope", "", "x.dat", "layout"]])
     files = {"file": ("batches.xlsx", data, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")}
     upload = client.post(
         "/api/batches/upload",
@@ -131,8 +142,8 @@ def test_batches_reject_invalid_type(client):
 def test_batches_reject_unknown_to_from_systems(client):
     admin = login(client, "Admin")
     _system(client, admin)
-    analyst = login(client, "Analyst")
-    data = _excel([["Peer Job", "incoming", "NOPE", "x", "x.dat", "layout"]])
+    analyst = login(client, "SuperAnalyst")
+    data = _excel([["Peer Job", "incoming", "NOPE", "x", "Yearly", "x.dat", "layout"]])
     files = {"file": ("batches.xlsx", data, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")}
     upload = client.post(
         "/api/batches/upload",
@@ -144,6 +155,7 @@ def test_batches_reject_unknown_to_from_systems(client):
     body = upload.json()
     assert "problem" in body["detail"].lower()
     assert any("TO_FROM_SYSTEMS" in (err.get("field") or "") for err in body.get("errors") or [])
+    assert any(err.get("field") == "FREQUENCY" for err in body["errors"])
 
     bad = client.post(
         "/api/batches",
@@ -168,7 +180,7 @@ def test_batches_edit_country_system_and_reject_duplicate_name(client):
     admin = login(client, "Admin")
     _system(client, admin, "SPL")
     _system(client, admin, "DGE")
-    analyst = login(client, "Analyst")
+    analyst = login(client, "SuperAnalyst")
     first = client.post(
         "/api/batches",
         json={

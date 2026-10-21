@@ -1,5 +1,6 @@
 import { Navigate, Outlet, Route, Routes } from "react-router-dom";
 import { useAuth } from "./auth";
+import { can, type Area } from "./permissions";
 import { Shell } from "./components/Shell";
 import { DashboardPage } from "./pages/DashboardPage";
 import { KnowledgePage } from "./pages/KnowledgePage";
@@ -9,6 +10,7 @@ import { AuditLogPage } from "./pages/settings/AuditLogPage";
 import { LayoutEditorPage } from "./pages/settings/LayoutEditorPage";
 import { LayoutsPage } from "./pages/settings/LayoutsPage";
 import { LlmPage } from "./pages/settings/LlmPage";
+import { RolesPage } from "./pages/settings/RolesPage";
 import { UsersPage } from "./pages/settings/UsersPage";
 import { WorkspacePage } from "./pages/WorkspacePage";
 
@@ -19,9 +21,10 @@ function RequireAuth() {
   return <Outlet />;
 }
 
-function RequireAdmin() {
+/** Pages of an area the user's role has no access to send them home. */
+function RequireArea({ area }: { area: Area }) {
   const { user } = useAuth();
-  if (user?.role_name !== "Admin") return <Navigate to="/" replace />;
+  if (!can(user, area, "read")) return <Navigate to="/" replace />;
   return <Outlet />;
 }
 
@@ -32,17 +35,22 @@ export function App() {
       <Route element={<RequireAuth />}>
         <Route element={<Shell />}>
           <Route path="/" element={<DashboardPage />} />
-          <Route path="/projects" element={<ProjectsPage />} />
-          <Route path="/projects/:projectId" element={<WorkspacePage />} />
-          <Route path="/projects/:projectId/documents/:documentId" element={<WorkspacePage />} />
-          <Route path="/knowledge" element={<Navigate to="/knowledge/capabilities" replace />} />
-          <Route path="/knowledge/:kind" element={<KnowledgePage />} />
-          <Route element={<RequireAdmin />}>
+          <Route element={<RequireArea area="projects" />}>
+            <Route path="/projects" element={<ProjectsPage />} />
+            <Route path="/projects/:projectId" element={<WorkspacePage />} />
+            <Route path="/projects/:projectId/documents/:documentId" element={<WorkspacePage />} />
+          </Route>
+          <Route element={<RequireArea area="knowledge" />}>
+            <Route path="/knowledge" element={<Navigate to="/knowledge/capabilities" replace />} />
+            <Route path="/knowledge/:kind" element={<KnowledgePage />} />
+          </Route>
+          <Route element={<RequireArea area="settings" />}>
             <Route path="/settings" element={<Navigate to="/settings/llm" replace />} />
             <Route path="/settings/llm" element={<LlmPage />} />
             <Route path="/settings/layouts" element={<LayoutsPage />} />
             <Route path="/settings/layouts/:layoutId" element={<LayoutEditorPage />} />
             <Route path="/settings/users" element={<UsersPage />} />
+            <Route path="/settings/roles" element={<RolesPage />} />
             <Route path="/settings/audit" element={<AuditLogPage />} />
           </Route>
         </Route>

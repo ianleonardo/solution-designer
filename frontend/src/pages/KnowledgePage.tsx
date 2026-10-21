@@ -17,6 +17,7 @@ import { SelectField } from "../components/SelectField";
 import { TablesPanel } from "../components/TablesPanel";
 import { KNOWLEDGE_KINDS } from "../knowledge";
 import type { Catalogs, RagItem } from "../types";
+import { can } from "../permissions";
 
 export const KNOWLEDGE_PAGE_SIZE = 25;
 
@@ -51,7 +52,8 @@ export function KnowledgePage() {
 
 function InventoryPage() {
   const auth = useOptionalAuth();
-  const canEdit = auth?.user?.role_name !== "Viewer";
+  // Without a signed-in user (component previews) editing stays on, as before.
+  const canEdit = !auth?.user || can(auth.user, "knowledge", "write");
   const { kind: slug } = useParams();
   const [searchParams, setSearchParams] = useSearchParams();
   const kind = KNOWLEDGE_KINDS.find((item) => item.slug === slug);

@@ -5,10 +5,10 @@ import uuid
 from datetime import datetime, timezone
 
 from app import db
-from app.config import CONTENT_AUTHORS
 from app.content import blank_content, sanitize_content
 from app.errors import AppError
 from app.missing import evaluate_missing
+from app.permissions import can, require
 from app.services import gcs, kb_links
 
 _SELECT = """
@@ -21,12 +21,8 @@ def _now() -> datetime:
     return datetime.now(timezone.utc)
 
 
-ROLES = {"Admin", "Analyst", "Viewer"}
-
-
-def _ensure(user: dict, roles: set[str]) -> None:
-    if user["role_name"] not in roles:
-        raise AppError(403, "Forbidden")
+def _ensure_writer(user: dict) -> None:
+    require(user, "projects", "write")
 
 
 def require_project(project_id: str) -> None:
@@ -148,7 +144,7 @@ def _document_title(project_id: str, layout: dict, title: str) -> str:
 
 
 def create_document(user: dict, project_id: str, layout_id: str, title: str = "") -> dict:
-    _ensure(user, CONTENT_AUTHORS)
+    _ensure_writer(user)
     require_project(project_id)
     layout = db.fetchone("SELECT layout_id, name, allow_multiple FROM document_layouts WHERE layout_id = ?", [layout_id])
     if layout is None:
@@ -165,7 +161,7 @@ def create_document(user: dict, project_id: str, layout_id: str, title: str = ""
 
 
 def delete_document(user: dict, project_id: str, document_id: str) -> None:
-    _ensure(user, CONTENT_AUTHORS)
+    _ensure_writer(user)
     document_row(project_id, document_id)
     count = db.fetchone("SELECT count(*) AS c FROM project_documents WHERE project_id = ?", [project_id])
     if count and count["c"] <= 1:
@@ -176,7 +172,7 @@ def delete_document(user: dict, project_id: str, document_id: str) -> None:
 
 
 def save(user: dict, project_id: str, document_id: str | None, content: dict) -> dict:
-    _ensure(user, CONTENT_AUTHORS)
+    _ensure_writer(user)
     current = document_row(project_id, document_id)
     sanitized = sanitize_content(content, document_templates(current))
     db.exec_sql(
@@ -246,7 +242,7 @@ def _find(templates: list[dict], section_id: str) -> dict:
 def add_section(user: dict, project_id: str, document_id: str, body: dict) -> dict:
     from app.services import layouts
 
-    _ensure(user, CONTENT_AUTHORS)
+    _ensure_writer(user)
     current = document_row(project_id, document_id)
     templates = document_templates(current)
     name = layouts.clean_section_name(body.get("section_name"))
@@ -288,10 +284,10 @@ def update_section(user: dict, project_id: str, document_id: str, section_id: st
     from app.services import layouts
 
     wanted = set(body) & (PROMPT_FIELDS | STRUCTURE_FIELDS)
-    if user["role_name"] == "Admin" and not wanted <= PROMPT_FIELDS:
-        raise AppError(403, "Forbidden")
-    if user["role_name"] != "Admin":
-        _ensure(user, CONTENT_AUTHORS)
+    # project writers change anything; settings writers (who manage prompts) may change only the prompt fields
+    if not can(user, "projects", "write"):
+        if not (can(user, "settings", "write") and wanted <= PROMPT_FIELDS):
+            raise AppError(403, "Forbidden")
     current = document_row(project_id, document_id)
     templates = document_templates(current)
     section = _find(templates, section_id)
@@ -309,7 +305,7 @@ def update_section(user: dict, project_id: str, document_id: str, section_id: st
 def delete_section(user: dict, project_id: str, document_id: str, section_id: str) -> dict:
     from app.services import layouts
 
-    _ensure(user, CONTENT_AUTHORS)
+    _ensure_writer(user)
     current = document_row(project_id, document_id)
     templates = document_templates(current)
     _find(templates, section_id)
@@ -323,7 +319,7 @@ def delete_section(user: dict, project_id: str, document_id: str, section_id: st
 def reorder_sections(user: dict, project_id: str, document_id: str, sections: list) -> dict:
     from app.services import layouts
 
-    _ensure(user, CONTENT_AUTHORS)
+    _ensure_writer(user)
     current = document_row(project_id, document_id)
     templates = document_templates(current)
     plan = layouts.plan_order(sections, {item["template_id"] for item in templates})
@@ -333,11 +329,10 @@ def reorder_sections(user: dict, project_id: str, document_id: str, sections: li
 
 
 def validate(user: dict, project_id: str, document_id: str | None) -> dict:
-    if user["role_name"] not in ROLES:
-        raise AppError(403, "Forbidden")
+    require(user, "projects", "read")
     row = document_row(project_id, document_id)
     content = evaluate_missing(sanitize_content(json.loads(row["content_json"]), document_templates(row)))
-    if user["role_name"] in CONTENT_AUTHORS:
+    if can(user, "projects", "write"):
         db.exec_sql(
             "UPDATE project_documents SET content_json = ?, last_modified = ? WHERE document_id = ?",
             [json.dumps(content), _now(), row["document_id"]],

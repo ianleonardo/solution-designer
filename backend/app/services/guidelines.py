@@ -7,8 +7,9 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from app import db
-from app.config import KB_EDITORS, data_dir
+from app.config import data_dir
 from app.errors import AppError
+from app.permissions import require
 from app.services import files, gcs, llm
 from app.services.project_rag import chunk_text
 
@@ -27,8 +28,7 @@ def _now() -> datetime:
 
 
 def _require_editor(user: dict) -> None:
-    if user["role_name"] not in KB_EDITORS:
-        raise AppError(403, "Forbidden")
+    require(user, "knowledge", "write")
 
 
 def current_embedding_model() -> str:

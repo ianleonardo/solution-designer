@@ -3,7 +3,7 @@ import io
 from openpyxl import Workbook
 from tests.conftest import auth, login
 
-HEADER = ["REPORT_ID", "REPORT_NAME", "REPORT_DESCRIPTION", "REPORT_LAYOUT"]
+HEADER = ["REPORT_ID", "REPORT_NAME", "REPORT_DESCRIPTION", "FREQUENCY", "REPORT_LAYOUT"]
 
 
 def _excel(rows, header=HEADER) -> bytes:
@@ -31,13 +31,13 @@ def _system(client, token, code="SPL"):
 def test_reports_upload_list_and_layout(client):
     admin = login(client, "Admin")
     _system(client, admin)
-    analyst = login(client, "Analyst")
+    analyst = login(client, "SuperAnalyst")
     viewer = login(client, "Viewer")
 
     data = _excel(
         [
-            ["RPT-01", "Daily Balance", "End of day balances", "Col A | Col B"],
-            ["RPT-02", "Exception Report", "Failed postings", "Layout text"],
+            ["RPT-01", "Daily Balance", "End of day balances", "Daily", "Col A | Col B"],
+            ["RPT-02", "Exception Report", "Failed postings", "", "Layout text"],
         ]
     )
     files = {"file": ("reports.xlsx", data, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")}
@@ -90,7 +90,7 @@ def test_reports_edit_country_system_and_reject_duplicate_name(client):
     admin = login(client, "Admin")
     _system(client, admin, "SPL")
     _system(client, admin, "DGE")
-    analyst = login(client, "Analyst")
+    analyst = login(client, "SuperAnalyst")
     first = client.post(
         "/api/reports",
         json={
@@ -134,3 +134,78 @@ def test_reports_edit_country_system_and_reject_duplicate_name(client):
     )
     assert dup.status_code == 400
     assert "already exists" in dup.json()["detail"].lower()
+
+
+def test_report_frequency_includes_adhoc_and_quarterly(client):
+    admin = login(client, "Admin")
+    _system(client, admin)
+    created = client.post(
+        "/api/reports",
+        json={
+            "country": "SG",
+            "system_code": "SPL",
+            "report_code": "RPT-Q",
+            "report_name": "Quarter Pack",
+            "frequency": "quarterly, adhoc",
+            "description": "q",
+            "layout": "L",
+        },
+        headers=auth(admin),
+    )
+    assert created.status_code == 200, created.text
+    assert created.json()["frequency"] == "Adhoc, Quarterly"
+
+    uploaded = client.post(
+        "/api/reports/upload",
+        data={"country": "SG", "system": "SPL"},
+        files={
+            "file": (
+                "reports.xlsx",
+                _excel(
+                    [
+                        ["RPT-UP", "Uploaded", "From a sheet", "adhoc, quarterly", "L"],
+                        ["RPT-OT", "Custom", "Other cadence", "Other: Biweekly", "L"],
+                    ]
+                ),
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            )
+        },
+        headers=auth(admin),
+    )
+    assert uploaded.status_code == 200, uploaded.text
+    by_code = {row["report_code"]: row for row in uploaded.json()["reports"]}
+    assert by_code["RPT-UP"]["frequency"] == "Adhoc, Quarterly"
+    assert by_code["RPT-OT"]["frequency"] == "Other"
+    assert by_code["RPT-OT"]["frequency_other"] == "Biweekly"
+
+    rejected_sheet = client.post(
+        "/api/reports/upload",
+        data={"country": "SG", "system": "SPL"},
+        files={
+            "file": (
+                "bad.xlsx",
+                _excel([["RPT-BAD", "Nope", "x", "Yearly", "L"]]),
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            )
+        },
+        headers=auth(admin),
+    )
+    assert rejected_sheet.status_code == 400
+    assert rejected_sheet.json()["errors"][0]["field"] == "FREQUENCY"
+    assert "RPT-BAD" not in {row["report_code"] for row in client.get("/api/reports", headers=auth(admin)).json()}
+
+    rejected = client.post(
+        "/api/reports",
+        json={
+            "country": "SG",
+            "system_code": "SPL",
+            "report_code": "RPT-X",
+            "report_name": "Bad",
+            "frequency": "Yearly",
+            "description": "q",
+            "layout": "L",
+        },
+        headers=auth(admin),
+    )
+    assert rejected.status_code == 400
+    assert "Adhoc" in rejected.json()["detail"] and "Quarterly" in rejected.json()["detail"]

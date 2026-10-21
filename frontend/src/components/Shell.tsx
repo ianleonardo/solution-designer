@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Link, Outlet, useNavigate } from "react-router-dom";
 import { useAuth } from "../auth";
+import { permissionsOf } from "../permissions";
 import { AnimatedLogo } from "./AnimatedLogo";
 import { AnimatedWordmark } from "./AnimatedWordmark";
 import { THEME_LABELS, themeIcon, useTheme } from "../theme";
@@ -53,7 +54,7 @@ export function Shell() {
       <div className="flex flex-1 min-h-0">
         <aside className={`${navOpen ? "fixed inset-y-14 left-0 z-30 flex w-64" : "hidden"} lg:flex lg:static w-60 shrink-0 border-r border-hairline bg-panel`}>
           <div className="flex-1">
-            <SideNav role={user.role_name} onNavigate={() => setNavOpen(false)} />
+            <SideNav permissions={permissionsOf(user)} onNavigate={() => setNavOpen(false)} />
           </div>
         </aside>
         {navOpen && <button type="button" aria-label="Close navigation" className="fixed inset-0 z-20 bg-black/40 lg:hidden" onClick={() => setNavOpen(false)} />}

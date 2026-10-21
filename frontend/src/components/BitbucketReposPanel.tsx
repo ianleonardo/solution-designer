@@ -8,6 +8,7 @@ import { FileDrop } from "./FileDrop";
 import { type Column, DataTable } from "./DataTable";
 import { KB_PAGE_SIZES } from "./TablePager";
 import { ProcessingRulesEditor } from "./ProcessingRulesEditor";
+import { can } from "../permissions";
 
 const PAGE_SIZE = 25;
 const DEFAULT_PROJECTS = ["CORE", "SPL", "DBE", "PIB", "PIBVN2", "PIBID", "SOF", "WSM", "NTN"];
@@ -153,7 +154,8 @@ function RepoDetailDialog({
 
 export function BitbucketReposPanel() {
   const auth = useOptionalAuth();
-  const canEdit = auth?.user?.role_name !== "Viewer";
+  // Without a signed-in user (component previews) editing stays on, as before.
+  const canEdit = !auth?.user || can(auth.user, "knowledge", "write");
   const [params, setParams] = useSearchParams();
   const [projects, setProjects] = useState<string[]>(DEFAULT_PROJECTS);
   const requested = (params.get("tab") ?? "").toUpperCase();

@@ -215,8 +215,8 @@ function twoSectionDoc(names: [string, string]): ProjectDocument {
   };
 }
 
-test("only makers and checkers can edit the structure", async () => {
-  for (const role of ["Viewer", "Admin"] as const) {
+test("only project writers can edit the structure", async () => {
+  for (const role of ["Viewer"] as const) {
     setup(role, "/projects/p1/documents/d2");
     await screen.findByRole("heading", { name: "Introduction" });
     expect(screen.queryByRole("button", { name: /Edit structure/ })).toBeNull();
@@ -357,8 +357,8 @@ test("auto fill for the document fills empty sections only unless told to replac
   expect(calls.filter((call) => call.url.includes("/generate"))[1].url).toBe("/api/projects/p1/documents/d1/generate");
 });
 
-test("viewers and admins do not get auto fill", async () => {
-  for (const role of ["Viewer", "Admin"] as const) {
+test("project readers do not get auto fill", async () => {
+  for (const role of ["Viewer"] as const) {
     setup(role);
     await screen.findByRole("heading", { name: "Scope" });
     expect(screen.queryByRole("button", { name: /Auto fill/ })).toBeNull();

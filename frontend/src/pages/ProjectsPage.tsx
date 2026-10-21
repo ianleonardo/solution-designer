@@ -5,6 +5,7 @@ import { useAuth } from "../auth";
 import { ProjectDialog, type ProjectScope } from "../components/ProjectDialog";
 import { ProjectTable } from "../components/ProjectTable";
 import type { Project } from "../types";
+import { can } from "../permissions";
 
 export function ProjectsPage() {
   const { user } = useAuth();
@@ -37,11 +38,11 @@ export function ProjectsPage() {
       {error && <p className="text-alert">{error}</p>}
       <ProjectTable
         projects={projects}
-        role={user.role_name}
+        canManage={can(user, "projects", "write")}
         onChanged={load}
         emptyLabel="No projects found."
         toolbar={
-          user.role_name === "Analyst" ? (
+          can(user, "projects", "write") ? (
             <button type="button" className="btn btn-primary" onClick={() => setCreating(true)}>
               Create project
             </button>

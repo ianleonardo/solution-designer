@@ -7,6 +7,7 @@ import { ConfirmDialog } from "./ConfirmDialog";
 import { type Column, DataTable } from "./DataTable";
 import { KB_PAGE_SIZES } from "./TablePager";
 import { GuidelineDialog } from "./GuidelineDialog";
+import { can } from "../permissions";
 
 const markdown = new MarkdownIt({ html: false, linkify: true, breaks: true });
 
@@ -81,7 +82,8 @@ function GuidelinePreview({ guideline, onClose }: { guideline: Guideline; onClos
 
 export function GuidelinesPanel() {
   const auth = useOptionalAuth();
-  const canEdit = auth?.user?.role_name !== "Viewer";
+  // Without a signed-in user (component previews) editing stays on, as before.
+  const canEdit = !auth?.user || can(auth.user, "knowledge", "write");
   const [items, setItems] = useState<Guideline[]>([]);
   const [adding, setAdding] = useState(false);
   const [deleting, setDeleting] = useState<Guideline | null>(null);

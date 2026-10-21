@@ -1,4 +1,5 @@
-export type Role = "Admin" | "Analyst" | "Viewer";
+/** A role id or name; roles are defined in Settings > User Roles. */
+export type Role = string;
 
 /** Where a table row came from in the Knowledge Base. `state` is worked out on each load and never saved. */
 export type KbLink = {
@@ -131,7 +132,11 @@ export type User = {
   user_id: string;
   username: string;
   login_id: string;
+  /** The role's display name. */
   role_name: Role;
+  role_id?: string;
+  /** What the role allows on each area; missing on old sessions (see permissions.ts). */
+  permissions?: { projects: "none" | "read" | "write"; knowledge: "none" | "read" | "write"; settings: "none" | "read" | "write" };
   /** local stores a password here. ldap checks Active Directory and stores none. */
   auth_provider?: "local" | "ldap";
   created_at: string;
@@ -348,6 +353,7 @@ export type KbCapabilityLinkInterface = {
   channel: string;
   country: string;
   interface_name: string;
+  endpoint: string;
   description: string;
   protocol: string;
   source: string;
@@ -413,4 +419,20 @@ export type TablesUploadResponse = {
   uploaded_tables: number;
   uploaded_columns: number;
   missing_columns: MissingColumnItem[];
+};
+
+export type RoleRecord = {
+  role_id: string;
+  name: string;
+  description: string;
+  projects: "none" | "read" | "write";
+  knowledge: "none" | "read" | "write";
+  settings: "none" | "read" | "write";
+  /** predefined: cannot be deleted */
+  is_system: boolean;
+  /** Administrator: cannot be changed */
+  locked: boolean;
+  user_count: number;
+  created_at: string;
+  updated_at: string;
 };

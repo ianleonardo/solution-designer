@@ -12,6 +12,7 @@ import { Outline, type OutlineEditor, type OutlineItem } from "../components/Out
 import { ProseEditor } from "../components/ProseEditor";
 import { ReferencesPanel } from "../components/ReferencesPanel";
 import { SectionDialog, type SectionDialogMode, type SectionValues } from "../components/SectionDialog";
+import { can } from "../permissions";
 import { KbSectionToolbar, kbSourceOf, presentColumns, TableFieldsDialog } from "../components/KbLinks";
 import { TableGrid } from "../components/TableGrid";
 import { sectionIsEmpty } from "../autofill";
@@ -70,8 +71,9 @@ export function WorkspacePage() {
   const [structureBusy, setStructureBusy] = useState(false);
   const [fieldsFor, setFieldsFor] = useState<{ table_id: string; label: string; present: string[] } | null>(null);
   const timer = useRef<number | null>(null);
-  const documentLocked = user?.role_name !== "Analyst";
-  const canEditStructure = user?.role_name === "Analyst";
+  const documentLocked = !can(user, "projects", "write");
+  const canEditStructure = can(user, "projects", "write");
+  const canReadKnowledge = can(user, "knowledge", "read");
   const canFill = canEditStructure;
 
   useEffect(() => {
@@ -375,7 +377,7 @@ export function WorkspacePage() {
   }
 
   async function commitTitle(nextTitleRaw: string) {
-    if (!data || user?.role_name !== "Analyst") return;
+    if (!data || !can(user, "projects", "write")) return;
     const nextTitle = nextTitleRaw.trim();
     if (!nextTitle || nextTitle === data.project.project_name) {
       setTitle(data.project.project_name);
@@ -414,7 +416,7 @@ export function WorkspacePage() {
               className="font-headline text-xl font-semibold bg-transparent border-b border-transparent focus:border-hairline outline-none min-w-[16rem]"
               aria-label="Project title"
               value={title}
-              readOnly={user.role_name !== "Analyst"}
+              readOnly={!can(user, "projects", "write")}
               onChange={(event) => setTitle(event.target.value)}
               onBlur={(event) => void commitTitle(event.currentTarget.value)}
               onKeyDown={(event) => {
@@ -507,7 +509,7 @@ export function WorkspacePage() {
                 </button>
               )}
             </div>
-            {kbSource && section && (
+            {kbSource && section && canReadKnowledge && (
               <KbSectionToolbar
                 key={`${docId}-${activeId}`}
                 base={base}
@@ -666,7 +668,7 @@ export function WorkspacePage() {
         <ReferencesPanel
           projectId={projectId}
           references={data.references}
-          canEdit={user.role_name === "Analyst"}
+          canEdit={can(user, "projects", "write")}
           onChange={(references) => setData((current) => (current ? { ...current, references } : current))}
           onClose={() => setReferencesOpen(false)}
         />

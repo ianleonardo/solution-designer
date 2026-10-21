@@ -26,7 +26,7 @@ def test_admin_adds_edits_lists_and_deletes_systems(client):
     listed = client.get("/api/systems", headers=auth(admin)).json()
     assert [item["system_code"] for item in listed] == ["DGE", "PIB", "SPL"]
 
-    assert client.delete("/api/systems/PIB", headers=auth(admin)).status_code == 200
+    assert client.delete("/api/systems/PIB?confirm=PIB", headers=auth(admin)).status_code == 200
     assert [item["system_code"] for item in client.get("/api/systems", headers=auth(admin)).json()] == ["DGE", "SPL"]
 
 
@@ -38,13 +38,13 @@ def test_system_code_and_name_rules(client):
     assert _create(client, admin, "A").status_code == 200
     assert _create(client, admin, "a").status_code == 400
     assert client.patch("/api/systems/NOPE", json={"system_name": "x"}, headers=auth(admin)).status_code == 404
-    assert client.delete("/api/systems/NOPE", headers=auth(admin)).status_code == 404
+    assert client.delete("/api/systems/NOPE?confirm=NOPE", headers=auth(admin)).status_code == 404
 
 
 def test_analyst_can_edit_and_viewer_can_only_view_systems(client):
     admin = login(client, "Admin")
     _create(client, admin, "SPL")
-    analyst = auth(login(client, "Analyst"))
+    analyst = auth(login(client, "SuperAnalyst"))
     assert client.get("/api/systems", headers=analyst).status_code == 200
     assert client.post("/api/systems", json={"system_code": "DGE", "system_name": "Digital"}, headers=analyst).status_code == 200
     assert client.patch("/api/systems/SPL", json={"system_name": "Updated"}, headers=analyst).status_code == 200

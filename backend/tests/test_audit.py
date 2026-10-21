@@ -111,7 +111,7 @@ def test_admin_changes_are_recorded(client):
     admin = login(client, "Admin")
     client.post("/api/systems", json={"system_code": "SPL", "system_name": "Front door"}, headers=auth(admin))
     client.patch("/api/systems/SPL", json={"description": "d"}, headers=auth(admin))
-    client.delete("/api/systems/SPL", headers=auth(admin))
+    client.delete("/api/systems/SPL?confirm=SPL", headers=auth(admin))
     client.post("/api/layouts", json={"name": "Runbook"}, headers=auth(admin))
     entries = _log(client)
     assert {"create_system", "update_system", "delete_system", "create_layout"} <= {entry["action"] for entry in entries}

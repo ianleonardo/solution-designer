@@ -1,6 +1,8 @@
 import { FormEvent, useCallback, useEffect, useState } from "react";
 import { api, ApiError } from "../../api";
 import type { LlmProvider, ReindexStatus, Settings } from "../../types";
+import { useOptionalAuth } from "../../auth";
+import { can } from "../../permissions";
 
 type ProviderForm = {
   chat_model: string;
@@ -172,6 +174,9 @@ function ReindexBanner({ status }: { status: ReindexStatus | null }) {
 }
 
 export function LlmPage() {
+  const auth = useOptionalAuth();
+  // Settings read: the page is shown but cannot be changed.
+  const canWrite = !auth?.user || can(auth.user, "settings", "write");
   const [settings, setSettings] = useState<Settings | null>(null);
   const [reindex, setReindex] = useState<ReindexStatus | null>(null);
   const [prompt, setPrompt] = useState("");
@@ -233,8 +238,9 @@ export function LlmPage() {
       </div>
       {error && <p className="text-alert">{error}</p>}
       <ReindexBanner status={reindex} />
+      {!canWrite && <p className="text-sm text-muted">View only. Your role can see these settings but not change them.</p>}
       {settings && (
-        <>
+        <fieldset disabled={!canWrite} className="space-y-4 min-w-0">
           <div className="grid gap-4 lg:grid-cols-3">
             {settings.providers.map((provider) => (
               <ProviderCard
@@ -259,9 +265,9 @@ export function LlmPage() {
               <textarea className="field mt-1 min-h-32" value={prompt} onChange={(event) => setPrompt(event.target.value)} />
             </label>
             {message && <p className="text-muted" role="status">{message}</p>}
-            <button className="btn btn-primary" type="submit">Save prompt</button>
+            {canWrite && <button className="btn btn-primary" type="submit">Save prompt</button>}
           </form>
-        </>
+        </fieldset>
       )}
     </div>
   );

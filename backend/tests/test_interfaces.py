@@ -83,19 +83,22 @@ def test_bad_files_and_channels(client):
     assert client.get("/api/interfaces/XYZ", headers=auth(admin)).status_code == 404
 
 
-def test_system_used_by_an_interface_cannot_be_deleted(client):
+def test_deleting_a_system_keeps_the_interfaces_that_use_it(client):
     admin = login(client, "Admin")
     _systems(client, admin)
     _upload(client, admin, "PIB", _excel([["x", "", "", "API", "SPL, DGE", "DGE"]]))
-    blocked = client.delete("/api/systems/SPL", headers=auth(admin))
-    assert blocked.status_code == 409 and "PIB" in blocked.json()["detail"]
-    assert client.delete("/api/systems/PIB", headers=auth(admin)).status_code == 200
+    impact = client.get("/api/systems/SPL/delete-impact", headers=auth(admin)).json()
+    assert [row["interface_name"] for row in impact["interfaces_kept"]] == ["x"]
+    deleted = client.delete("/api/systems/SPL?confirm=SPL", headers=auth(admin))
+    assert deleted.status_code == 200 and deleted.json()["interfaces_kept"] == 1
+    kept = client.get("/api/interfaces/PIB", headers=auth(admin)).json()
+    assert [row["interface_name"] for row in kept] == ["x"]
 
 
 def test_analyst_can_upload_and_viewer_can_only_view_interfaces(client):
     admin = login(client, "Admin")
     _systems(client, admin)
-    analyst = login(client, "Analyst")
+    analyst = login(client, "SuperAnalyst")
     assert client.get("/api/interfaces/SPL", headers=auth(analyst)).status_code == 200
     assert _upload(client, analyst, "SPL", _excel([["x", "", "", "API", "SPL", "DGE"]])).status_code == 200
     viewer = login(client, "Viewer")
@@ -106,7 +109,7 @@ def test_analyst_can_upload_and_viewer_can_only_view_interfaces(client):
 def test_manual_interface_crud(client):
     admin = login(client, "Admin")
     _systems(client, admin)
-    analyst = login(client, "Analyst")
+    analyst = login(client, "SuperAnalyst")
     viewer = login(client, "Viewer")
 
     created = client.post(

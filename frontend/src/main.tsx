@@ -5,6 +5,9 @@ import { App } from "./App";
 import { AuthProvider } from "./auth";
 import { ThemeProvider } from "./theme";
 import "./index.css";
+import { enableResizableDialogs } from "./resizableDialogs";
+
+enableResizableDialogs();
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>

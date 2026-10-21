@@ -1,6 +1,7 @@
 import { ReactNode, useState } from "react";
 import { Link } from "react-router-dom";
 import { api, formatDate } from "../api";
+import { can } from "../permissions";
 import type { Project, Role } from "../types";
 import { ConfirmDialog } from "./ConfirmDialog";
 import { type Column, DataTable } from "./DataTable";
@@ -11,19 +12,22 @@ export const PROJECT_PAGE_SIZE = 30;
 export function ProjectTable({
   projects,
   role,
+  canManage,
   onChanged,
   emptyLabel = "No projects yet.",
   toolbar,
 }: {
   projects: Project[];
-  role: Role;
+  /** Old fixed role name; `canManage` wins when given. */
+  role?: Role;
+  canManage?: boolean;
   onChanged: () => void;
   emptyLabel?: string;
   toolbar?: ReactNode;
 }) {
   const [editing, setEditing] = useState<Project | null>(null);
   const [deleting, setDeleting] = useState<Project | null>(null);
-  const canManageProjects = role === "Analyst";
+  const canManageProjects = canManage ?? can({ role_name: role ?? "" }, "projects", "write");
 
   async function saveEdit(name: string, description: string, scope: ProjectScope) {
     if (!editing) return;

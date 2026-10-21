@@ -8,6 +8,14 @@ pushd "%ROOT%"
 set "ROOT=%CD%"
 popd
 set "PORT=7777"
+REM FRONTEND_PORT in the project's .env (or the environment) changes the port. Allowed host names
+REM (FRONTEND_ALLOWED_HOSTS) are read from .env by vite.config.ts.
+if exist "%ROOT%\.env" (
+  for /f "usebackq tokens=1,* delims==" %%A in ("%ROOT%\.env") do (
+    if /i "%%A"=="FRONTEND_PORT" if not "%%B"=="" set "PORT=%%B"
+  )
+)
+if defined FRONTEND_PORT set "PORT=%FRONTEND_PORT%"
 
 if not exist "%ROOT%\node_modules" (
   echo Frontend dependencies not found. From the repository root, run: npm ci

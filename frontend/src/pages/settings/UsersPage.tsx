@@ -3,12 +3,26 @@ import { api, ApiError, formatDate } from "../../api";
 import { ConfirmDialog } from "../../components/ConfirmDialog";
 import { type Column, DataTable } from "../../components/DataTable";
 import { SelectField } from "../../components/SelectField";
-import type { Role, User } from "../../types";
+import { useOptionalAuth } from "../../auth";
+import { AREAS, can } from "../../permissions";
+import type { RoleRecord, User } from "../../types";
 
 export const USER_PAGE_SIZE = 20;
 export const LOGIN_ID_PATTERN = /^[A-Za-z0-9]{3,64}$/;
 const LOGIN_ID_HELP = "Login ID must be 3-64 letters or numbers, with no spaces or special characters";
-const ROLES: Role[] = ["Admin", "Analyst", "Viewer"];
+// Shown until the role list loads, or if it cannot be read.
+const FALLBACK_ROLES: Pick<RoleRecord, "role_id" | "name">[] = [
+  { role_id: "viewer", name: "Viewer" },
+  { role_id: "analyst", name: "Analyst" },
+  { role_id: "super-analyst", name: "Super-analyst" },
+  { role_id: "administrator", name: "Administrator" },
+];
+
+function accessSummary(role: Partial<RoleRecord>) {
+  if (!role.projects) return undefined;
+  const word = { write: "write", read: "read", none: "none" } as const;
+  return AREAS.map((area) => `${area.label}: ${word[role[area.key] ?? "none"]}`).join(" · ");
+}
 
 type SignIn = "local" | "ldap";
 
@@ -16,12 +30,24 @@ function signInLabel(provider: string | undefined) {
   return provider === "ldap" ? "Active Directory" : "Local database";
 }
 
-function UserDialog({ user, onSaved, onClose }: { user: User | null; onSaved: (user: User) => void; onClose: () => void }) {
+function UserDialog({
+  user,
+  roles,
+  onSaved,
+  onClose,
+}: {
+  user: User | null;
+  roles: Partial<RoleRecord>[];
+  onSaved: (user: User) => void;
+  onClose: () => void;
+}) {
   const editing = user !== null;
   const [loginId, setLoginId] = useState(user?.login_id ?? "");
   const [name, setName] = useState(user?.username ?? "");
   const [password, setPassword] = useState("");
-  const [role, setRole] = useState<Role>(user?.role_name ?? "Analyst");
+  const [role, setRole] = useState<string>(
+    user?.role_id ?? roles.find((item) => item.name === user?.role_name)?.role_id ?? (user?.role_name || "analyst"),
+  );
   const [signIn, setSignIn] = useState<SignIn>(user?.auth_provider === "ldap" ? "ldap" : "local");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
@@ -48,9 +74,9 @@ function UserDialog({ user, onSaved, onClose }: { user: User | null; onSaved: (u
     }
     setBusy(true);
     try {
-      const payload: { username: string; role_name: Role; login_id?: string; password?: string; auth_provider?: SignIn } = {
+      const payload: { username: string; role_id: string; login_id?: string; password?: string; auth_provider?: SignIn } = {
         username: name.trim(),
-        role_name: role,
+        role_id: role,
       };
       if (!editing) payload.login_id = loginId.trim();
       if (directory) payload.auth_provider = "ldap";
@@ -130,8 +156,8 @@ function UserDialog({ user, onSaved, onClose }: { user: User | null; onSaved: (u
               value={role}
               disabled={busy}
               className="w-full [&_button]:w-full [&_button]:max-w-none"
-              options={ROLES.map((item) => ({ value: item, label: item }))}
-              onChange={(value) => setRole(value as Role)}
+              options={roles.map((item) => ({ value: item.role_id ?? "", label: item.name ?? "", hint: accessSummary(item) }))}
+              onChange={setRole}
             />
           </div>
         </label>
@@ -150,7 +176,10 @@ function UserDialog({ user, onSaved, onClose }: { user: User | null; onSaved: (u
 }
 
 export function UsersPage() {
+  const auth = useOptionalAuth();
+  const canWrite = !auth?.user || can(auth.user, "settings", "write");
   const [users, setUsers] = useState<User[]>([]);
+  const [roles, setRoles] = useState<Partial<RoleRecord>[]>(FALLBACK_ROLES);
   const [error, setError] = useState("");
   const [dialog, setDialog] = useState<null | "add" | User>(null);
   const [deleting, setDeleting] = useState<User | null>(null);
@@ -159,6 +188,12 @@ export function UsersPage() {
     api<User[]>("/api/users")
       .then(setUsers)
       .catch((err: unknown) => setError(err instanceof ApiError ? err.message : "Could not load users"));
+    api<RoleRecord[]>("/api/roles")
+      .then((loaded) => {
+        const valid = Array.isArray(loaded) ? loaded.filter((item) => item && typeof item.role_id === "string") : [];
+        if (valid.length) setRoles(valid);
+      })
+      .catch(() => undefined);
   }, []);
 
   async function remove() {
@@ -169,26 +204,28 @@ export function UsersPage() {
     setDeleting(null);
   }
 
+  const actionsColumn: Column<User> = {
+    key: "actions",
+    header: "Actions",
+    render: (row) => (
+      <div className="flex items-center gap-1.5">
+        <button type="button" className="icon-btn" aria-label={`Edit ${row.login_id}`} title="Edit name, role, sign-in, and password" onClick={() => setDialog(row)}>
+          <span className="material-symbols-outlined text-base">edit</span>
+        </button>
+        <button type="button" className="icon-btn icon-btn-danger" aria-label={`Delete ${row.login_id}`} title="Delete user" onClick={() => setDeleting(row)}>
+          <span className="material-symbols-outlined text-base">delete</span>
+        </button>
+      </div>
+    ),
+  };
+
   const columns: Column<User>[] = [
     { key: "login", header: "Login ID", sortValue: (row) => row.login_id, className: "font-medium", render: (row) => row.login_id },
     { key: "name", header: "Name", sortValue: (row) => row.username, render: (row) => row.username },
     { key: "role", header: "Role", sortValue: (row) => row.role_name, render: (row) => <span className="text-[11px] uppercase tracking-wide">{row.role_name}</span> },
     { key: "signin", header: "Sign-in", sortValue: (row) => signInLabel(row.auth_provider), render: (row) => signInLabel(row.auth_provider) },
     { key: "created", header: "Created", sortValue: (row) => row.created_at, className: "text-muted whitespace-nowrap", render: (row) => formatDate(row.created_at) },
-    {
-      key: "actions",
-      header: "Actions",
-      render: (row) => (
-        <div className="flex items-center gap-1.5">
-          <button type="button" className="icon-btn" aria-label={`Edit ${row.login_id}`} title="Edit name, role, sign-in, and password" onClick={() => setDialog(row)}>
-            <span className="material-symbols-outlined text-base">edit</span>
-          </button>
-          <button type="button" className="icon-btn icon-btn-danger" aria-label={`Delete ${row.login_id}`} title="Delete user" onClick={() => setDeleting(row)}>
-            <span className="material-symbols-outlined text-base">delete</span>
-          </button>
-        </div>
-      ),
-    },
+    ...(canWrite ? [actionsColumn] : []),
   ];
 
   return (
@@ -205,14 +242,17 @@ export function UsersPage() {
         searchLabel="Search users"
         searchPlaceholder="Search users"
         toolbar={
-          <button type="button" className="btn btn-primary" onClick={() => setDialog("add")}>
-            Add user
-          </button>
+          canWrite ? (
+            <button type="button" className="btn btn-primary" onClick={() => setDialog("add")}>
+              Add user
+            </button>
+          ) : undefined
         }
       />
       {dialog && (
         <UserDialog
           user={dialog === "add" ? null : dialog}
+          roles={roles}
           onClose={() => setDialog(null)}
           onSaved={(saved) => {
             setUsers((current) => (current.some((item) => item.user_id === saved.user_id) ? current.map((item) => (item.user_id === saved.user_id ? saved : item)) : [...current, saved]));

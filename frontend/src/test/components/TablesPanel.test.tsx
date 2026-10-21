@@ -12,7 +12,7 @@ function renderPanel() {
   );
 }
 
-let currentRole: Role = "Analyst";
+let currentRole: Role = "Admin"; // Knowledge Base write
 
 vi.mock("../../auth", () => ({
   useOptionalAuth: () => ({
@@ -70,7 +70,7 @@ function mockFetch(handler?: (url: string, init?: RequestInit) => Response | Pro
 
 afterEach(() => {
   vi.unstubAllGlobals();
-  currentRole = "Analyst";
+  currentRole = "Admin";
 });
 
 describe("TablesPanel", () => {

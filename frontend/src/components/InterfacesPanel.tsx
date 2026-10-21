@@ -9,6 +9,7 @@ import { FileDrop } from "./FileDrop";
 import { type Column, DataTable } from "./DataTable";
 import { KB_PAGE_SIZES } from "./TablePager";
 import { SelectField } from "./SelectField";
+import { can } from "../permissions";
 
 export const INTERFACES_PAGE_SIZE = 25;
 export const PROTOCOLS = ["API", "MQ", "Kafka", "gRPC", "FTP", "SMTP", "SMPP"];
@@ -328,7 +329,8 @@ function UploadInterfacesDialog({
 
 export function InterfacesPanel() {
   const auth = useOptionalAuth();
-  const canEdit = auth?.user?.role_name !== "Viewer";
+  // Without a signed-in user (component previews) editing stays on, as before.
+  const canEdit = !auth?.user || can(auth.user, "knowledge", "write");
   const [params, setParams] = useSearchParams();
   const [channels, setChannels] = useState<string[]>(["SPL", "DGE", "PIB", "NTN", "WSM", "EAI"]);
   const [countries, setCountries] = useState<string[]>(["SG", "MY", "TH", "VN", "ID"]);

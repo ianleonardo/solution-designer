@@ -16,6 +16,7 @@ import { FileDrop } from "./FileDrop";
 import { SelectField } from "./SelectField";
 import { SortHeader, sortRows, toggleColumnSort, type ColumnSort } from "./SortHeader";
 import { PageSlice, TablePager, usePageWindow } from "./TablePager";
+import { can } from "../permissions";
 
 const DEFAULT_COUNTRIES = ["SG", "MY", "TH", "VN", "ID"];
 const DEFAULT_DATABASES = ["PIB", "MBK", "SMS", "NTN", "WSM", "LCM"];
@@ -87,7 +88,7 @@ function UploadTablesDialog({
         <div>
           <h2 className="font-headline text-xl font-semibold">Upload Tables</h2>
           <p className="text-xs text-muted mt-1">
-            Excel (.xlsx) sheet with columns: TABLE_NAME, COLUMN_NAME, DATA_TYPE, IS_NULL, PRIMARY_KEY, FOREIGN_KEY.
+            Excel (.xlsx) sheet with columns: TABLE_NAME, COLUMN_NAME, DATA_TYPE, IS_NULL, PRIMARY_KEY, FOREIGN_KEY. Y is saved as Yes. N is saved as empty. A blank IS_NULL defaults to Yes, and a blank PRIMARY_KEY defaults to No.
           </p>
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -423,6 +424,20 @@ function TableFormDialog({
   );
 }
 
+const YES_NO_OPTIONS = [
+  { value: "Yes", label: "Yes" },
+  { value: "", label: "No" },
+];
+
+function isYes(value: string | undefined) {
+  const text = (value || "").trim().toLowerCase();
+  return text === "y" || text === "yes";
+}
+
+function yesNoLabel(value: string | undefined) {
+  return isYes(value) ? "Yes" : "No";
+}
+
 function ColumnFormDialog({
   tableId,
   column,
@@ -437,8 +452,8 @@ function ColumnFormDialog({
   const editing = Boolean(column);
   const [columnName, setColumnName] = useState(column?.column_name ?? "");
   const [dataType, setDataType] = useState(column?.data_type ?? "");
-  const [isNull, setIsNull] = useState(column?.is_null ?? "N");
-  const [primaryKey, setPrimaryKey] = useState(column?.primary_key ?? "");
+  const [isNull, setIsNull] = useState(column ? (isYes(column.is_null) ? "Yes" : "") : "Yes");
+  const [primaryKey, setPrimaryKey] = useState(column ? (isYes(column.primary_key) ? "Yes" : "") : "");
   const [foreignKey, setForeignKey] = useState(column?.foreign_key ?? "");
   const [description, setDescription] = useState(column?.description ?? "");
   const [busy, setBusy] = useState(false);
@@ -451,8 +466,8 @@ function ColumnFormDialog({
     const payload = {
       column_name: columnName.trim().toUpperCase(),
       data_type: dataType.trim().toUpperCase(),
-      is_null: isNull || "N",
-      primary_key: primaryKey.trim(),
+      is_null: isNull === "Yes" ? "Yes" : "",
+      primary_key: primaryKey === "Yes" ? "Yes" : "",
       foreign_key: foreignKey.trim(),
       description: description.trim(),
     };
@@ -517,28 +532,30 @@ function ColumnFormDialog({
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
           <label className="block">
-            <span className="font-label text-[10px] uppercase text-muted">Is Null</span>
+            <span className="font-label text-[10px] uppercase text-muted">Is nullable</span>
             <div className="mt-1">
               <SelectField
-                aria-label="Is Null"
+                aria-label="Is nullable"
                 value={isNull}
                 disabled={busy}
                 className="w-full [&_button]:w-full [&_button]:max-w-none"
-                options={[{ value: "N", label: "N" }, { value: "Y", label: "Y" }]}
+                options={YES_NO_OPTIONS}
                 onChange={setIsNull}
               />
             </div>
           </label>
           <label className="block">
             <span className="font-label text-[10px] uppercase text-muted">Primary key</span>
-            <input
-              className="field mt-1"
-              aria-label="Primary key"
-              value={primaryKey}
-              disabled={busy}
-              placeholder="e.g. Y or PK"
-              onChange={(event) => setPrimaryKey(event.target.value)}
-            />
+            <div className="mt-1">
+              <SelectField
+                aria-label="Primary key"
+                value={primaryKey}
+                disabled={busy}
+                className="w-full [&_button]:w-full [&_button]:max-w-none"
+                options={YES_NO_OPTIONS}
+                onChange={setPrimaryKey}
+              />
+            </div>
           </label>
           <label className="block">
             <span className="font-label text-[10px] uppercase text-muted">Foreign key</span>
@@ -711,8 +728,8 @@ export function TableDetailsDialog({
                       <tr key={col.column_id} className="border-b border-hairline last:border-b-0">
                         <td className="py-2.5 px-3 font-label text-xs font-medium whitespace-nowrap">{col.column_name}</td>
                         <td className="py-2.5 px-3 font-label text-xs text-muted whitespace-nowrap">{col.data_type}</td>
-                        <td className="py-2.5 px-3 text-xs whitespace-nowrap">{col.is_null}</td>
-                        <td className="py-2.5 px-3 text-xs text-muted whitespace-nowrap">{col.primary_key || "—"}</td>
+                        <td className="py-2.5 px-3 text-xs whitespace-nowrap">{yesNoLabel(col.is_null)}</td>
+                        <td className="py-2.5 px-3 text-xs text-muted whitespace-nowrap">{yesNoLabel(col.primary_key)}</td>
                         <td className="py-2.5 px-3 text-xs text-muted whitespace-nowrap">{col.foreign_key || "—"}</td>
                         <td className="py-2.5 px-3 text-muted max-w-md">{col.description || "—"}</td>
                         {canEdit && (
@@ -966,7 +983,8 @@ function TableCompareDialog({
 
 export function TablesPanel() {
   const auth = useOptionalAuth();
-  const canEdit = auth?.user?.role_name !== "Viewer";
+  // Without a signed-in user (component previews) editing stays on, as before.
+  const canEdit = !auth?.user || can(auth.user, "knowledge", "write");
   const [catalogs, setCatalogs] = useState<Catalogs>({
     countries: DEFAULT_COUNTRIES,
     databases: DEFAULT_DATABASES,

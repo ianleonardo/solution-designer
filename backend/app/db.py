@@ -1,11 +1,13 @@
 import json
 import threading
+from contextlib import contextmanager
 from datetime import datetime, timezone
 
 import bcrypt
 import duckdb
 
 from app.config import DEFAULT_USERS, GLOBAL_PROMPT, LEGACY_GLOBAL_PROMPT, db_path, template_path
+from app.permissions import LEGACY_ROLES, PREDEFINED_ROLES
 from app.seed_layouts import (
     FMEA_LAYOUT_DESCRIPTION,
     FMEA_LAYOUT_ID,
@@ -73,6 +75,19 @@ def fetchone(sql: str, params: list | None = None) -> dict | None:
     return rows[0] if rows else None
 
 
+@contextmanager
+def transaction():
+    """All statements inside run as one: either every change is kept or none is."""
+    with _lock:
+        _require().execute("BEGIN TRANSACTION")
+        try:
+            yield
+        except BaseException:
+            _require().execute("ROLLBACK")
+            raise
+        _require().execute("COMMIT")
+
+
 # A project may hold several documents of one layout when the layout allows it, so there is no
 # UNIQUE (project_id, layout_id). `title` names a copy; empty means "use the layout name".
 PROJECT_DOCUMENTS_DDL = """
@@ -124,6 +139,19 @@ def _rebuild_project_documents_without_unique() -> None:
 
 def _migrate() -> None:
     statements = [
+        """
+        CREATE TABLE IF NOT EXISTS roles (
+            role_id VARCHAR PRIMARY KEY,
+            name VARCHAR NOT NULL,
+            description VARCHAR NOT NULL DEFAULT '',
+            projects VARCHAR NOT NULL DEFAULT 'none',
+            knowledge VARCHAR NOT NULL DEFAULT 'none',
+            settings VARCHAR NOT NULL DEFAULT 'none',
+            is_system BOOLEAN NOT NULL DEFAULT FALSE,
+            created_at TIMESTAMP NOT NULL,
+            updated_at TIMESTAMP NOT NULL
+        )
+        """,
         """
         CREATE TABLE IF NOT EXISTS users (
             user_id VARCHAR PRIMARY KEY,
@@ -1085,10 +1113,24 @@ def _migrate_seed_login_ids() -> None:
             exec_sql("UPDATE users SET email = ? WHERE user_id = ?", [user["login_id"], user["user_id"]])
 
 
+def _seed_roles() -> None:
+    """The predefined roles exist once; later edits to them are kept (Administrator cannot be edited)."""
+    for role in PREDEFINED_ROLES:
+        if fetchone("SELECT role_id FROM roles WHERE role_id = ?", [role["role_id"]]):
+            continue
+        exec_sql(
+            """
+            INSERT INTO roles (role_id, name, description, projects, knowledge, settings, is_system, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, TRUE, ?, ?)
+            """,
+            [role["role_id"], role["name"], role["description"], role["projects"], role["knowledge"], role["settings"], _now(), _now()],
+        )
+
+
 def _migrate_roles() -> None:
-    """Legacy Maker/Checker/Write roles become Analyst; Read becomes Viewer."""
-    exec_sql("UPDATE users SET role_name = 'Analyst' WHERE role_name IN ('Maker', 'Checker', 'Write')")
-    exec_sql("UPDATE users SET role_name = 'Viewer' WHERE role_name = 'Read'")
+    """Users stored the old fixed role names (Admin, Analyst, Viewer ...); they now point at a role id."""
+    for old, new in LEGACY_ROLES.items():
+        exec_sql("UPDATE users SET role_name = ? WHERE role_name = ?", [new, old])
 
 
 def _migrate_table_countries() -> None:
@@ -1120,6 +1162,7 @@ def _seed() -> None:
                 """,
                 [user["user_id"], user["username"], login_id, hashed, user["role"], _now()],
             )
+    _seed_roles()
     _migrate_roles()
     _migrate_seed_login_ids()
     _migrate_table_countries()

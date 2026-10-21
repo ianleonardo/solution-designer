@@ -11,7 +11,7 @@ def _setup(client):
             json={"system_code": code, "system_name": code, "has_batch": True, "has_report": True, "has_capability": True},
             headers=admin,
         )
-    analyst = auth(login(client, "Analyst"))
+    analyst = auth(login(client, "SuperAnalyst"))
     capability = client.post(
         "/api/capabilities",
         json={"country": "SG,MY", "system_code": "SPL", "l1_capability": "Payments", "l2_capability": "Card", "l3_capability": "Auth"},

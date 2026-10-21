@@ -34,7 +34,7 @@ def test_catalogs_include_bitbucket_projects(client):
 
 
 def test_upload_normalizes_case_and_rejects_another_project(client):
-    analyst = login(client, "Analyst")
+    analyst = login(client, "SuperAnalyst")
     viewer = login(client, "Viewer")
     admin = login(client, "Admin")
 
@@ -91,7 +91,7 @@ def test_upload_normalizes_case_and_rejects_another_project(client):
 
 
 def test_empty_description_is_kept_on_reupload_and_inferred_when_missing(client, monkeypatch):
-    analyst = login(client, "Analyst")
+    analyst = login(client, "SuperAnalyst")
 
     first = _upload(client, analyst, "PIB", [["PIB", "checkout", "Kept on purpose.", "old"]])
     assert first.status_code == 200, first.text

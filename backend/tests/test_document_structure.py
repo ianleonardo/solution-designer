@@ -232,7 +232,7 @@ def test_changing_blocks_keeps_matching_content_and_refits_tables(client):
 def test_who_may_change_the_structure(client):
     writer, base, _ = _setup(client)
     first = _templates(client, writer, base)[0]
-    for role in ("Read", "Admin"):
+    for role in ("Read",):  # project read only
         token = login(client, role)
         assert client.post(f"{base}/sections", json={"section_name": "x"}, headers=auth(token)).status_code == 403
         assert client.patch(f"{base}/sections/{first['template_id']}", json={"section_name": "x"}, headers=auth(token)).status_code == 403

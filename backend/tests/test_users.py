@@ -85,10 +85,10 @@ def test_edit_changes_name_and_role_only(client):
     assert client.post("/api/auth/login", json={"login_id": "ian", "password": "NewPassword1"}).status_code == 200
 
 
-def test_last_admin_cannot_be_demoted_or_deleted(client):
+def test_last_admin_cannot_be_demoted_or_deleted(client):  # the last user who can manage settings
     admin = login(client, "Admin")
     users = client.get("/api/users", headers=auth(admin)).json()
-    admin_id = next(user["user_id"] for user in users if user["role_name"] == "Admin")
+    admin_id = next(user["user_id"] for user in users if user["role_id"] == "administrator")
     demoted = client.patch(f"/api/users/{admin_id}", json={"username": "Admin", "role_name": "Viewer"}, headers=auth(admin))
     assert demoted.status_code == 400
     assert client.delete(f"/api/users/{admin_id}", headers=auth(admin)).status_code == 400

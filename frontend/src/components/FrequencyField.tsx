@@ -1,16 +1,18 @@
-export const FREQUENCY_CHOICES = ["Daily", "Weekly", "Monthly", "Other"] as const;
+export const FREQUENCY_CHOICES = ["Adhoc", "Daily", "Weekly", "Monthly", "Quarterly", "Other"] as const;
 
-export function selectedFrequencies(value: string | undefined) {
-  const known = new Set<string>(FREQUENCY_CHOICES);
+export const REPORT_FREQUENCY_CHOICES = FREQUENCY_CHOICES;
+
+export function selectedFrequencies(value: string | undefined, choices: readonly string[] = FREQUENCY_CHOICES) {
+  const known = new Set<string>(choices);
   return (value || "")
     .split(",")
     .map((item) => item.trim())
     .filter((item) => known.has(item));
 }
 
-export function frequencyText(frequency: string | undefined, other: string | undefined) {
+export function frequencyText(frequency: string | undefined, other: string | undefined, choices: readonly string[] = FREQUENCY_CHOICES) {
   const extra = (other || "").trim();
-  const parts = selectedFrequencies(frequency).map((item) => (item === "Other" && extra ? `Other: ${extra}` : item));
+  const parts = selectedFrequencies(frequency, choices).map((item) => (item === "Other" && extra ? `Other: ${extra}` : item));
   return parts.join(", ");
 }
 
@@ -18,16 +20,18 @@ export function FrequencyField({
   selected,
   other,
   disabled,
+  choices = FREQUENCY_CHOICES,
   onChange,
 }: {
   selected: string[];
   other: string;
   disabled?: boolean;
+  choices?: readonly string[];
   onChange: (selected: string[], other: string) => void;
 }) {
   function toggle(option: string) {
     const next = selected.includes(option) ? selected.filter((item) => item !== option) : [...selected, option];
-    const ordered = FREQUENCY_CHOICES.filter((item) => next.includes(item));
+    const ordered = choices.filter((item) => next.includes(item));
     onChange([...ordered], option === "Other" && !next.includes("Other") ? "" : other);
   }
 
@@ -35,7 +39,7 @@ export function FrequencyField({
     <fieldset>
       <legend className="font-label text-[10px] uppercase text-muted">Frequency</legend>
       <div className="mt-2 flex flex-wrap gap-x-4 gap-y-2">
-        {FREQUENCY_CHOICES.map((option) => (
+        {choices.map((option) => (
           <label key={option} className="inline-flex items-center gap-2 text-sm">
             <input type="checkbox" aria-label={option} checked={selected.includes(option)} disabled={disabled} onChange={() => toggle(option)} />
             {option}

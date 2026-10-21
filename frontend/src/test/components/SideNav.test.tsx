@@ -78,4 +78,17 @@ describe("SideNav", () => {
     expect(screen.getByRole("button", { name: "Tables" })).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Users" })).toBeNull();
   });
+
+  it("hides every menu the role has no access to and lists User Roles under Settings", () => {
+    render(
+      <MemoryRouter initialEntries={["/settings/users"]}>
+        <SideNav permissions={{ projects: "none", knowledge: "none", settings: "read" }} />
+      </MemoryRouter>,
+    );
+    expect(screen.getByText("Dashboard")).toBeTruthy();
+    expect(screen.queryByText("Project Documents")).toBeNull();
+    expect(screen.queryByRole("button", { name: /Knowledge Base/ })).toBeNull();
+    expect(screen.getByRole("button", { name: /Settings/ })).toBeTruthy();
+    expect(screen.getByText("User Roles")).toBeTruthy();
+  });
 });

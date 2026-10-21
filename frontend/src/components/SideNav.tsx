@@ -1,6 +1,7 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { KNOWLEDGE_KINDS } from "../knowledge";
+import { permissionsOf, type Permissions } from "../permissions";
 
 type NavLeaf = { to: string; label: string; icon: string };
 type NavGroup = { id: string; label: string; icon: string; prefix: string; children: { to: string; label: string }[] };
@@ -10,19 +11,21 @@ function isGroup(entry: NavEntry): entry is NavGroup {
   return "children" in entry;
 }
 
-export function navItems(role: string): NavEntry[] {
-  const items: NavEntry[] = [
-    { to: "/", label: "Dashboard", icon: "dashboard" },
-    { to: "/projects", label: "Project Documents", icon: "folder_open" },
-    {
+/** The menu for a role: an area the role has no access to is left out. */
+export function navItems(access: Permissions | string): NavEntry[] {
+  const allowed = typeof access === "string" ? permissionsOf({ role_name: access }) : access;
+  const items: NavEntry[] = [{ to: "/", label: "Dashboard", icon: "dashboard" }];
+  if (allowed.projects !== "none") items.push({ to: "/projects", label: "Project Documents", icon: "folder_open" });
+  if (allowed.knowledge !== "none") {
+    items.push({
       id: "knowledge",
       label: "Knowledge Base",
       icon: "hub",
       prefix: "/knowledge",
       children: KNOWLEDGE_KINDS.map((kind) => ({ to: `/knowledge/${kind.slug}`, label: kind.label })),
-    },
-  ];
-  if (role === "Admin") {
+    });
+  }
+  if (allowed.settings !== "none") {
     items.push({
       id: "settings",
       label: "Settings",
@@ -32,6 +35,7 @@ export function navItems(role: string): NavEntry[] {
         { to: "/settings/llm", label: "LLM" },
         { to: "/settings/layouts", label: "Document Layouts" },
         { to: "/settings/users", label: "Users" },
+        { to: "/settings/roles", label: "User Roles" },
         { to: "/settings/audit", label: "Audit Log" },
       ],
     });
@@ -112,16 +116,26 @@ function Group({
   );
 }
 
-function groupIdForPath(pathname: string, role: string): string | null {
+function groupIdForPath(pathname: string, role: Permissions | string): string | null {
   for (const entry of navItems(role)) {
     if (isGroup(entry) && pathname.startsWith(entry.prefix)) return entry.id;
   }
   return null;
 }
 
-export function SideNav({ role, onNavigate }: { role: string; onNavigate?: () => void }) {
+export function SideNav({
+  role,
+  permissions,
+  onNavigate,
+}: {
+  /** Old fixed role name; `permissions` wins when given. */
+  role?: string;
+  permissions?: Permissions;
+  onNavigate?: () => void;
+}) {
+  const access: Permissions = permissions ?? permissionsOf(role ? { role_name: role } : null);
   const location = useLocation();
-  const routeGroup = groupIdForPath(location.pathname, role);
+  const routeGroup = groupIdForPath(location.pathname, access);
   const [openId, setOpenId] = useState<string | null>(routeGroup);
 
   useEffect(() => {
@@ -130,7 +144,7 @@ export function SideNav({ role, onNavigate }: { role: string; onNavigate?: () =>
 
   return (
     <nav className="flex flex-col gap-0.5 p-3" aria-label="Primary">
-      {navItems(role).map((entry) =>
+      {navItems(access).map((entry) =>
         isGroup(entry) ? (
           <Group
             key={entry.id}

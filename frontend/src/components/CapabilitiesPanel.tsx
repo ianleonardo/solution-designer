@@ -1,4 +1,4 @@
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { api, ApiError, type RowError } from "../api";
 import { useOptionalAuth } from "../auth";
@@ -6,9 +6,7 @@ import type {
   Catalogs,
   InterfaceRecord,
   KbBatchRecord,
-  KbCapabilityLinkBatch,
   KbCapabilityLinkInterface,
-  KbCapabilityLinkReport,
   KbCapabilityRecord,
   KbReportRecord,
   KbTableRecord,
@@ -19,11 +17,14 @@ import { LinkPickerDialog, type LinkPickerRow } from "./LinkPickerDialog";
 import { FileDrop } from "./FileDrop";
 import { MermaidPreview } from "./DiagramBlock";
 import { SequenceDiagramsDialog, type SequenceDiagram } from "./SequenceDiagramsDialog";
+import { BatchDetailsDialog } from "./BatchesPanel";
+import { ReportDetailsDialog } from "./ReportsPanel";
 import { TableDetailsDialog } from "./TablesPanel";
 import { SortHeader, sortRows, toggleColumnSort, type ColumnSort } from "./SortHeader";
 import { ProcessingRulesEditor } from "./ProcessingRulesEditor";
 import { SelectField } from "./SelectField";
 import { PageSlice } from "./TablePager";
+import { can } from "../permissions";
 
 function inferredDescription(l1: string, l2: string, l3: string) {
   const [area, group, feature] = [l1, l2, l3].map((part) => part.trim());
@@ -52,18 +53,14 @@ function appliesToCountry(country: string, filter: string) {
 }
 
 function UploadCapabilitiesDialog({
-  countries,
   systems,
   onUploaded,
   onClose,
 }: {
-  countries: string[];
   systems: SystemRecord[];
   onUploaded: (capabilities: KbCapabilityRecord[]) => void;
   onClose: () => void;
 }) {
-  const [allCountries, setAllCountries] = useState(false);
-  const [selectedCountries, setSelectedCountries] = useState<string[]>([countries.includes("SG") ? "SG" : countries[0]].filter(Boolean));
   const [system, setSystem] = useState(systems[0]?.system_code ?? "");
   const [file, setFile] = useState<File | null>(null);
   const [busy, setBusy] = useState(false);
@@ -76,9 +73,8 @@ function UploadCapabilitiesDialog({
 
   async function submit(event: FormEvent) {
     event.preventDefault();
-    const country = allCountries ? "" : countries.filter((code) => selectedCountries.includes(code)).join(",");
-    if (!file || !system || (!allCountries && !country)) {
-      setError(!file ? "Please select an Excel (.xlsx) file." : !system ? "Please select a system." : "Choose All countries or at least one country.");
+    if (!file || !system) {
+      setError(!file ? "Please select an Excel (.xlsx) file." : "Please select a system.");
       return;
     }
     setBusy(true);
@@ -86,7 +82,6 @@ function UploadCapabilitiesDialog({
     setProblems([]);
     try {
       const body = new FormData();
-      body.append("country", country);
       body.append("system", system);
       body.append("file", file);
       const response = await api<{ capabilities: KbCapabilityRecord[]; uploaded: number }>("/api/capabilities/upload", {
@@ -107,45 +102,10 @@ function UploadCapabilitiesDialog({
         <div>
           <h2 className="font-headline text-xl font-semibold">Upload Capabilities</h2>
           <p className="text-xs text-muted mt-1">
-            Excel (.xlsx) with columns: L1_CAPABILITY, L2_CAPABILITY, L3_CAPABILITY, DESCRIPTION. L1–L3 are required. An empty DESCRIPTION is filled with a short description generated from those levels.
+            Excel (.xlsx) with columns: COUNTRY, L1_CAPABILITY, L2_CAPABILITY, L3_CAPABILITY, DESCRIPTION. COUNTRY is comma-separated and checked against the country list. Leave COUNTRY empty to apply to all countries. L1–L3 are required. An empty DESCRIPTION is filled with a short description generated from those levels.
           </p>
         </div>
-        <fieldset className="space-y-2" disabled={busy}>
-          <legend className="font-label text-[10px] uppercase text-muted">Applicable for</legend>
-          <div className="flex flex-wrap gap-x-4 gap-y-2">
-            <label className="inline-flex items-center gap-2 text-sm">
-              <input
-                type="checkbox"
-                aria-label="All countries"
-                checked={allCountries}
-                onChange={(event) => {
-                  if (event.target.checked) {
-                    setAllCountries(true);
-                    setSelectedCountries([]);
-                  } else {
-                    setAllCountries(false);
-                  }
-                }}
-              />
-              All countries
-            </label>
-            {countries.map((code) => (
-              <label key={code} className="inline-flex items-center gap-2 text-sm">
-                <input
-                  type="checkbox"
-                  aria-label={code}
-                  checked={!allCountries && selectedCountries.includes(code)}
-                  onChange={() => {
-                    setAllCountries(false);
-                    setSelectedCountries((current) => (current.includes(code) ? current.filter((item) => item !== code) : [...current, code]));
-                  }}
-                />
-                {code}
-              </label>
-            ))}
-          </div>
-        </fieldset>
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <div>
           <label className="block">
             <span className="font-label text-[10px] uppercase text-muted">System</span>
             <div className="mt-1">
@@ -266,8 +226,8 @@ function CapabilityFormDialog({
   const [inspect, setInspect] = useState<
     | { kind: "interface"; row: KbCapabilityLinkInterface }
     | { kind: "table"; tableId: string }
-    | { kind: "batch"; row: KbCapabilityLinkBatch }
-    | { kind: "report"; row: KbCapabilityLinkReport }
+    | { kind: "batch"; batchId: string }
+    | { kind: "report"; reportId: string }
     | null
   >(null);
   const [unlinking, setUnlinking] = useState<{ kind: LinkKind; id: string; name: string } | null>(null);
@@ -514,26 +474,26 @@ function CapabilityFormDialog({
       const saved = (links.batches || []).map((row) => ({
         id: row.batch_id,
         label: `${row.system_code} · ${row.batch_name}`,
-        onOpen: () => setInspect({ kind: "batch", row }),
+        onOpen: () => setInspect({ kind: "batch", batchId: row.batch_id }),
       }));
       const extra = pending
         .filter((item) => item.kind === "batches")
         .map((item) => {
           const row = catalog.batches.find((entry) => entry.batch_id === item.id);
-          return { id: item.id, label: row ? `${row.system_code} · ${row.batch_name}` : item.id, onOpen: () => undefined };
+          return { id: item.id, label: row ? `${row.system_code} · ${row.batch_name}` : item.id, onOpen: () => setInspect({ kind: "batch", batchId: item.id }) };
         });
       return [...saved, ...extra];
     }
     const saved = (links.reports || []).map((row) => ({
       id: row.report_id,
       label: `${row.system_code} · ${row.report_name}`,
-      onOpen: () => setInspect({ kind: "report", row }),
+      onOpen: () => setInspect({ kind: "report", reportId: row.report_id }),
     }));
     const extra = pending
       .filter((item) => item.kind === "reports")
       .map((item) => {
         const row = catalog.reports.find((entry) => entry.report_id === item.id);
-        return { id: item.id, label: row ? `${row.system_code} · ${row.report_name}` : item.id, onOpen: () => undefined };
+        return { id: item.id, label: row ? `${row.system_code} · ${row.report_name}` : item.id, onOpen: () => setInspect({ kind: "report", reportId: item.id }) };
       });
     return [...saved, ...extra];
   }
@@ -744,15 +704,13 @@ function CapabilityFormDialog({
           onClose={() => setInspect(null)}
         />
       )}
-      {inspect && inspect.kind !== "table" && (
+      {inspect?.kind === "batch" && <BatchDetailsDialog batchId={inspect.batchId} layerClass="z-[70]" onClose={() => setInspect(null)} />}
+      {inspect?.kind === "report" && <ReportDetailsDialog reportId={inspect.reportId} layerClass="z-[70]" onClose={() => setInspect(null)} />}
+      {inspect?.kind === "interface" && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-4" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && setInspect(null)}>
           <div role="dialog" aria-modal="true" aria-label="Linked item detail" className="w-full max-w-lg rounded-lg border border-hairline bg-panel p-6 shadow-xl space-y-3">
             <div className="flex items-start justify-between gap-2">
-              <h3 className="font-headline text-lg font-semibold m-0">
-                {inspect.kind === "interface" && inspect.row.interface_name}
-                {inspect.kind === "batch" && inspect.row.batch_name}
-                {inspect.kind === "report" && inspect.row.report_name}
-              </h3>
+              <h3 className="font-headline text-lg font-semibold m-0">{inspect.row.interface_name}</h3>
               <button type="button" className="icon-btn" aria-label="Close linked detail" onClick={() => setInspect(null)}>
                 <span className="material-symbols-outlined text-base">close</span>
               </button>
@@ -783,9 +741,222 @@ function CapabilityFormDialog({
   );
 }
 
+function groupNamed(rows: KbCapabilityRecord[], nameOf: (row: KbCapabilityRecord) => string) {
+  const map = new Map<string, KbCapabilityRecord[]>();
+  for (const row of rows) {
+    const name = nameOf(row);
+    const list = map.get(name);
+    if (list) list.push(row);
+    else map.set(name, [row]);
+  }
+  return [...map.entries()].sort((a, b) => a[0].localeCompare(b[0], undefined, { sensitivity: "base" }));
+}
+
+function HierarchyNode({
+  label,
+  selected,
+  expanded,
+  onClick,
+  nodeRef,
+}: {
+  label: string;
+  selected?: boolean;
+  expanded?: boolean;
+  onClick?: () => void;
+  nodeRef?: (element: HTMLElement | null) => void;
+}) {
+  const className = `relative z-[1] rounded-lg border px-3 py-2 text-left text-sm font-medium break-words min-w-[9rem] max-w-[16rem] ${
+    selected ? "border-[var(--accent,currentColor)] bg-inset shadow-sm" : "border-hairline bg-panel hover:bg-inset/70"
+  }`;
+  if (!onClick) {
+    return (
+      <div ref={nodeRef} className={className}>
+        {label}
+      </div>
+    );
+  }
+  return (
+    <button ref={nodeRef} type="button" className={className} aria-expanded={expanded} onClick={onClick}>
+      {label}
+    </button>
+  );
+}
+
+type TreeLink = { from: string; to: string[]; active?: string };
+type TreePath = { d: string; active: boolean };
+
+/** Elbow connectors from the right middle of a parent box to the left middle of each child box. */
+function treePaths(container: HTMLElement, nodes: Map<string, HTMLElement>, links: TreeLink[]): TreePath[] {
+  const box = container.getBoundingClientRect();
+  const anchor = (key: string, side: "left" | "right") => {
+    const element = nodes.get(key);
+    if (!element) return null;
+    const rect = element.getBoundingClientRect();
+    return { x: (side === "right" ? rect.right : rect.left) - box.left, y: rect.top + rect.height / 2 - box.top };
+  };
+  const paths: TreePath[] = [];
+  for (const link of links) {
+    const start = anchor(link.from, "right");
+    if (!start) continue;
+    for (const child of link.to) {
+      const end = anchor(child, "left");
+      if (!end) continue;
+      const mid = start.x + (end.x - start.x) / 2;
+      const dy = end.y - start.y;
+      const radius = Math.min(8, Math.abs(dy) / 2, (end.x - start.x) / 4);
+      const sign = dy > 0 ? 1 : -1;
+      const d =
+        Math.abs(dy) < 1
+          ? `M ${start.x} ${start.y} H ${end.x}`
+          : `M ${start.x} ${start.y} H ${mid - radius} Q ${mid} ${start.y} ${mid} ${start.y + sign * radius} ` +
+            `V ${end.y - sign * radius} Q ${mid} ${end.y} ${mid + radius} ${end.y} H ${end.x}`;
+      paths.push({ d, active: link.active === child });
+    }
+  }
+  // the highlighted branch is drawn last so it sits on top where lines share the trunk
+  return paths.sort((a, b) => Number(a.active) - Number(b.active));
+}
+
+export function CapabilityHierarchyDialog({
+  country,
+  systemCode,
+  systemName,
+  rows,
+  onOpen,
+  onClose,
+}: {
+  country: string;
+  systemCode: string;
+  systemName: string;
+  rows: KbCapabilityRecord[];
+  onOpen: (capabilityId: string) => void;
+  onClose: () => void;
+}) {
+  const [openL1, setOpenL1] = useState<string | null>(null);
+  const [openL2, setOpenL2] = useState<string | null>(null);
+  const l1Groups = groupNamed(rows, (row) => row.l1_capability);
+  const l2Groups = openL1 ? groupNamed(l1Groups.find(([name]) => name === openL1)?.[1] ?? [], (row) => row.l2_capability) : [];
+  const l3Rows = openL2 ? (l2Groups.find(([name]) => name === openL2)?.[1] ?? []).slice().sort((a, b) => a.l3_capability.localeCompare(b.l3_capability, undefined, { sensitivity: "base" })) : [];
+
+  const treeRef = useRef<HTMLDivElement>(null);
+  const nodes = useRef(new Map<string, HTMLElement>());
+  const [paths, setPaths] = useState<TreePath[]>([]);
+  const [size, setSize] = useState({ width: 0, height: 0 });
+  const register = (key: string) => (element: HTMLElement | null) => {
+    if (element) nodes.current.set(key, element);
+    else nodes.current.delete(key);
+  };
+
+  const links: TreeLink[] = [
+    { from: "root", to: l1Groups.map(([name]) => `l1:${name}`), active: openL1 ? `l1:${openL1}` : undefined },
+    ...(openL1 ? [{ from: `l1:${openL1}`, to: l2Groups.map(([name]) => `l2:${name}`), active: openL2 ? `l2:${openL2}` : undefined }] : []),
+    ...(openL2 ? [{ from: `l2:${openL2}`, to: l3Rows.map((row) => `l3:${row.capability_id}`) }] : []),
+  ];
+  const linkKey = JSON.stringify(links);
+
+  const redraw = useCallback(() => {
+    const container = treeRef.current;
+    if (!container) return;
+    setSize({ width: container.scrollWidth, height: container.scrollHeight });
+    setPaths(treePaths(container, nodes.current, JSON.parse(linkKey) as TreeLink[]));
+  }, [linkKey]);
+
+  useLayoutEffect(() => {
+    redraw();
+  }, [redraw]);
+
+  useEffect(() => {
+    const container = treeRef.current;
+    if (!container || typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(() => redraw());
+    observer.observe(container);
+    return () => observer.disconnect();
+  }, [redraw]);
+
+  const column = "flex flex-col justify-center gap-3";
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && onClose()}>
+      <div role="dialog" aria-modal="true" aria-label="Capability hierarchy" className="w-full max-w-5xl max-h-[90vh] overflow-auto rounded-lg border border-hairline bg-panel p-6 shadow-xl space-y-4">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <h2 className="font-headline text-xl font-semibold">Capability hierarchy</h2>
+            <p className="text-xs text-muted mt-1">
+              {country} · {systemCode}
+              {systemName !== systemCode ? ` — ${systemName}` : ""}. Open an L1 to see its L2 capabilities, then an L2 to see L3. Click an L3 to view it.
+            </p>
+          </div>
+          <button type="button" className="btn" onClick={onClose}>
+            Close
+          </button>
+        </div>
+        {rows.length === 0 ? (
+          <p className="text-muted">No capabilities for this country and system.</p>
+        ) : (
+          <div className="overflow-x-auto py-2">
+            <div ref={treeRef} className="relative inline-flex items-center gap-14 min-w-full" aria-label="Capability tree">
+              <svg className="pointer-events-none absolute inset-0 z-0" width={size.width} height={size.height} aria-hidden="true">
+                {paths.map((path, index) => (
+                  <path
+                    key={index}
+                    d={path.d}
+                    fill="none"
+                    strokeWidth={path.active ? 2 : 1.5}
+                    strokeLinecap="round"
+                    style={{ stroke: path.active ? "var(--accent, #1a4b8c)" : "var(--muted, #6b7280)", opacity: path.active ? 1 : 0.45 }}
+                  />
+                ))}
+              </svg>
+              <div className={column}>
+                <HierarchyNode label={systemName || systemCode} nodeRef={register("root")} />
+              </div>
+              <div className={column}>
+                {l1Groups.map(([name]) => (
+                  <HierarchyNode
+                    key={name}
+                    label={name}
+                    nodeRef={register(`l1:${name}`)}
+                    selected={openL1 === name}
+                    expanded={openL1 === name}
+                    onClick={() => {
+                      setOpenL1((current) => (current === name ? null : name));
+                      setOpenL2(null);
+                    }}
+                  />
+                ))}
+              </div>
+              {openL1 && (
+                <div className={column}>
+                  {l2Groups.map(([name]) => (
+                    <HierarchyNode
+                      key={name}
+                      label={name}
+                      nodeRef={register(`l2:${name}`)}
+                      selected={openL2 === name}
+                      expanded={openL2 === name}
+                      onClick={() => setOpenL2((current) => (current === name ? null : name))}
+                    />
+                  ))}
+                </div>
+              )}
+              {openL2 && (
+                <div className={column}>
+                  {l3Rows.map((row) => (
+                    <HierarchyNode key={row.capability_id} label={row.l3_capability} nodeRef={register(`l3:${row.capability_id}`)} onClick={() => onOpen(row.capability_id)} />
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export function CapabilitiesPanel() {
   const auth = useOptionalAuth();
-  const canEdit = auth?.user?.role_name !== "Viewer";
+  // Without a signed-in user (component previews) editing stays on, as before.
+  const canEdit = !auth?.user || can(auth.user, "knowledge", "write");
   const [searchParams] = useSearchParams();
   const [items, setItems] = useState<KbCapabilityRecord[]>([]);
   const [countries, setCountries] = useState<string[]>(["SG", "MY", "TH", "VN", "ID"]);
@@ -799,6 +970,7 @@ export function CapabilitiesPanel() {
   const [uploading, setUploading] = useState(false);
   const [form, setForm] = useState<{ capability?: KbCapabilityRecord } | null>(null);
   const [inspecting, setInspecting] = useState<string | null>(null);
+  const [hierarchyOpen, setHierarchyOpen] = useState(false);
   const [deleting, setDeleting] = useState<KbCapabilityRecord | null>(null);
   const [sort, setSort] = useState<ColumnSort>(null);
 
@@ -873,6 +1045,12 @@ export function CapabilitiesPanel() {
     return [...map.values()];
   }, [items, systems, search, countryFilter, systemFilter]);
 
+  const hierarchyRows = useMemo(
+    () => items.filter((row) => appliesToCountry(row.country, countryFilter) && row.system_code === systemFilter),
+    [items, countryFilter, systemFilter],
+  );
+  const hierarchySystemName = systemsForFilter.find((item) => item.system_code === systemFilter)?.system_name || systemFilter;
+
   async function remove() {
     if (!deleting) return;
     await api(`/api/capabilities/${encodeURIComponent(deleting.capability_id)}`, { method: "DELETE" });
@@ -888,8 +1066,13 @@ export function CapabilitiesPanel() {
           <h1 className="font-headline text-2xl font-semibold">Capabilities</h1>
           <p className="text-muted mt-0.5">One table per country and system (L1 / L2 / L3). Click a row for processing rules and linked catalogue items.</p>
         </div>
-        {canEdit && (
-          <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2">
+          <button type="button" className="btn" onClick={() => setHierarchyOpen(true)} disabled={!systemFilter}>
+            <span className="material-symbols-outlined text-base">account_tree</span>
+            View Hierarchy
+          </button>
+          {canEdit && (
+            <>
             <button type="button" className="btn" onClick={() => setForm({})}>
               <span className="material-symbols-outlined text-base">add</span>
               Add capability
@@ -898,8 +1081,9 @@ export function CapabilitiesPanel() {
               <span className="material-symbols-outlined text-base">upload</span>
               Upload
             </button>
-          </div>
-        )}
+            </>
+          )}
+        </div>
       </div>
       {error && <p className="text-alert">{error}</p>}
       {notice && (
@@ -947,11 +1131,9 @@ export function CapabilitiesPanel() {
       ) : (
         <div className="space-y-4">
           {groups.map((group) => (
-            <section key={group.key} className="bg-panel border border-hairline rounded-lg overflow-hidden" aria-label={`${applicableFor(group.country)} ${group.system}`}>
+            <section key={group.key} className="bg-panel border border-hairline rounded-lg overflow-hidden" aria-label={group.system}>
               <div className="flex items-center justify-between gap-2 border-b border-hairline bg-inset px-4 py-2.5">
                 <div className="flex items-center gap-2 text-sm font-semibold">
-                  <span>{applicableFor(group.country)}</span>
-                  <span className="text-muted">/</span>
                   <span className="font-label text-xs text-accent">{group.system}</span>
                   {group.systemName !== group.system && <span className="text-muted font-normal">{group.systemName}</span>}
                 </div>
@@ -976,7 +1158,6 @@ export function CapabilitiesPanel() {
                         <SortHeader label={label} active={sort?.key === key ? sort.dir : null} onClick={() => setSort((current) => toggleColumnSort(current, key))} />
                       </th>
                     ))}
-                    <th className="py-2.5 px-3">Applicable for</th>
                     <th className="py-2.5 px-3">Description</th>
                     {canEdit && <th className="py-2.5 px-3 w-24" />}
                   </tr>
@@ -999,7 +1180,6 @@ export function CapabilitiesPanel() {
                       <td className="py-2.5 px-3 font-label text-xs">{row.l1_capability}</td>
                       <td className="py-2.5 px-3 text-muted">{row.l2_capability}</td>
                       <td className="py-2.5 px-3 text-muted">{row.l3_capability}</td>
-                      <td className="py-2.5 px-3">{applicableFor(row.country)}</td>
                       <td className="py-2.5 px-3 text-muted">{capabilityDescription(row)}</td>
                       {canEdit && (
                         <td className="py-2.5 px-3 whitespace-nowrap">
@@ -1043,9 +1223,18 @@ export function CapabilitiesPanel() {
           ))}
         </div>
       )}
+      {hierarchyOpen && (
+        <CapabilityHierarchyDialog
+          country={countryFilter}
+          systemCode={systemFilter}
+          systemName={hierarchySystemName}
+          rows={hierarchyRows}
+          onOpen={(capabilityId) => setInspecting(capabilityId)}
+          onClose={() => setHierarchyOpen(false)}
+        />
+      )}
       {uploading && (
         <UploadCapabilitiesDialog
-          countries={countries}
           systems={systems}
           onUploaded={(capabilities) => {
             setItems(capabilities);

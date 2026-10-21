@@ -49,7 +49,7 @@ DEFAULT_USERS = [
         "login_id": "admin",
         "password_env": "SEED_ADMIN_PASSWORD",
         "password": "AdminPass123!",
-        "role": "Admin",
+        "role": "administrator",
     },
     {
         "user_id": "user-write",
@@ -58,7 +58,7 @@ DEFAULT_USERS = [
         "login_id": "analyst",
         "password_env": "SEED_ANALYST_PASSWORD",
         "password": "AnalystPass123!",
-        "role": "Analyst",
+        "role": "analyst",
     },
     {
         "user_id": "user-read",
@@ -67,12 +67,10 @@ DEFAULT_USERS = [
         "login_id": "viewer",
         "password_env": "SEED_VIEWER_PASSWORD",
         "password": "ViewerPass123!",
-        "role": "Viewer",
+        "role": "viewer",
     },
 ]
 
-CONTENT_AUTHORS = {"Analyst"}
-KB_EDITORS = {"Admin", "Analyst"}
 
 _DEFAULT_COUNTRIES = ("SG", "MY", "TH", "VN", "ID")
 _DEFAULT_DATABASES = ("PIB", "MBK", "SMS", "NTN", "WSM", "LCM")

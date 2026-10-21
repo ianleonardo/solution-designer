@@ -82,6 +82,52 @@ test("lists capabilities and filters by country", async () => {
   }
 });
 
+test("view hierarchy expands one branch at a time and opens the L3 detail", async () => {
+  const transfer = { ...capability, capability_id: "c3", l2_capability: "Transfer", l3_capability: "Send" };
+  const accounts = { ...capability, capability_id: "c4", l1_capability: "Accounts", l2_capability: "Savings", l3_capability: "Open" };
+  vi.stubGlobal("localStorage", { getItem: () => JSON.stringify({ role_name: "Analyst", username: "a" }) });
+  vi.stubGlobal(
+    "fetch",
+    vi.fn().mockImplementation((url: string) => {
+      if (url === "/api/catalogs") return Promise.resolve(json({ countries: ["SG", "MY"], databases: [], interface_channels: [] }));
+      if (url === "/api/systems")
+        return Promise.resolve(json([{ system_code: "SPL", system_name: "SPL Core", description: "", upstreams: "", downstreams: "", has_batch: false, has_report: false, has_capability: true }]));
+      if (url === "/api/capabilities") return Promise.resolve(json([capability, transfer, accounts, myCapability]));
+      if (url.startsWith("/api/capabilities/c3")) return Promise.resolve(json({ ...transfer, interfaces: [], tables: [], batches: [], reports: [] }));
+      return Promise.resolve(json([]));
+    }),
+  );
+  renderPanel();
+  fireEvent.click(await screen.findByRole("button", { name: /View Hierarchy/ }));
+  const tree = screen.getByRole("dialog", { name: "Capability hierarchy" });
+  expect(within(tree).getByText("SPL Core")).toBeTruthy();
+  expect(within(tree).getByRole("button", { name: /Payments/ })).toBeTruthy();
+  expect(within(tree).getByRole("button", { name: /Accounts/ })).toBeTruthy();
+  expect(within(tree).queryByText("Lending")).toBeNull();
+  expect(within(tree).queryByRole("button", { name: /Card/ })).toBeNull();
+  expect(within(tree).queryByRole("button", { name: /Auth/ })).toBeNull();
+
+  fireEvent.click(within(tree).getByRole("button", { name: /Payments/ }));
+  expect(within(tree).getByRole("button", { name: /Card/ })).toBeTruthy();
+  expect(within(tree).getByRole("button", { name: /Transfer/ })).toBeTruthy();
+  expect(within(tree).queryByRole("button", { name: /Auth/ })).toBeNull();
+
+  fireEvent.click(within(tree).getByRole("button", { name: /Accounts/ }));
+  expect(within(tree).queryByRole("button", { name: /Card/ })).toBeNull();
+  expect(within(tree).getByRole("button", { name: /Savings/ })).toBeTruthy();
+
+  fireEvent.click(within(tree).getByRole("button", { name: /Payments/ }));
+  fireEvent.click(within(tree).getByRole("button", { name: /Card/ }));
+  expect(within(tree).getByRole("button", { name: /Auth/ })).toBeTruthy();
+  expect(within(tree).queryByRole("button", { name: /Send/ })).toBeNull();
+
+  fireEvent.click(within(tree).getByRole("button", { name: /Transfer/ }));
+  expect(within(tree).queryByRole("button", { name: /Auth/ })).toBeNull();
+  fireEvent.click(within(tree).getByRole("button", { name: /Send/ }));
+  const detail = await screen.findByRole("dialog", { name: "View capability" });
+  expect(await within(detail).findByDisplayValue("Send")).toBeTruthy();
+});
+
 test("shows a short description when description is empty", async () => {
   vi.stubGlobal("localStorage", { getItem: () => JSON.stringify({ role_name: "Analyst", username: "a" }) });
   vi.stubGlobal(
@@ -126,8 +172,8 @@ test("applicable for lists every country, and the form saves all countries or a 
   );
   renderPanel();
   await waitFor(() => expect(screen.getByText("Everywhere")).toBeTruthy());
-  expect(within(screen.getByRole("region", { name: "All countries SPL" })).getAllByText("All countries").length).toBeGreaterThan(0);
-  expect(within(screen.getByRole("region", { name: "SG, MY SPL" })).getAllByText("SG, MY").length).toBeGreaterThan(0);
+  expect(screen.getByText("Regional")).toBeTruthy();
+  expect(screen.queryByRole("columnheader", { name: "Applicable for" })).toBeNull();
 
   fireEvent.click(screen.getByRole("button", { name: /Add capability/ }));
   const dialog = screen.getByRole("dialog", { name: "Add capability" });
@@ -156,7 +202,7 @@ test("applicable for lists every country, and the form saves all countries or a 
   expect(JSON.parse(second.body).country).toBe("SG,MY");
 });
 
-test("upload dialog asks for country, system and excel", async () => {
+test("upload dialog asks for system and excel", async () => {
   vi.stubGlobal("localStorage", { getItem: () => JSON.stringify({ role_name: "Analyst", username: "a" }) });
   vi.stubGlobal(
     "fetch",
@@ -174,8 +220,8 @@ test("upload dialog asks for country, system and excel", async () => {
   await waitFor(() => expect(screen.getByRole("button", { name: /Upload$/ })).toBeTruthy());
   fireEvent.click(screen.getByRole("button", { name: /Upload$/ }));
   const dialog = screen.getByRole("dialog", { name: "Upload capabilities" });
-  expect(within(dialog).getByLabelText("All countries")).toBeTruthy();
-  expect(within(dialog).getByLabelText("SG")).toBeTruthy();
+  expect(within(dialog).queryByLabelText("All countries")).toBeNull();
+  expect(within(dialog).getByText(/COUNTRY is comma-separated/)).toBeTruthy();
   expect(within(dialog).getByLabelText("System")).toBeTruthy();
   expect(within(dialog).getByLabelText("Excel file")).toBeTruthy();
 });
@@ -197,7 +243,50 @@ test("shows table columns and offers tables, batches and reports for the selecte
       if (url === "/api/systems")
         return Promise.resolve(json([{ system_code: "SPL", system_name: "SPL Core", description: "", upstreams: "", downstreams: "", has_batch: false, has_report: false, has_capability: true }]));
       if (url === "/api/capabilities") return Promise.resolve(json([capability]));
-      if (url.startsWith("/api/capabilities/c1")) return Promise.resolve(json({ ...capability, interfaces: [], tables: [tableLink], batches: [], reports: [] }));
+      if (url.startsWith("/api/capabilities/c1"))
+        return Promise.resolve(
+          json({
+            ...capability,
+            interfaces: [],
+            tables: [tableLink],
+            batches: [{ batch_id: "b-sg", country: "SG", system_code: "SPL", batch_name: "Nightly SG", batch_type: "incoming", description: "" }],
+            reports: [{ report_id: "r-sg", country: "SG", system_code: "SPL", report_name: "SG Daily", description: "" }],
+          }),
+        );
+      if (url === "/api/batches/b-sg")
+        return Promise.resolve(
+          json({
+            batch_id: "b-sg",
+            country: "SG",
+            system_code: "SPL",
+            batch_name: "Nightly SG",
+            batch_type: "incoming",
+            frequency: "Daily",
+            frequency_other: "",
+            to_from_systems: "DGE",
+            description: "Nightly settlement",
+            batch_filename: "settle.in",
+            file_layout: "Col A | Col B",
+            created_at: "",
+            last_modified: "",
+          }),
+        );
+      if (url === "/api/reports/r-sg")
+        return Promise.resolve(
+          json({
+            report_id: "r-sg",
+            country: "SG",
+            system_code: "SPL",
+            report_code: "R1",
+            report_name: "SG Daily",
+            frequency: "Daily",
+            frequency_other: "",
+            description: "End of day",
+            layout: "Account | Balance",
+            created_at: "",
+            last_modified: "",
+          }),
+        );
       if (url === "/api/tables/t-sg")
         return Promise.resolve(
           json({
@@ -255,6 +344,18 @@ test("shows table columns and offers tables, batches and reports for the selecte
   expect(await within(table).findByText("ACCT_NO")).toBeTruthy();
   expect(within(table).getByText("VARCHAR")).toBeTruthy();
   expect(within(table).getByText("Account number")).toBeTruthy();
+
+  fireEvent.click(within(detail).getByRole("button", { name: "SPL · Nightly SG" }));
+  const batch = await screen.findByRole("dialog", { name: "Batch Nightly SG" });
+  expect(await within(batch).findByText("settle.in")).toBeTruthy();
+  expect(within(batch).getByText("Col A | Col B")).toBeTruthy();
+  fireEvent.click(within(batch).getByRole("button", { name: "Close" }));
+
+  fireEvent.click(within(detail).getByRole("button", { name: "SPL · SG Daily" }));
+  const report = await screen.findByRole("dialog", { name: "Report SG Daily" });
+  expect(await within(report).findByText("Account | Balance")).toBeTruthy();
+  expect(within(report).getByText("End of day")).toBeTruthy();
+  fireEvent.click(within(report).getByRole("button", { name: "Close" }));
 
   fireEvent.click(screen.getByRole("button", { name: /Add capability/ }));
   const add = screen.getByRole("dialog", { name: "Add capability" });

@@ -121,14 +121,14 @@ def test_generate_all_can_fill_only_the_empty_sections(client, monkeypatch):
     assert "section_skipped" not in full
 
 
-def test_viewers_and_admins_cannot_auto_fill(client, monkeypatch):
+def test_viewers_cannot_auto_fill(client, monkeypatch):
     _fake(monkeypatch, [])
     writer = login(client, "Write")
     project_id = _project(client, writer)
     document = _document(client, writer, project_id)
     section = document["templates"][0]["template_id"]
     base = f"/api/projects/{project_id}/documents/{document['document_id']}"
-    for role in ("Read", "Admin"):
+    for role in ("Read",):  # project read only
         token = auth(login(client, role))
         assert client.post(f"{base}/sections/{section}/regenerate", json={"instruction": "x"}, headers=token).status_code == 403
         assert client.post(f"{base}/generate?only_empty=true", headers=token).status_code == 403

@@ -7,8 +7,9 @@ import uuid
 from datetime import datetime, timezone
 
 from app import db
-from app.config import KB_EDITORS, kb_countries, kb_databases
+from app.config import kb_countries, kb_databases
 from app.errors import AppError
+from app.permissions import require
 from app.services import gcs, llm
 
 HEADERS = ("TABLE_NAME", "COLUMN_NAME", "DATA_TYPE", "IS_NULL", "PRIMARY_KEY", "FOREIGN_KEY")
@@ -23,8 +24,7 @@ def _now() -> datetime:
 
 
 def _require_editor(user: dict) -> None:
-    if user["role_name"] not in KB_EDITORS:
-        raise AppError(403, "Forbidden")
+    require(user, "knowledge", "write")
 
 
 def _canonical(value: str, allowed: tuple[str, ...]) -> str | None:
@@ -75,15 +75,20 @@ def _clean_text(value: str | None, label: str, limit: int = MAX_NAME, required: 
     return cleaned
 
 
-def _clean_is_null(value: str | None) -> str:
-    cleaned = (value or "").strip().upper()
+def _is_yes(value: str | None) -> bool:
+    return (value or "").strip().lower() in {"y", "yes", "true", "1"}
+
+
+def _clean_yes_no(value: str | None, *, default_yes: bool) -> str:
+    """Yes is stored as Yes. No, N, and a blank primary key are stored as empty. A blank nullable defaults to Yes."""
+    cleaned = (value or "").strip().lower()
     if not cleaned:
-        return "N"
-    if cleaned in {"Y", "YES", "TRUE", "1", "NULLABLE"}:
-        return "Y"
-    if cleaned in {"N", "NO", "FALSE", "0", "NOT NULL"}:
-        return "N"
-    return cleaned[:10]
+        return "Yes" if default_yes else ""
+    if cleaned in {"y", "yes", "true", "1"}:
+        return "Yes"
+    if cleaned in {"n", "no", "false", "0", "not null"}:
+        return ""
+    return "Yes" if default_yes else ""
 
 
 def _human_identifier(name: str) -> str:
@@ -106,11 +111,11 @@ def heuristic_column_description(table_name: str, column: dict) -> str:
     pk = (column.get("primary_key") or "").strip()
     fk = (column.get("foreign_key") or "").strip()
     notes = []
-    if pk and pk.upper() not in {"N", "NO", "FALSE", "0"}:
+    if _is_yes(pk):
         notes.append("primary key")
     if fk and fk.upper() not in {"N", "NO", "FALSE", "0"}:
         notes.append(f"foreign key ({fk})" if fk.upper() not in {"Y", "YES", "TRUE", "1", "FK"} else "foreign key")
-    if column.get("is_null", "N") == "N":
+    if not _is_yes(column.get("is_null")):
         notes.append("required")
     meta = f" [{', '.join(notes)}]" if notes else ""
     return f"{human[:1].upper() + human[1:]} of {_human_identifier(table_name)} ({data_type}){meta}."
@@ -188,10 +193,10 @@ def text_for(row: dict, columns: list[dict] | None = None) -> str:
     col_parts = []
     for col in columns[:60]:
         flags = [col["data_type"]]
-        if col.get("is_null") == "N":
+        if not _is_yes(col.get("is_null")):
             flags.append("NOT NULL")
-        if col.get("primary_key"):
-            flags.append(f"PK:{col['primary_key']}")
+        if _is_yes(col.get("primary_key")):
+            flags.append("PK")
         if col.get("foreign_key"):
             flags.append(f"FK:{col['foreign_key']}")
         desc = f" - {col['description']}" if col.get("description") else ""
@@ -347,8 +352,8 @@ def add_column(user: dict, table_id: str, body: dict) -> dict:
     table = _require_table(table_id)
     column_name = _upper_name(str(body.get("column_name") or ""), "Column name", required=True)
     data_type = _upper_name(str(body.get("data_type") or ""), "Data type", required=True)
-    is_null = _clean_is_null(body.get("is_null"))
-    primary_key = _clean_text(str(body.get("primary_key") or ""), "Primary key", MAX_NAME)
+    is_null = _clean_yes_no(body.get("is_null"), default_yes=True)
+    primary_key = _clean_yes_no(str(body.get("primary_key") or ""), default_yes=False)
     foreign_key = _clean_text(str(body.get("foreign_key") or ""), "Foreign key", MAX_NAME)
     description = _clean_text(str(body.get("description") or ""), "Description", MAX_DESCRIPTION)
 
@@ -400,8 +405,8 @@ def update_column(user: dict, table_id: str, column_id: str, body: dict) -> dict
         raise AppError(404, "Column not found")
     column_name = _upper_name(str(body.get("column_name", current["column_name"]) or ""), "Column name", required=True)
     data_type = _upper_name(str(body.get("data_type", current["data_type"]) or ""), "Data type", required=True)
-    is_null = _clean_is_null(body.get("is_null", current["is_null"]))
-    primary_key = _clean_text(str(body.get("primary_key", current["primary_key"]) or ""), "Primary key", MAX_NAME)
+    is_null = _clean_yes_no(body.get("is_null", current["is_null"]), default_yes=True)
+    primary_key = _clean_yes_no(str(body.get("primary_key", current["primary_key"]) or ""), default_yes=False)
     foreign_key = _clean_text(str(body.get("foreign_key", current["foreign_key"]) or ""), "Foreign key", MAX_NAME)
     description = _clean_text(str(body.get("description", current["description"]) or ""), "Description", MAX_DESCRIPTION)
 
@@ -532,8 +537,8 @@ def parse_and_validate(data: bytes) -> list[dict]:
                 "table_name": table_name,
                 "column_name": column_name,
                 "data_type": data_type,
-                "is_null": _clean_is_null(values["IS_NULL"]),
-                "primary_key": values["PRIMARY_KEY"].strip(),
+                "is_null": _clean_yes_no(values["IS_NULL"], default_yes=True),
+                "primary_key": _clean_yes_no(values["PRIMARY_KEY"], default_yes=False),
                 "foreign_key": values["FOREIGN_KEY"].strip(),
             }
         )

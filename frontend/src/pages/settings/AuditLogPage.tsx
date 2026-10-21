@@ -3,6 +3,8 @@ import { api, ApiError, formatDateTime } from "../../api";
 import { type Column, DataTable } from "../../components/DataTable";
 import type { AuditEntry } from "../../types";
 import { SelectField } from "../../components/SelectField";
+import { useOptionalAuth } from "../../auth";
+import { can } from "../../permissions";
 
 export const AUDIT_PAGE_SIZE = 30;
 
@@ -31,6 +33,9 @@ function detailText(entry: AuditEntry) {
 }
 
 export function AuditLogPage() {
+  const auth = useOptionalAuth();
+  // Settings read: the page is shown but cannot be changed.
+  const canWrite = !auth?.user || can(auth.user, "settings", "write");
   const [entries, setEntries] = useState<AuditEntry[]>([]);
   const [actions, setActions] = useState<string[]>([]);
   const [action, setAction] = useState("");
@@ -113,9 +118,11 @@ export function AuditLogPage() {
           <h1 className="font-headline text-2xl font-semibold">Audit Log</h1>
           <p className="text-sm text-muted">Who changed what, and when. Newest first; the latest 2,000 matching entries are shown.</p>
         </div>
-        <button type="button" className="btn btn-danger shrink-0" onClick={() => setPurging(true)}>
-          Purge logs
-        </button>
+        {canWrite && (
+          <button type="button" className="btn btn-danger shrink-0" onClick={() => setPurging(true)}>
+            Purge logs
+          </button>
+        )}
       </div>
       <div className="flex flex-wrap items-end gap-3">
         <label className="text-sm">

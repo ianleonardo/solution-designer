@@ -5,7 +5,11 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-PORT=7777
+# Port and allowed host names come from the project's .env (FRONTEND_PORT, FRONTEND_ALLOWED_HOSTS); the shell wins.
+env_value() { [[ -f "$ROOT/.env" ]] && sed -n "s/^[[:space:]]*$1[[:space:]]*=[[:space:]]*//p" "$ROOT/.env" | tail -1 | tr -d '"'"'"'\r'; }
+PORT="${FRONTEND_PORT:-$(env_value FRONTEND_PORT)}"
+PORT="${PORT:-7777}"
+HOSTS="${FRONTEND_ALLOWED_HOSTS:-$(env_value FRONTEND_ALLOWED_HOSTS)}"
 
 if [[ ! -d "$ROOT/node_modules" ]]; then
   echo "Frontend dependencies not found. From the repository root, run: npm ci" >&2
@@ -47,5 +51,12 @@ if ip="$(local_ip)"; then
   echo "Frontend on the local network: http://${ip}:${PORT}"
 else
   echo "Local network address: not found."
+fi
+if [[ -n "$HOSTS" ]]; then
+  IFS=',' read -r -a host_list <<< "$HOSTS"
+  for host in "${host_list[@]}"; do
+    host="$(echo "$host" | xargs)"
+    [[ -n "$host" && "$host" != "*" && "$host" != .* ]] && echo "Frontend by host name:        http://${host}:${PORT}"
+  done
 fi
 exec npm run dev --workspace frontend -- --host 0.0.0.0 --port "$PORT"

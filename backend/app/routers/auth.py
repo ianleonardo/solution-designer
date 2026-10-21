@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, Request
 
-from app.deps import create_token, current_user
+from app.deps import create_token, current_user, load_user
 from app.errors import AppError
 from app.services import audit, projects
 
@@ -24,6 +24,7 @@ def login(body: dict, request: Request):
             ip_address=address,
         )
         raise
+    user = load_user(user["user_id"])  # with the role's name and permissions
     audit.record(
         action="login",
         summary="Signed in",

@@ -7,11 +7,12 @@ import uuid
 from datetime import datetime, timezone
 
 from app import db
-from app.config import KB_EDITORS, kb_countries
+from app.config import kb_countries
 from app.errors import AppError
+from app.permissions import require
 from app.services import gcs, llm, systems
 
-HEADERS = ("L1_CAPABILITY", "L2_CAPABILITY", "L3_CAPABILITY", "DESCRIPTION")
+HEADERS = ("COUNTRY", "L1_CAPABILITY", "L2_CAPABILITY", "L3_CAPABILITY", "DESCRIPTION")
 MAX_ROWS = 5000
 MAX_BYTES = 20 * 1024 * 1024
 MAX_LEVEL = 200
@@ -28,8 +29,7 @@ def _now() -> datetime:
 
 
 def _require_editor(user: dict) -> None:
-    if user["role_name"] not in KB_EDITORS:
-        raise AppError(403, "Forbidden")
+    require(user, "knowledge", "write")
 
 
 def _canonical(value: str, allowed: tuple[str, ...]) -> str | None:
@@ -201,7 +201,7 @@ def _embed(capability_id: str) -> None:
 def _linked(capability_id: str) -> dict:
     interfaces = db.fetchall(
         """
-        SELECT i.interface_id, i.channel, i.country, i.interface_name, i.description, i.protocol, i.source, i.destination
+        SELECT i.interface_id, i.channel, i.country, i.interface_name, i.endpoint, i.description, i.protocol, i.source, i.destination
         FROM kb_capability_interfaces link
         JOIN interfaces i ON i.interface_id = link.interface_id
         WHERE link.capability_id = ?
@@ -246,6 +246,7 @@ def _linked(capability_id: str) -> dict:
                 "channel": row["channel"],
                 "country": row["country"],
                 "interface_name": row["interface_name"],
+                "endpoint": row.get("endpoint") or "",
                 "description": row["description"],
                 "protocol": row["protocol"],
                 "source": row["source"],
@@ -651,16 +652,23 @@ def parse_and_validate(data: bytes) -> list[dict]:
         l2 = values["L2_CAPABILITY"].strip()
         l3 = values["L3_CAPABILITY"].strip()
         description = values["DESCRIPTION"].strip()
+        country = ""
+        country_ok = True
+        try:
+            country = _country(values["COUNTRY"])
+        except AppError as exc:
+            country_ok = False
+            error(offset, "COUNTRY", exc.detail)
         if not l1:
             error(offset, "L1_CAPABILITY", "L1_CAPABILITY is required.")
         if not l2:
             error(offset, "L2_CAPABILITY", "L2_CAPABILITY is required.")
         if not l3:
             error(offset, "L3_CAPABILITY", "L3_CAPABILITY is required.")
-        key = f"{l1}\0{l2}\0{l3}".upper()
-        if l1 and l2 and l3 and key in seen:
-            error(offset, "L1_CAPABILITY", f"Duplicate L1/L2/L3 (first seen on row {seen[key]}).")
-        elif l1 and l2 and l3:
+        key = f"{country}\0{l1}\0{l2}\0{l3}".upper()
+        if country_ok and l1 and l2 and l3 and key in seen:
+            error(offset, "L1_CAPABILITY", f"Duplicate COUNTRY/L1/L2/L3 (first seen on row {seen[key]}).")
+        elif country_ok and l1 and l2 and l3:
             seen[key] = offset
         if len(l1) > MAX_LEVEL:
             error(offset, "L1_CAPABILITY", f"L1_CAPABILITY must be {MAX_LEVEL} characters or fewer.")
@@ -672,6 +680,7 @@ def parse_and_validate(data: bytes) -> list[dict]:
             error(offset, "DESCRIPTION", f"DESCRIPTION must be {MAX_DESCRIPTION} characters or fewer.")
         records.append(
             {
+                "country": country,
                 "l1_capability": l1,
                 "l2_capability": l2,
                 "l3_capability": l3,
@@ -695,9 +704,8 @@ def parse_and_validate(data: bytes) -> list[dict]:
     return records
 
 
-def upload_from_excel(user: dict, country_raw: str, system_raw: str, filename: str, data: bytes) -> dict:
+def upload_from_excel(user: dict, system_raw: str, filename: str, data: bytes) -> dict:
     _require_editor(user)
-    country = _country(country_raw)
     system_code = _system_code(system_raw)
     if not (filename or "").lower().endswith(".xlsx"):
         raise AppError(400, "Upload an Excel file (.xlsx).")
@@ -712,7 +720,7 @@ def upload_from_excel(user: dict, country_raw: str, system_raw: str, filename: s
             WHERE country = ? AND system_code = ?
               AND lower(l1_capability) = lower(?) AND lower(l2_capability) = lower(?) AND lower(l3_capability) = lower(?)
             """,
-            [country, system_code, rec["l1_capability"], rec["l2_capability"], rec["l3_capability"]],
+            [rec["country"], system_code, rec["l1_capability"], rec["l2_capability"], rec["l3_capability"]],
         )
         if existing is None:
             capability_id = str(uuid.uuid4())
@@ -725,7 +733,7 @@ def upload_from_excel(user: dict, country_raw: str, system_raw: str, filename: s
                 """,
                 [
                     capability_id,
-                    country,
+                    rec["country"],
                     system_code,
                     rec["l1_capability"],
                     rec["l2_capability"],

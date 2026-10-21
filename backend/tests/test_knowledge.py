@@ -41,7 +41,7 @@ def test_unknown_inventory_type_is_rejected(client):
 
 
 def test_analyst_can_upload_and_viewer_cannot_upload_to_the_knowledge_base(client):
-    analyst = login(client, "Analyst")
+    analyst = login(client, "SuperAnalyst")
     assert _upload(client, analyst, "Screens").status_code == 200
     viewer = login(client, "Viewer")
     assert client.get("/api/rag", headers=auth(viewer)).status_code == 200

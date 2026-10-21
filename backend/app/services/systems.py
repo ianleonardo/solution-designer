@@ -4,8 +4,8 @@ import io
 from datetime import datetime, timezone
 
 from app import db
-from app.config import KB_EDITORS
 from app.errors import AppError
+from app.permissions import require
 from app.services import gcs, llm
 
 MAX_CODE = 50
@@ -21,8 +21,7 @@ def _now() -> datetime:
 
 
 def _require_editor(user: dict) -> None:
-    if user["role_name"] not in KB_EDITORS:
-        raise AppError(403, "Forbidden")
+    require(user, "knowledge", "write")
 
 
 def split_codes(value: str | None) -> list[str]:
@@ -165,21 +164,125 @@ def update_system(user: dict, code: str, body: dict) -> dict:
     return _payload(_row(code))
 
 
-def delete_system(user: dict, code: str) -> None:
-    _require_editor(user)
-    code = _row(code)["system_code"]
-    used_channels = sorted(
-        {
-            row["channel"]
-            for row in db.fetchall("SELECT channel, source, destination FROM interfaces")
-            if code in split_codes(row["source"]) or code in split_codes(row["destination"])
-        }
+def _without(value: str | None, code: str) -> str:
+    return ",".join(item for item in split_codes(value) if item != code)
+
+
+def _impact_rows(code: str) -> dict:
+    capabilities = db.fetchall(
+        "SELECT capability_id, country, l1_capability, l2_capability, l3_capability FROM kb_capabilities WHERE system_code = ?"
+        " ORDER BY l1_capability, l2_capability, l3_capability",
+        [code],
     )
-    used = [{"channel": channel} for channel in used_channels]
-    if used:
-        raise AppError(409, f"{code} is used by interfaces in: {', '.join(row['channel'] for row in used)}. Upload a new file without it first.")
-    db.exec_sql("DELETE FROM systems WHERE system_code = ?", [code])
+    batches = db.fetchall("SELECT batch_id, country, batch_name FROM kb_batches WHERE system_code = ? ORDER BY batch_name", [code])
+    reports = db.fetchall("SELECT report_id, country, report_name FROM kb_reports WHERE system_code = ? ORDER BY report_name", [code])
+    interfaces = [
+        row
+        for row in db.fetchall("SELECT interface_id, channel, country, interface_name, source, destination FROM interfaces ORDER BY interface_name")
+        if code in split_codes(row["source"]) or code in split_codes(row["destination"])
+    ]
+    capability_ids = [row["capability_id"] for row in capabilities]
+    unlinked_tables = []
+    if capability_ids:
+        marks = ", ".join("?" for _ in capability_ids)
+        unlinked_tables = db.fetchall(
+            f"""
+            SELECT DISTINCT t.table_id, t.country, t.database_name, t.schema_name, t.table_name
+            FROM kb_capability_tables l JOIN kb_tables t ON t.table_id = l.table_id
+            WHERE l.capability_id IN ({marks})
+            ORDER BY t.database_name, t.schema_name, t.table_name
+            """,
+            capability_ids,
+        )
+    peers = [
+        row["system_code"]
+        for row in db.fetchall("SELECT system_code, upstreams, downstreams FROM systems WHERE system_code <> ?", [code])
+        if code in split_codes(row["upstreams"]) or code in split_codes(row["downstreams"])
+    ]
+    batch_peers = [
+        row["batch_name"]
+        for row in db.fetchall("SELECT batch_name, system_code, to_from_systems FROM kb_batches WHERE system_code <> ?", [code])
+        if code in split_codes(row["to_from_systems"])
+    ]
+    projects = [
+        row["project_name"]
+        for row in db.fetchall("SELECT project_name, systems FROM projects ORDER BY project_name")
+        if code in split_codes(row["systems"])
+    ]
+    return {
+        "capabilities": capabilities,
+        "interfaces_kept": interfaces,
+        "batches": batches,
+        "reports": reports,
+        "unlinked_tables": unlinked_tables,
+        "systems_referencing": peers,
+        "batches_referencing": batch_peers,
+        "projects_in_scope": projects,
+    }
+
+
+def delete_impact(user: dict, code: str) -> dict:
+    """Everything deleting the system removes or changes, for the warning shown before it happens."""
+    require(user, "knowledge", "read")
+    row = _row(code)
+    impact = _impact_rows(row["system_code"])
+    return {"system_code": row["system_code"], "system_name": row["system_name"], **impact}
+
+
+def delete_system(user: dict, code: str, confirm: str = "") -> dict:
+    """Delete the system and everything that belongs to it.
+
+    Removed: its capabilities (and their links), batches and reports. Interfaces that have it as source or destination
+    are kept as they are, and tables are kept; both are only unlinked from the removed capabilities. The code is also
+    taken out of other systems' upstreams / downstreams, other batches' To/From lists and project scopes.
+    The caller must repeat the system code in `confirm`.
+    """
+    _require_editor(user)
+    row = _row(code)
+    code = row["system_code"]
+    if confirm.strip().upper() != code:
+        raise AppError(400, f"Type the system code {code} to confirm the delete")
+    impact = _impact_rows(code)
+    capability_ids = [item["capability_id"] for item in impact["capabilities"]]
+    batch_ids = [item["batch_id"] for item in impact["batches"]]
+    report_ids = [item["report_id"] for item in impact["reports"]]
+
+    def delete_in(table: str, column: str, ids: list[str]) -> None:
+        if ids:
+            db.exec_sql(f"DELETE FROM {table} WHERE {column} IN ({', '.join('?' for _ in ids)})", ids)
+
+    with db.transaction():
+        for link in ("kb_capability_interfaces", "kb_capability_tables", "kb_capability_batches", "kb_capability_reports"):
+            delete_in(link, "capability_id", capability_ids)
+        delete_in("kb_capability_batches", "batch_id", batch_ids)
+        delete_in("kb_capability_reports", "report_id", report_ids)
+        delete_in("kb_capabilities", "capability_id", capability_ids)
+        delete_in("kb_batches", "batch_id", batch_ids)
+        delete_in("kb_reports", "report_id", report_ids)
+        for other in db.fetchall("SELECT system_code, upstreams, downstreams FROM systems WHERE system_code <> ?", [code]):
+            if code in split_codes(other["upstreams"]) or code in split_codes(other["downstreams"]):
+                db.exec_sql(
+                    "UPDATE systems SET upstreams = ?, downstreams = ? WHERE system_code = ?",
+                    [_without(other["upstreams"], code), _without(other["downstreams"], code), other["system_code"]],
+                )
+        for batch in db.fetchall("SELECT batch_id, to_from_systems FROM kb_batches"):
+            if code in split_codes(batch["to_from_systems"]):
+                db.exec_sql("UPDATE kb_batches SET to_from_systems = ? WHERE batch_id = ?", [_without(batch["to_from_systems"], code), batch["batch_id"]])
+        for project in db.fetchall("SELECT project_id, systems FROM projects"):
+            if code in split_codes(project["systems"]):
+                db.exec_sql("UPDATE projects SET systems = ? WHERE project_id = ?", [_without(project["systems"], code), project["project_id"]])
+        db.exec_sql("DELETE FROM systems WHERE system_code = ?", [code])
     gcs.upload_db()
+    return {
+        "ok": True,
+        "deleted": {
+            "capabilities": len(capability_ids),
+            "batches": len(batch_ids),
+            "reports": len(report_ids),
+        },
+        "unlinked_tables": len(impact["unlinked_tables"]),
+        "interfaces_kept": len(impact["interfaces_kept"]),
+    }
 
 
 def _cell(value) -> str:

@@ -25,21 +25,32 @@ SpecForge generates enterprise documents, such as **Solution Design Documents (S
   - Header blocks (with a size picker), and image blocks you upload (PNG, JPEG, GIF or WEBP, up to 5 MB). The model never writes headers or images.
 ### Workflow and roles (RBAC)
 
-| Role | Capabilities |
-|---|---|
-| **Admin** | Settings, users, document layouts, knowledge base (view & edit), and audit log. Admin views project documents read-only (same as Viewer) and does not create, edit or delete projects or documents. |
-| **Analyst** | Create, edit and delete projects and documents, upload project references, generate (auto fill) and edit content and structure, plus view and edit the Knowledge Base. |
-| **Viewer** | Read-only access to the dashboard, project documents, and the Knowledge Base. |
+Access is set per role in **Settings > User Roles**. A role gives each of three menus **Read**, **Write** (which includes Read) or neither:
 
-Admin and Viewer do not create, edit or delete projects or documents. There is no approval workflow: Analyst users edit documents directly and documents have no status.
+- **Projects:** Project Documents: projects, their documents, references and images.
+- **Knowledge Base:** systems, capabilities, interfaces, tables, batches, reports, guidelines, repositories.
+- **Settings:** LLM, Document Layouts, Users, User Roles and Audit Log.
 
-Existing databases are migrated on start: `Maker`, `Checker` and `Write` users become `Analyst`, and `Read` users become `Viewer`.
+With neither, the menu is hidden and its API refuses the user. Read shows the menu and its items without changes. Write also allows add, edit and delete. The dashboard is open to everyone.
+
+Predefined roles:
+
+| Role | Projects | Knowledge Base | Settings |
+|---|---|---|---|
+| **Viewer** | Read | Read | – |
+| **Analyst** | Write | Read | – |
+| **Super-analyst** | Write | Write | – |
+| **Administrator** | Write | Write | Write |
+
+Predefined roles cannot be deleted. Administrator cannot be changed, so someone can always manage settings. Other roles can be added, edited, and deleted when no user has them. At least one user always keeps a role that can write settings. There is no approval workflow: project writers edit documents directly and documents have no status.
+
+The API checks every request against the user's role in one place (`backend/app/permissions.py`): the area comes from the path, and the level from the method (GET reads, anything else writes). Existing databases are migrated on start: `Admin` users become Administrator, `Analyst`, `Maker`, `Checker` and `Write` users become Analyst, and `Viewer` and `Read` users become Viewer.
 
 ### Audit log (Admin only)
 Every change by every user is recorded: who (user and role), when (UTC), what (action, project or other entity and a short summary) and from which IP address. This covers projects, documents, references, knowledge base, layouts, users, settings and exports, plus **sign-ins and failed sign-ins**. Requests that fail are not logged as changes. Passwords, API keys and tokens are never stored, and large content (document text, table rows, diagram blocks) is left out of the details. Admin opens **Settings > Audit Log** to filter by action and date range, search and expand an entry for its details. The API is `GET /api/audit` (Admin only).
 
 ### Knowledge base (RAG): Admin & Analyst (edit), Viewer (view)
-- The **Knowledge Base** menu has one screen per type: **Systems, Capabilities, Interfaces, Tables, Screens, Batches, Reports, Guidelines**. All roles can view the Knowledge Base; Admin and Analyst users can upload, add, edit and delete entries.
+- The **Knowledge Base** menu has one screen per type: **Systems, Capabilities, Interfaces, Tables, Screens, Batches, Reports, Guidelines**. Roles with Knowledge Base read can view it; roles with Knowledge Base write (Super-analyst, Administrator) can upload, add, edit and delete entries.
 - **Systems** is a catalogue you add, edit and delete by hand: System Code, System Name, Description, Upstreams, Downstreams, **Has batch** and **Has report**. Upstreams and Downstreams are system codes separated by commas; they can be empty, but every code you enter must already exist. The code is fixed after it is created. A system cannot be deleted while another system lists it, or an interface uses it. Only systems with Has batch / Has report ticked appear in the system dropdown when adding or uploading Batches / Reports. Capabilities can use any system.
 - **Catalogs** (`KB_COUNTRIES`, `KB_DATABASES`, `KB_INTERFACE_CHANNELS` in `.env`, exposed as `GET /api/catalogs`) drive country codes, database names and interface channel tabs. Defaults are `SG,MY,TH,VN,ID`, `PIB,MBK,SMS,NTN,WSM,LCM` and `SPL,DGE,PIB,NTN,WSM,EAI`.
 - **Interfaces** has one tab per configured channel. Admin and Analyst users can **Add / Edit / Delete** interfaces on the active tab, or upload an Excel (`.xlsx`) with columns `Country, Interface name, Description, Protocol, Source, Destination`. Country must be in the catalog; Protocol must be API, MQ, Kafka, gRPC, FTP, SMTP or SMPP; Source and Destination must be existing system codes. If any row is invalid the whole file is rejected; a valid upload replaces that tab's interfaces.
@@ -62,7 +73,7 @@ Every change by every user is recorded: who (user and role), when (UTC), what (a
 - **LLM:** three providers, **Gemini**, **Anthropic** and **Spirare**. Each has its own chat model and URL, embedding model and URL, and API keys. One provider is active at a time. Settings are stored in the database. API keys are encrypted at rest and write-only: the API never returns them, and a blank field keeps the saved key. Spirare chat posts to `https://is-egp.sg.uobnet.com/wip/v1/chat/completions` and embeddings post to `https://is-egp.sg.uobnet.com/embedding/v1/embeddings` (`encoding_format: float`, `input_type: passage`). A full endpoint or an OpenAI-style base URL both work. **Bypass SSL certificate check** on the Spirare card skips certificate verification for those HTTPS calls. Anthropic has no embeddings API, so its embeddings use a Voyage-style endpoint (`POST {embedding URL}/embeddings`) with its own key. Leave it blank to search by keyword only.
   - **Re-index.** Stored vectors belong to one embedding setup (active provider, embedding model, URL and key). When you switch the active provider or save a different embedding model, URL or key for it, the app re-makes **every** stored vector in the background: knowledge base entries, guideline chunks, systems, interfaces and every project's reference chunks. The LLM page shows progress (`Re-indexing the knowledge base… 120 of 840`) and the result. With no embedding model configured the vectors are cleared and search uses keywords only. Items that fail to embed are counted and searched by keyword. The work runs in a background thread, so on Cloud Run keep CPU allocated after the response; an interrupted run is repeated at the next save because the new setup is only recorded when a run finishes.
 - **Document Layouts:** a table of layouts (sortable, searchable). A layout has a document name and sections that can be nested up to five levels. Each section is built from blocks (**header, text, table, image, diagram**) and has its own auto-generation prompt, temperature and word limit. Sections can be added, deleted and reordered by dragging. Drop a section on another to nest it, or choose **Parent section** to move it (including back to **Main section**). Export headings run from h2 to h6. Columns in a table block are reordered by dragging the handle beside each name. The Interface Specifications layout is seeded from `backend/app/seed_layouts.py`. Built-in layouts can be edited but not deleted, and a layout used by a project document cannot be deleted. Layout changes apply only to documents created afterwards.
-- **Users:** add a user with Login ID, name, password and role. You can edit only the name and role. Delete asks for confirmation. The list is searchable, sortable and shows 20 per page. The last admin cannot be demoted or deleted.
+- **Users:** add a user with Login ID, name, password and role. You can edit only the name and role. Delete asks for confirmation. The list is searchable, sortable and shows 20 per page. The role picker lists the roles from Settings > User Roles. The last user who can write settings cannot lose that role or be deleted.
 - Changes take effect right away without a server restart, through an in-process cache that is cleared on update.
 
 ### Other
@@ -181,7 +192,7 @@ Default seed accounts (unless you overrode them in `.env`):
 
 | Role | Login ID | Password |
 |---|---|---|
-| Admin | admin | AdminPass123! |
+| Administrator | admin | AdminPass123! |
 | Analyst | analyst | AnalystPass123! |
 | Viewer | viewer | ViewerPass123! |
 
@@ -232,11 +243,12 @@ Behind a proxy or a private mirror, export `HTTP_PROXY`, `HTTPS_PROXY`, `NO_PROX
 **Start.** Set the paths at the top of `scripts/docker-start.sh`, or pass them:
 
 ```bash
-./scripts/docker-start.sh --env-file /opt/specforge/.env --db /opt/specforge/data/solutioncrafter.duckdb --port 8080
+./scripts/docker-start.sh --data-dir /opt/specforge/data --env-file /opt/specforge/.env --port 8080
 ```
 
+- `--data-dir` is the data folder on the server, mounted into the container. It holds the DuckDB database (`solutioncrafter.duckdb`, or `--db-name <file>.duckdb`), its `.wal` file and the `uploads` folder; back up the folder as a whole. It is created when missing, and an empty folder starts a new database. To move an existing setup, copy your current `data` folder there.
 - `--env-file` is mounted read-only. Variables the script sets on the container (`DATA_DIR`, `DUCKDB_PATH`) win over the same names in the file, so a `DATA_DIR=./data` line there does no harm.
-- `--db` can be any `.duckdb` file name; it is created on first start. Its folder is mounted, so the `.wal` file and the `uploads` folder sit beside it, and backing up that folder backs up everything.
+- If the image is not loaded on the server yet, the script loads a saved one first: `--load <file>.tar.gz`, or a `specforge-*.tar.gz` found in `dist/` or beside the script.
 - The container runs as the user who runs the script (rootless Podman keeps your user id), so the files stay yours. With SELinux enforcing, the mounts are labelled automatically.
 - It restarts on failure and after a reboot of the Docker service. The script waits for `/api/health` and prints the URL, or the last log lines if it fails.
 

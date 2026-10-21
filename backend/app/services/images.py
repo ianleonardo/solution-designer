@@ -7,8 +7,9 @@ import uuid
 from pathlib import Path
 
 from app import db
-from app.config import CONTENT_AUTHORS, data_dir
+from app.config import data_dir
 from app.errors import AppError
+from app.permissions import require
 from app.services import gcs
 
 MAX_BYTES = 5 * 1024 * 1024
@@ -36,8 +37,7 @@ def _folder(project_id: str) -> Path:
 
 
 def save_image(user: dict, project_id: str, data: bytes) -> dict:
-    if user["role_name"] not in CONTENT_AUTHORS:
-        raise AppError(403, "Forbidden")
+    require(user, "projects", "write")
     if db.fetchone("SELECT project_id FROM projects WHERE project_id = ?", [project_id]) is None:
         raise AppError(404, "Project not found")
     if not data:

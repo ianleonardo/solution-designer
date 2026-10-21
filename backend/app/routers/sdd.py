@@ -5,11 +5,11 @@ from fastapi import APIRouter, Body, Depends
 from fastapi.responses import Response, StreamingResponse
 
 from app import cache, db
-from app.config import CONTENT_AUTHORS
 from app.content import section_is_empty
 from app.deps import current_user
 from app.errors import AppError, LLMNotConfigured
 from app.missing import evaluate_missing
+from app.permissions import require
 from app.services import documents, export, gcs, kb_links, llm
 from app.services.generate import generate_section
 
@@ -125,8 +125,7 @@ def export_document(project_id: str, document_id: str | None = None, format: str
 
 
 def _require_author(user: dict) -> None:
-    if user["role_name"] not in CONTENT_AUTHORS:
-        raise AppError(403, "Forbidden")
+    require(user, "projects", "write")
 
 
 def _generate_into(row: dict, templates: list[dict], user: dict, instruction: str = "") -> dict:

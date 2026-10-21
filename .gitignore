@@ -1,5 +1,6 @@
 node_modules
 dist
+# Docker images are published as GitHub Release assets, not committed (GitHub's file limit is 100 MB).
 .venv
 __pycache__
 .pytest_cache
