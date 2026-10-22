@@ -17,8 +17,10 @@ MAX_ROWS = 5000
 MAX_BYTES = 20 * 1024 * 1024
 MAX_LEVEL = 200
 MAX_DESCRIPTION = 4000
-MAX_BEHAVIOR = 4000
-MAX_RULES = 100000
+MAX_BEHAVIOR = 20000
+MAX_RULES = 20000
+# One embedding call can carry this much. Diagrams are placed first so they are not cut off by long rules.
+EMBED_CHARS = 8000
 MAX_DIAGRAMS = 30
 MAX_DIAGRAM_TITLE = 120
 MAX_DIAGRAM_TEXT = 20000
@@ -78,6 +80,86 @@ def _diagram_list(raw) -> list[dict]:
     return [item for item in data if isinstance(item, dict)] if isinstance(data, list) else []
 
 
+# First word of a Mermaid diagram. Mermaid rejects anything else when the picture is drawn.
+MERMAID_TYPES = frozenset(
+    {
+        "flowchart",
+        "graph",
+        "sequencediagram",
+        "classdiagram",
+        "statediagram",
+        "statediagram-v2",
+        "erdiagram",
+        "journey",
+        "gantt",
+        "pie",
+        "quadrantchart",
+        "requirementdiagram",
+        "gitgraph",
+        "mindmap",
+        "timeline",
+        "zenuml",
+        "sankey-beta",
+        "xychart-beta",
+        "block-beta",
+        "packet-beta",
+        "kanban",
+        "architecture-beta",
+        "radar-beta",
+        "c4context",
+        "c4container",
+        "c4component",
+        "c4dynamic",
+        "c4deployment",
+        "treemap",
+        "usecase-beta",
+        "treeview-beta",
+        "swimlane-beta",
+    }
+)
+
+
+def sentence_case(value: str) -> str:
+    """First letter of the text, and of each following sentence, in capitals. The rest is lower case."""
+    text = " ".join((value or "").split())
+    if not text:
+        return ""
+    chars = list(text.lower())
+    chars[0] = chars[0].upper()
+    index = 0
+    while index < len(chars) - 1:
+        if chars[index] in ".!?" and chars[index + 1] == " ":
+            cursor = index + 1
+            while cursor < len(chars) and chars[cursor] == " ":
+                cursor += 1
+            if cursor < len(chars):
+                chars[cursor] = chars[cursor].upper()
+            index = cursor
+        else:
+            index += 1
+    return "".join(chars)
+
+
+def _mermaid_keyword(text: str) -> str | None:
+    lines = (text or "").splitlines()
+    index = 0
+    if lines and lines[0].strip() == "---":
+        index = 1
+        while index < len(lines) and lines[index].strip() != "---":
+            index += 1
+        index += 1
+    while index < len(lines):
+        line = lines[index].strip()
+        index += 1
+        if not line or line.startswith("%%"):
+            continue
+        token = re.split(r"[\s;]+", line, maxsplit=1)[0].lower()
+        if token in MERMAID_TYPES:
+            return token
+        return None
+    return None
+
+
 def _diagrams(value) -> str:
     items = value
     if isinstance(value, str):
@@ -87,27 +169,27 @@ def _diagrams(value) -> str:
         try:
             items = json.loads(text)
         except json.JSONDecodeError as exc:
-            raise AppError(400, "Sequence diagrams must be a list.") from exc
+            raise AppError(400, "Diagrams must be a list.") from exc
     if items is None:
         return "[]"
     if not isinstance(items, list):
-        raise AppError(400, "Sequence diagrams must be a list.")
+        raise AppError(400, "Diagrams must be a list.")
     if len(items) > MAX_DIAGRAMS:
-        raise AppError(400, f"At most {MAX_DIAGRAMS} sequence diagrams.")
+        raise AppError(400, f"At most {MAX_DIAGRAMS} diagrams.")
     cleaned = []
     for index, item in enumerate(items, start=1):
         if not isinstance(item, dict):
-            raise AppError(400, "Each sequence diagram needs a title and Mermaid text.")
+            raise AppError(400, "Each diagram needs a title and Mermaid text.")
         title = str(item.get("title") or "").strip() or f"Diagram {index}"
         mermaid = str(item.get("mermaid") or "").strip()
         if len(title) > MAX_DIAGRAM_TITLE:
-            raise AppError(400, f"Sequence diagram titles must be {MAX_DIAGRAM_TITLE} characters or fewer.")
+            raise AppError(400, f"Diagram titles must be {MAX_DIAGRAM_TITLE} characters or fewer.")
         if not mermaid:
-            raise AppError(400, f"Sequence diagram '{title}' is empty.")
-        if not mermaid.lower().startswith("sequencediagram"):
-            raise AppError(400, f"Sequence diagram '{title}' must start with sequenceDiagram.")
+            raise AppError(400, f"Diagram '{title}' is empty.")
+        if _mermaid_keyword(mermaid) is None:
+            raise AppError(400, f"Diagram '{title}' must be a Mermaid diagram, such as flowchart, sequenceDiagram, swimlane-beta, journey, C4Context, architecture-beta, block-beta, requirementDiagram, usecase-beta, mindmap, or treeView-beta.")
         if len(mermaid) > MAX_DIAGRAM_TEXT:
-            raise AppError(400, f"Sequence diagram '{title}' is too long.")
+            raise AppError(400, f"Diagram '{title}' is too long.")
         diagram_id = str(item.get("id") or "").strip() or str(uuid.uuid4())
         cleaned.append({"id": diagram_id, "title": title, "mermaid": mermaid})
     return json.dumps(cleaned)
@@ -130,7 +212,7 @@ def _system_code(value: str) -> str:
 
 
 def _level(value: str, label: str) -> str:
-    text = (value or "").strip()
+    text = sentence_case(value)
     if not text:
         raise AppError(400, f"{label} is required.")
     if len(text) > MAX_LEVEL:
@@ -178,23 +260,34 @@ def inferred_description(l1: str, l2: str, l3: str) -> str:
 
 
 def text_for(row: dict) -> str:
-    desc = f" {row['description']}" if row.get("description") else ""
-    rules = (row.get("processing_rules") or "").strip()
-    rules_bit = f" Processing rules: {rules[:1200]}" if rules else ""
-    titles = [item.get("title") for item in _diagram_list(row.get("sequence_diagrams")) if item.get("title")]
-    diagram_bit = f" Sequence diagrams: {', '.join(titles)}." if titles else ""
-    return (
+    """Everything the chat should be able to answer from: names, behavior, rules, and the diagram source."""
+    parts = [
         f"Capability {row['l1_capability']} / {row['l2_capability']} / {row['l3_capability']} "
         f"(country {country_label(row.get('country') or '')}, system {row['system_code']})."
-        f"{desc}{(' Country specific behavior: ' + (row.get('country_behavior') or '').strip()) if (row.get('country_behavior') or '').strip() else ''}{diagram_bit}{rules_bit}"
-    )
+    ]
+    if (row.get("description") or "").strip():
+        parts.append(row["description"].strip())
+    diagrams = []
+    for item in _diagram_list(row.get("sequence_diagrams")):
+        title = str(item.get("title") or "Diagram").strip()
+        mermaid = str(item.get("mermaid") or "").strip()
+        diagrams.append(f"Diagram {title}:\n{mermaid}" if mermaid else f"Diagram {title}")
+    if diagrams:
+        parts.append("\n".join(diagrams))
+    behavior = (row.get("country_behavior") or "").strip()
+    if behavior:
+        parts.append(f"Country specific behavior: {behavior}")
+    rules = (row.get("processing_rules") or "").strip()
+    if rules:
+        parts.append(f"Processing rules: {rules}")
+    return "\n".join(parts)
 
 
 def _embed(capability_id: str) -> None:
     row = db.fetchone("SELECT * FROM kb_capabilities WHERE capability_id = ?", [capability_id])
     if row is None:
         return
-    vector = llm.embed(text_for(row)[:2000]) if llm.embedding_configured() else None
+    vector = llm.embed(text_for(row)[:EMBED_CHARS]) if llm.embedding_configured() else None
     db.exec_sql("UPDATE kb_capabilities SET embedding = ? WHERE capability_id = ?", [vector, capability_id])
 
 
@@ -294,10 +387,10 @@ def _payload(row: dict, *, with_links: bool = False) -> dict:
         "capability_id": row["capability_id"],
         "country": row["country"],
         "system_code": row["system_code"],
-        "l1_capability": row["l1_capability"],
-        "l2_capability": row["l2_capability"],
-        "l3_capability": row["l3_capability"],
-        "description": row["description"],
+        "l1_capability": sentence_case(row["l1_capability"]),
+        "l2_capability": sentence_case(row["l2_capability"]),
+        "l3_capability": sentence_case(row["l3_capability"]),
+        "description": sentence_case(row["description"] or ""),
         "sequence_diagrams": _diagram_list(row.get("sequence_diagrams")),
         "processing_rules": row.get("processing_rules") or "",
         "country_behavior": row.get("country_behavior") or "",
@@ -330,7 +423,8 @@ def _validate_fields(l1: str, l2: str, l3: str, description: str, rules: str) ->
     l1 = _level(l1, "L1 capability")
     l2 = _level(l2, "L2 capability")
     l3 = _level(l3, "L3 capability")
-    description = (description or "").strip() or inferred_description(l1, l2, l3)
+    description = sentence_case(description) or inferred_description(l1, l2, l3)
+    description = sentence_case(description)
     rules = (rules or "").strip()
     if len(description) > MAX_DESCRIPTION:
         raise AppError(400, f"Description must be {MAX_DESCRIPTION} characters or fewer.")
@@ -648,10 +742,10 @@ def parse_and_validate(data: bytes) -> list[dict]:
         values = {name: row[index[name]] if index[name] < len(row) else "" for name in HEADERS}
         if not any(values.values()):
             continue
-        l1 = values["L1_CAPABILITY"].strip()
-        l2 = values["L2_CAPABILITY"].strip()
-        l3 = values["L3_CAPABILITY"].strip()
-        description = values["DESCRIPTION"].strip()
+        l1 = sentence_case(values["L1_CAPABILITY"])
+        l2 = sentence_case(values["L2_CAPABILITY"])
+        l3 = sentence_case(values["L3_CAPABILITY"])
+        description = sentence_case(values["DESCRIPTION"])
         country = ""
         country_ok = True
         try:
@@ -700,7 +794,7 @@ def parse_and_validate(data: bytes) -> list[dict]:
             [(records[index]["l1_capability"], records[index]["l2_capability"], records[index]["l3_capability"]) for index in missing]
         )
         for index, text in zip(missing, generated):
-            records[index]["description"] = text
+            records[index]["description"] = sentence_case(text)
     return records
 
 

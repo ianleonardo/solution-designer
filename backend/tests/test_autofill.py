@@ -106,8 +106,9 @@ def test_generate_all_can_fill_only_the_empty_sections(client, monkeypatch):
     next(block for block in sections[kept]["blocks"] if block["type"] == "prose")["markdown"] = "Written by a person"
     assert client.put(base, json={"content_json": {"sections": sections}}, headers=auth(writer)).status_code == 200
 
-    with client.stream("POST", f"{base}/generate?only_empty=true", headers=auth(writer)) as stream:
+    with client.stream("POST", f"{base}/generate?only_empty=true", json={"instruction": "  Mention timeouts "}, headers=auth(writer)) as stream:
         body = stream.read().decode()
+    assert any("Mention timeouts" in user for _system, user in prompts)
     assert f'"event": "section_skipped", "section_id": "{kept}"' in body
     assert f'"event": "section_start", "section_id": "{prose[1]}"' in body
     assert f'"event": "section_start", "section_id": "{kept}"' not in body
@@ -132,6 +133,30 @@ def test_viewers_cannot_auto_fill(client, monkeypatch):
         token = auth(login(client, role))
         assert client.post(f"{base}/sections/{section}/regenerate", json={"instruction": "x"}, headers=token).status_code == 403
         assert client.post(f"{base}/generate?only_empty=true", headers=token).status_code == 403
+
+
+def test_a_raw_block_dump_is_stored_as_prose(client, monkeypatch):
+    monkeypatch.setenv("LLM_API_KEY", "test-key")
+
+    def complete(system, user, temperature):
+        del system, user, temperature
+        return 'blocks: { type: "prose", "markdown": "Settlement completes before cutoff." }'
+
+    monkeypatch.setattr("app.services.llm.complete", complete)
+    monkeypatch.setattr("app.services.llm.embed", lambda _text: None)
+    writer = login(client, "Write")
+    project_id = _project(client, writer)
+    document = _document(client, writer, project_id)
+    section = next(item for item in document["templates"] if item["content_kind"] == "prose")["template_id"]
+    response = client.post(
+        f"/api/projects/{project_id}/documents/{document['document_id']}/sections/{section}/regenerate",
+        headers=auth(writer),
+    )
+    assert response.status_code == 200, response.text
+    blocks = response.json()["content_json"]["sections"][section]["blocks"]
+    prose = next(block for block in blocks if block["type"] == "prose")
+    assert prose["markdown"] == "Settlement completes before cutoff."
+    assert "blocks" not in prose["markdown"]
 
 
 def test_a_model_that_renames_the_prose_field_still_fills_the_section(client, monkeypatch):

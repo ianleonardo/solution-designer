@@ -12,6 +12,7 @@ type ProviderForm = {
   api_key: string;
   embedding_api_key: string;
   verify_ssl: boolean;
+  max_model_length: string;
 };
 
 function formFor(provider: LlmProvider): ProviderForm {
@@ -23,6 +24,7 @@ function formFor(provider: LlmProvider): ProviderForm {
     api_key: "",
     embedding_api_key: "",
     verify_ssl: provider.verify_ssl !== false,
+    max_model_length: String(provider.max_model_length ?? 128000),
   };
 }
 
@@ -52,7 +54,8 @@ export function ProviderCard({ provider, active, onActivate, onSaved }: CardProp
     setError("");
     setMessage("");
     try {
-      const saved = await api<LlmProvider>(`/api/settings/providers/${provider.provider}`, { method: "PUT", body: JSON.stringify(form) });
+      const payload = provider.provider === "spirare" ? form : { ...form, max_model_length: undefined };
+      const saved = await api<LlmProvider>(`/api/settings/providers/${provider.provider}`, { method: "PUT", body: JSON.stringify(payload) });
       setForm(formFor(saved));
       setMessage("Saved");
       onSaved(saved);
@@ -88,6 +91,18 @@ export function ProviderCard({ provider, active, onActivate, onSaved }: CardProp
           Chat model
           <input className="field mt-1" value={form.chat_model} onChange={(event) => set("chat_model", event.target.value)} />
         </label>
+        {provider.provider === "spirare" && (
+          <label className="block text-sm">
+            Max model length
+            <input
+              className="field mt-1"
+              inputMode="numeric"
+              aria-label="Max model length"
+              value={form.max_model_length}
+              onChange={(event) => set("max_model_length", event.target.value)}
+            />
+          </label>
+        )}
         <label className="block text-sm">
           Chat URL
           <input className="field mt-1" value={form.chat_base_url} placeholder="Provider default" onChange={(event) => set("chat_base_url", event.target.value)} />

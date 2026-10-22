@@ -55,6 +55,17 @@ test("shows three providers with write-only key inputs", async () => {
     expect(input.value).toBe("");
   });
   expect(screen.getByText("(configured)")).toBeTruthy();
+  expect(screen.getByLabelText("Max model length")).toBeTruthy();
+});
+
+test("saving Spirare sends the max model length", async () => {
+  render(<LlmPage />);
+  const input = (await screen.findByLabelText("Max model length")) as HTMLInputElement;
+  fireEvent.change(input, { target: { value: "128000" } });
+  fireEvent.click(screen.getByRole("button", { name: "Save Spirare" }));
+  await waitFor(() => expect(calls.some((call) => call.url === "/api/settings/providers/spirare")).toBe(true));
+  const call = calls.find((item) => item.url === "/api/settings/providers/spirare")!;
+  expect(JSON.parse(call.body).max_model_length).toBe("128000");
 });
 
 test("saving a provider sends the key and clears the input", async () => {

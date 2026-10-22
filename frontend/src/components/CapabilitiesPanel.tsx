@@ -15,7 +15,7 @@ import type {
 import { ConfirmDialog } from "./ConfirmDialog";
 import { LinkPickerDialog, type LinkPickerRow } from "./LinkPickerDialog";
 import { FileDrop } from "./FileDrop";
-import { MermaidPreview } from "./DiagramBlock";
+import { DiagramPopup, MermaidPreview } from "./DiagramBlock";
 import { SequenceDiagramsDialog, type SequenceDiagram } from "./SequenceDiagramsDialog";
 import { BatchDetailsDialog } from "./BatchesPanel";
 import { ReportDetailsDialog } from "./ReportsPanel";
@@ -32,8 +32,24 @@ function inferredDescription(l1: string, l2: string, l3: string) {
   return `Provides ${feature} as a ${group} feature of ${area}.`;
 }
 
+function sentenceCase(value: string) {
+  const text = value.trim().replace(/\s+/g, " ");
+  if (!text) return "";
+  const chars = text.toLowerCase().split("");
+  chars[0] = chars[0].toUpperCase();
+  for (let index = 0; index < chars.length - 1; index += 1) {
+    if (".!?".includes(chars[index]) && chars[index + 1] === " ") {
+      let cursor = index + 1;
+      while (cursor < chars.length && chars[cursor] === " ") cursor += 1;
+      if (cursor < chars.length) chars[cursor] = chars[cursor].toUpperCase();
+      index = cursor;
+    }
+  }
+  return chars.join("");
+}
+
 function capabilityDescription(row: Pick<KbCapabilityRecord, "description" | "l1_capability" | "l2_capability" | "l3_capability">) {
-  return (row.description || "").trim() || inferredDescription(row.l1_capability, row.l2_capability, row.l3_capability);
+  return sentenceCase((row.description || "").trim() || inferredDescription(row.l1_capability, row.l2_capability, row.l3_capability));
 }
 
 function countryCodes(value: string) {
@@ -208,6 +224,7 @@ function CapabilityFormDialog({
   const [description, setDescription] = useState(capability?.description ?? "");
   const [diagrams, setDiagrams] = useState<SequenceDiagram[]>(capability?.sequence_diagrams ?? []);
   const [diagramsOpen, setDiagramsOpen] = useState(false);
+  const [viewingDiagram, setViewingDiagram] = useState<SequenceDiagram | null>(null);
   const [rules, setRules] = useState(capability?.processing_rules ?? "");
   const [links, setLinks] = useState<Pick<KbCapabilityRecord, "interfaces" | "tables" | "batches" | "reports">>({
     interfaces: capability?.interfaces ?? [],
@@ -593,7 +610,7 @@ function CapabilityFormDialog({
         </div>
         <div>
           <div className="flex items-center justify-between gap-2">
-            <span className="font-label text-[10px] uppercase text-muted">Sequence diagrams</span>
+            <span className="font-label text-[10px] uppercase text-muted">Diagrams</span>
             {!readOnly && (
               <button type="button" className="btn" disabled={busy} onClick={() => setDiagramsOpen(true)}>
                 Add / edit
@@ -601,12 +618,24 @@ function CapabilityFormDialog({
             )}
           </div>
           {diagrams.length === 0 ? (
-            <p className="mt-1 text-sm text-muted">No sequence diagrams.</p>
+            <p className="mt-1 text-sm text-muted">No diagrams.</p>
           ) : (
             <ul className="mt-1 space-y-3">
               {diagrams.map((diagram) => (
                 <li key={diagram.id} className="rounded-lg border border-hairline p-3">
-                  <p className="mb-2 text-sm font-medium">{diagram.title}</p>
+                  <div className="mb-2 flex items-center justify-between gap-2">
+                    <p className="text-sm font-medium">{diagram.title}</p>
+                    <button
+                      type="button"
+                      className="btn"
+                      aria-label={`Expand ${diagram.title}`}
+                      title="Expand diagram"
+                      onClick={() => setViewingDiagram(diagram)}
+                    >
+                      <span className="material-symbols-outlined text-base">open_in_full</span>
+                      Expand
+                    </button>
+                  </div>
                   <MermaidPreview source={diagram.mermaid} />
                 </li>
               ))}
@@ -682,6 +711,14 @@ function CapabilityFormDialog({
             setDiagrams(next);
             setDiagramsOpen(false);
           }}
+        />
+      )}
+      {viewingDiagram && (
+        <DiagramPopup
+          source={viewingDiagram.mermaid}
+          title={viewingDiagram.title}
+          layerClass="z-[80]"
+          onClose={() => setViewingDiagram(null)}
         />
       )}
       {picker && (
@@ -1177,9 +1214,9 @@ export function CapabilitiesPanel() {
                         }
                       }}
                     >
-                      <td className="py-2.5 px-3 font-label text-xs">{row.l1_capability}</td>
-                      <td className="py-2.5 px-3 text-muted">{row.l2_capability}</td>
-                      <td className="py-2.5 px-3 text-muted">{row.l3_capability}</td>
+                      <td className="py-2.5 px-3 font-label text-xs">{sentenceCase(row.l1_capability)}</td>
+                      <td className="py-2.5 px-3 text-muted">{sentenceCase(row.l2_capability)}</td>
+                      <td className="py-2.5 px-3 text-muted">{sentenceCase(row.l3_capability)}</td>
                       <td className="py-2.5 px-3 text-muted">{capabilityDescription(row)}</td>
                       {canEdit && (
                         <td className="py-2.5 px-3 whitespace-nowrap">

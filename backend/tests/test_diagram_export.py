@@ -169,6 +169,38 @@ def test_html_export_draws_pie_state_er_and_gantt():
     assert "stateDiagram-v2" not in page and "erDiagram" not in page and "dateFormat" not in page
 
 
+ADDED = {
+    "journey": "journey\n    title Pay a bill\n    section Sign in\n      Open the app: 5: Customer",
+    "c4": 'C4Context\n    Person(customer, "Customer", "A bank customer")\n    System(banking, "Internet Banking", "Views accounts")\n    Rel(customer, banking, "Uses")',
+    "architecture": "architecture-beta\n    service db(database)[Database]\n    service server(server)[Server]\n    db:R --> L:server",
+    "block": 'block-beta\n    columns 3\n    Customer["Customer"] Account["Account"] Payment["Payment"]\n    Customer --> Account',
+    "requirement": "requirementDiagram\n    requirement pay {\n    text: the customer can pay a bill\n    }\n    element gateway {\n    type: service\n    }\n    gateway - satisfies -> pay",
+    "usecase": 'usecase-beta\n    actor Customer\n    SignIn("Sign in")\n    Customer --> SignIn',
+    "mindmap": "mindmap\n  root((Payments))\n    Card\n      Auth",
+    "tree": "treeView-beta\n    payments/\n        src/\n            pay.js",
+    "swimlane": "swimlane-beta LR\n    subgraph Customer\n        request[Request service]\n    end\n    subgraph Support\n        triage[Triage request]\n    end\n    request --> triage",
+}
+
+
+def test_html_and_pdf_draw_the_added_diagram_types():
+    blocks = [{"type": "diagram", "mermaid": text} for text in ADDED.values()]
+    for block in blocks:
+        scene = diagrams.scene_for_block(block)
+        assert scene is not None and scene.items, block["mermaid"].splitlines()[0]
+        for item in scene.items:
+            xs = [item[key] for key in ("x", "x1", "x2") if key in item] + [point[0] for point in item.get("points", [])]
+            ys = [item[key] for key in ("y", "y1", "y2") if key in item] + [point[1] for point in item.get("points", [])]
+            assert all(0 <= x <= scene.width + 0.1 for x in xs)
+            assert all(0 <= y <= scene.height + 0.1 for y in ys)
+    page = export.render_html("T", TEMPLATES, _content(*blocks))
+    assert page.count("<svg ") == len(blocks)
+    assert "<pre>" not in page
+    for label in ("Pay a bill", "Open the app", "Internet Banking", "Database", "Account", "can pay", "Sign in", "Auth", "pay.js", "Request service", "Triage request"):
+        assert label in page, label
+    pdf = export.render_pdf_document("T", TEMPLATES, _content(*blocks))
+    assert pdf.startswith(b"%PDF") and len(pdf) > 1000
+
+
 def test_pdf_export_includes_the_extra_diagrams():
     content = _content(
         {"type": "diagram", "mermaid": PIE},

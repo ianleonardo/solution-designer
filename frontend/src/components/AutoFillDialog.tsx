@@ -62,19 +62,21 @@ export function AutoFillDialog({
             </label>
           </fieldset>
         )}
-        {scope === "section" && (
-          <label className="block space-y-1 text-sm">
-            <span className="font-label text-[10px] uppercase text-muted">Extra instruction (optional, this run only)</span>
-            <textarea
-              className="field min-h-24"
-              aria-label="Extra instruction"
-              placeholder="For example: focus on settlement risk, keep it under five bullets"
-              maxLength={1000}
-              value={instruction}
-              onChange={(event) => setInstruction(event.target.value)}
-            />
-          </label>
-        )}
+        <label className="block space-y-1 text-sm">
+          <span className="font-label text-[10px] uppercase text-muted">Extra instruction (optional, this run only)</span>
+          <textarea
+            className="field min-h-24"
+            aria-label="Extra instruction"
+            placeholder={
+              scope === "section"
+                ? "For example: focus on settlement risk, keep it under five bullets"
+                : "For example: focus on settlement risk. This applies to every section filled in this run."
+            }
+            maxLength={1000}
+            value={instruction}
+            onChange={(event) => setInstruction(event.target.value)}
+          />
+        </label>
         {replaces && (
           <p className="rounded border border-hairline bg-inset px-3 py-2 text-sm text-alert" role="alert">
             {scope === "section" ? "This section already has content. Auto fill replaces it." : "Sections that already have content are replaced, including your edits."}

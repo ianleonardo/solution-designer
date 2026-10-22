@@ -252,8 +252,26 @@ def _migrate() -> None:
             protocol VARCHAR NOT NULL,
             source VARCHAR NOT NULL,
             destination VARCHAR NOT NULL,
+            processing_rules VARCHAR NOT NULL DEFAULT '',
+            validation_rules VARCHAR NOT NULL DEFAULT '',
             created_at TIMESTAMP NOT NULL,
             embedding FLOAT[]
+        )
+        """,
+        """
+        CREATE TABLE IF NOT EXISTS interface_fields (
+            field_id VARCHAR PRIMARY KEY,
+            interface_id VARCHAR NOT NULL,
+            direction VARCHAR NOT NULL,
+            position INTEGER NOT NULL,
+            field_path VARCHAR NOT NULL,
+            field_type VARCHAR NOT NULL,
+            required VARCHAR NOT NULL,
+            length VARCHAR NOT NULL DEFAULT '',
+            validation VARCHAR NOT NULL DEFAULT '',
+            description VARCHAR NOT NULL DEFAULT '',
+            example VARCHAR NOT NULL DEFAULT '',
+            UNIQUE (interface_id, direction, field_path)
         )
         """,
         """
@@ -325,6 +343,7 @@ def _migrate() -> None:
             api_key_enc VARCHAR NOT NULL DEFAULT '',
             embedding_api_key_enc VARCHAR NOT NULL DEFAULT '',
             verify_ssl BOOLEAN NOT NULL DEFAULT TRUE,
+            max_model_length INTEGER NOT NULL DEFAULT 128000,
             updated_at TIMESTAMP NOT NULL
         )
         """,
@@ -619,6 +638,30 @@ def _ensure_columns() -> None:
     if "endpoint" not in interface_columns:
         _conn.execute("ALTER TABLE interfaces ADD COLUMN endpoint VARCHAR DEFAULT ''")
         _conn.execute("UPDATE interfaces SET endpoint = '' WHERE endpoint IS NULL")
+    if "processing_rules" not in interface_columns:
+        _conn.execute("ALTER TABLE interfaces ADD COLUMN processing_rules VARCHAR DEFAULT ''")
+        _conn.execute("UPDATE interfaces SET processing_rules = '' WHERE processing_rules IS NULL")
+    if "validation_rules" not in interface_columns:
+        _conn.execute("ALTER TABLE interfaces ADD COLUMN validation_rules VARCHAR DEFAULT ''")
+        _conn.execute("UPDATE interfaces SET validation_rules = '' WHERE validation_rules IS NULL")
+    _conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS interface_fields (
+            field_id VARCHAR PRIMARY KEY,
+            interface_id VARCHAR NOT NULL,
+            direction VARCHAR NOT NULL,
+            position INTEGER NOT NULL,
+            field_path VARCHAR NOT NULL,
+            field_type VARCHAR NOT NULL,
+            required VARCHAR NOT NULL,
+            length VARCHAR NOT NULL DEFAULT '',
+            validation VARCHAR NOT NULL DEFAULT '',
+            description VARCHAR NOT NULL DEFAULT '',
+            example VARCHAR NOT NULL DEFAULT '',
+            UNIQUE (interface_id, direction, field_path)
+        )
+        """
+    )
     if "indexed_embedding_signature" not in columns:
         _conn.execute("ALTER TABLE app_settings ADD COLUMN indexed_embedding_signature VARCHAR DEFAULT ''")
         _conn.execute("UPDATE app_settings SET indexed_embedding_signature = '' WHERE indexed_embedding_signature IS NULL")
@@ -634,6 +677,9 @@ def _ensure_columns() -> None:
     if "verify_ssl" not in provider_columns:
         _conn.execute("ALTER TABLE llm_providers ADD COLUMN verify_ssl BOOLEAN DEFAULT TRUE")
         _conn.execute("UPDATE llm_providers SET verify_ssl = TRUE WHERE verify_ssl IS NULL")
+    if "max_model_length" not in provider_columns:
+        _conn.execute("ALTER TABLE llm_providers ADD COLUMN max_model_length INTEGER DEFAULT 128000")
+        _conn.execute("UPDATE llm_providers SET max_model_length = 128000 WHERE max_model_length IS NULL OR max_model_length = 0")
     capability_columns = {
         row[0]
         for row in _conn.execute(
@@ -691,7 +737,7 @@ def _seed_llm_providers() -> None:
         (
             "spirare",
             "Spirare",
-            "default",
+            "Qwen3.5-122B-A10B",
             "https://s-egp.sg.uobnet.com/nlp/v1/chat/completions",
             "/data/genai/models/bge-m3",
             "https://s-egp.sg.uobnet.com/embedding/v1/embeddings",
@@ -711,7 +757,7 @@ def _seed_llm_providers() -> None:
     exec_sql(
         """
         UPDATE llm_providers
-        SET chat_model = 'default',
+        SET chat_model = 'Qwen3.5-122B-A10B',
             chat_base_url = 'https://is-egp.sg.uobnet.com/wip/v1/chat/completions',
             embedding_model = '/data/genai/models/bge-m3',
             embedding_base_url = 'https://is-egp.sg.uobnet.com/embedding/v1/embeddings'
@@ -719,6 +765,13 @@ def _seed_llm_providers() -> None:
           AND chat_base_url IN ('', 'https://api.openai.com/v1')
           AND chat_model IN ('', 'gpt-4o-mini')
           AND embedding_model IN ('', 'text-embedding-3-small')
+        """
+    )
+    exec_sql(
+        """
+        UPDATE llm_providers
+        SET chat_model = 'Qwen3.5-122B-A10B'
+        WHERE provider = 'spirare' AND chat_model IN ('', 'default')
         """
     )
 

@@ -297,7 +297,7 @@ export function WorkspacePage() {
     }
   }
 
-  async function generateAll(onlyEmpty: boolean) {
+  async function generateAll(onlyEmpty: boolean, instruction = "") {
     if (!doc) return;
     const targetId = doc.document_id;
     setError("");
@@ -305,8 +305,13 @@ export function WorkspacePage() {
     setRunning(true);
     await flushSave();
     const headers = authHeaders();
+    headers.set("Content-Type", "application/json");
     const query = onlyEmpty ? "?only_empty=true" : "";
-    const response = await fetch(`/api/projects/${projectId}/documents/${targetId}/generate${query}`, { method: "POST", headers });
+    const response = await fetch(`/api/projects/${projectId}/documents/${targetId}/generate${query}`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({ instruction }),
+    });
     if (!response.ok) {
       const body = (await response.json()) as { detail?: string };
       setError(body.detail || "Generation failed");
@@ -652,7 +657,7 @@ export function WorkspacePage() {
             const target = fillDialog;
             setFillDialog(null);
             if (target.scope === "section") void fillSection(target.id, request.instruction);
-            else void generateAll(request.onlyEmpty);
+            else void generateAll(request.onlyEmpty, request.instruction);
           }}
         />
       )}

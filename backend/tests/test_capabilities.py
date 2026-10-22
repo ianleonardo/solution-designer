@@ -51,7 +51,7 @@ def test_capabilities_upload_infers_description_and_blocks_rag(client):
     body = upload.json()
     assert body["uploaded"] == 2
     by_l3 = {row["l3_capability"]: row for row in body["capabilities"]}
-    assert by_l3["Auth"]["description"] == "Provides Auth as a Card feature of Payments."
+    assert by_l3["Auth"]["description"] == "Provides auth as a card feature of payments."
     assert by_l3["Capture"]["description"] == "Take funds"
 
     listed = client.get("/api/capabilities", headers=auth(viewer))
@@ -148,7 +148,7 @@ def test_capabilities_link_interface_and_unlink(client):
         headers=auth(analyst),
     )
     assert created.status_code == 200, created.text
-    assert created.json()["description"] == "Provides Auth as a Card feature of Pay."
+    assert created.json()["description"] == "Provides auth as a card feature of pay."
     assert created.json()["processing_rules"] == "**step** one"
     capability_id = created.json()["capability_id"]
 
@@ -314,3 +314,90 @@ def test_capability_countries_can_be_all_or_several(client):
     assert refused.status_code == 400
     both = client.post(f"/api/capabilities/{several.json()['capability_id']}/interfaces/{interface_id}", headers=auth(analyst))
     assert both.status_code == 200, both.text
+
+
+def test_names_are_sentence_case_and_diagrams_accept_any_mermaid_type(client, monkeypatch):
+    from app.services import capabilities as capabilities_svc
+
+    admin = login(client, "Admin")
+    _system(client, admin)
+    embedded = []
+    monkeypatch.setattr("app.services.llm.embedding_configured", lambda: True)
+    monkeypatch.setattr("app.services.llm.embed", lambda text: embedded.append(text) or [0.1])
+    created = client.post(
+        "/api/capabilities",
+        json={
+            "country": "SG",
+            "system_code": "SPL",
+            "l1_capability": "FUND TRANSFER",
+            "l2_capability": "fund transfer",
+            "l3_capability": "Fund Transfer",
+            "description": "SENDS MONEY overnight.",
+            "country_behavior": "Uses FAST on weekdays.",
+            "processing_rules": "Step one then step two.",
+            "sequence_diagrams": [
+                {"title": "Flow", "mermaid": "flowchart LR\n  A[Payer] --> B[Bank]"},
+                {"title": "States", "mermaid": "stateDiagram-v2\n  [*] --> Received"},
+            ],
+        },
+        headers=auth(admin),
+    )
+    assert created.status_code == 200, created.text
+    body = created.json()
+    assert body["l1_capability"] == "Fund transfer"
+    assert body["l2_capability"] == "Fund transfer"
+    assert body["l3_capability"] == "Fund transfer"
+    assert body["description"] == "Sends money overnight."
+    assert {item["title"] for item in body["sequence_diagrams"]} == {"Flow", "States"}
+    text = capabilities_svc.text_for(
+        {
+            **body,
+            "sequence_diagrams": body["sequence_diagrams"],
+        }
+    )
+    assert "flowchart LR" in text and "stateDiagram-v2" in text
+    assert "Uses FAST on weekdays." in text and "Step one then step two." in text
+    assert embedded and "flowchart LR" in embedded[-1] and "Uses FAST on weekdays." in embedded[-1]
+
+    too_long = client.post(
+        "/api/capabilities",
+        json={
+            "country": "SG",
+            "system_code": "SPL",
+            "l1_capability": "Pay",
+            "l2_capability": "Card",
+            "l3_capability": "Notes",
+            "description": "Notes",
+            "processing_rules": "x" * 20001,
+        },
+        headers=auth(admin),
+    )
+    assert too_long.status_code == 400
+    assert "20000" in too_long.json()["detail"]
+    behavior = client.post(
+        "/api/capabilities",
+        json={
+            "country": "SG",
+            "system_code": "SPL",
+            "l1_capability": "Pay",
+            "l2_capability": "Card",
+            "l3_capability": "Local",
+            "country_behavior": "y" * 20001,
+        },
+        headers=auth(admin),
+    )
+    assert behavior.status_code == 400
+    plain = client.post(
+        "/api/capabilities",
+        json={
+            "country": "SG",
+            "system_code": "SPL",
+            "l1_capability": "Pay",
+            "l2_capability": "Card",
+            "l3_capability": "Sketch",
+            "sequence_diagrams": [{"title": "Notes", "mermaid": "just some words"}],
+        },
+        headers=auth(admin),
+    )
+    assert plain.status_code == 400
+    assert "Mermaid" in plain.json()["detail"]

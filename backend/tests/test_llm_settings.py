@@ -18,6 +18,9 @@ def test_settings_list_three_providers_without_secrets(client):
     body = client.get("/api/settings", headers=auth(admin)).json()
     assert [item["provider"] for item in body["providers"]] == ["gemini", "anthropic", "spirare"]
     assert body["active_provider"] == "spirare"
+    spirare = _provider(body, "spirare")
+    assert spirare["chat_model"] == "Qwen3.5-122B-A10B"
+    assert spirare["max_model_length"] == 128000
     for item in body["providers"]:
         assert item["api_key_configured"] is False
         assert "api_key" not in item
@@ -61,6 +64,10 @@ def test_provider_validation_and_permissions(client):
     bad_url = client.put("/api/settings/providers/spirare", json={"chat_base_url": "ftp://x"}, headers=auth(admin))
     assert bad_url.status_code == 400
     assert client.put("/api/settings/providers/spirare", json={"api_key": "x"}, headers=auth(writer)).status_code == 403
+    saved_length = client.put("/api/settings/providers/spirare", json={"max_model_length": "64000"}, headers=auth(admin))
+    assert saved_length.status_code == 200
+    assert saved_length.json()["max_model_length"] == 64000
+    assert client.put("/api/settings/providers/spirare", json={"max_model_length": "soon"}, headers=auth(admin)).status_code == 400
     assert client.get("/api/settings", headers=auth(writer)).status_code == 403
     prompt = client.get("/api/settings", headers=auth(admin)).json()["global_system_prompt"]
     assert client.put("/api/settings", json={"active_provider": "bogus", "global_system_prompt": prompt}, headers=auth(admin)).status_code == 400

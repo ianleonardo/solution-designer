@@ -855,6 +855,11 @@ def scene_for_block(block: dict) -> Scene | None:
     if is_class_diagram(mermaid):
         parsed = parse_class_diagram(mermaid)
         return class_scene(parsed) if parsed else None
+    from app.services.diagram_extra import extra_scene
+
+    extra = extra_scene(mermaid)
+    if extra is not None:
+        return extra
     chart = mermaid_to_flowchart(mermaid)
     return flowchart_scene(chart) if chart else None
 

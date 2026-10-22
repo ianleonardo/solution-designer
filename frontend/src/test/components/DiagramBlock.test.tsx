@@ -128,7 +128,22 @@ test("a template asks before it replaces something that was written", async () =
 });
 
 test("every template is valid Mermaid-looking text and the list covers the common diagrams", () => {
-  expect(MERMAID_TEMPLATES.map((item) => item.id)).toEqual(["flowchart", "sequence", "class", "state", "er", "gantt", "pie"]);
+  expect(MERMAID_TEMPLATES.map((item) => item.id)).toEqual([
+    "flowchart",
+    "swimlane",
+    "sequence",
+    "class",
+    "state",
+    "er",
+    "journey",
+    "c4",
+    "architecture",
+    "block",
+    "requirement",
+    "usecase",
+    "mindmap",
+    "treeview",
+  ]);
   for (const template of MERMAID_TEMPLATES) expect(template.text.trim().length).toBeGreaterThan(10);
 });
 

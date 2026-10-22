@@ -198,6 +198,7 @@ export type LlmProvider = {
   api_key_configured: boolean;
   embedding_api_key_configured: boolean;
   verify_ssl?: boolean;
+  max_model_length?: number;
   updated_at: string;
 };
 

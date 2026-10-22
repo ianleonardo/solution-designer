@@ -14,6 +14,26 @@ _URL_FIELDS = ("chat_base_url", "embedding_base_url")
 _TEXT_FIELDS = ("chat_model", "chat_base_url", "embedding_model", "embedding_base_url")
 
 
+def _stored_length(value) -> int:
+    try:
+        number = int(value)
+    except (TypeError, ValueError):
+        return 128000
+    return number if number > 0 else 128000
+
+
+def _max_model_length(value) -> int:
+    text = str(value if value is not None else "").strip().replace(",", "")
+    if not text.isdigit():
+        raise AppError(400, "Max model length must be a whole number.")
+    number = int(text)
+    if number < 1024:
+        raise AppError(400, "Max model length must be at least 1024.")
+    if number > 2_000_000:
+        raise AppError(400, "Max model length must be 2000000 or fewer.")
+    return number
+
+
 def _row(provider: str) -> dict:
     row = db.fetchone("SELECT * FROM llm_providers WHERE provider = ?", [provider])
     if row is None:
@@ -40,6 +60,7 @@ def runtime_config(provider: str) -> ProviderConfig:
         api_key=api_key,
         embedding_api_key=embedding_key,
         verify_ssl=True if verify_raw is None else bool(verify_raw),
+        max_model_length=_stored_length(row.get("max_model_length")),
     )
 
 
@@ -65,6 +86,7 @@ def provider_payload(row: dict) -> dict:
         "api_key_configured": bool(config.api_key),
         "embedding_api_key_configured": bool(config.embedding_api_key),
         "verify_ssl": config.verify_ssl,
+        "max_model_length": config.max_model_length,
         "updated_at": row["updated_at"],
     }
 
@@ -127,6 +149,9 @@ def update_provider(user: dict, provider: str, body: dict) -> dict:
     if provider == "spirare" and "verify_ssl" in body:
         assignments.append("verify_ssl = ?")
         params.append(bool(body.get("verify_ssl")))
+    if provider == "spirare" and "max_model_length" in body:
+        assignments.append("max_model_length = ?")
+        params.append(_max_model_length(body.get("max_model_length")))
     if assignments:
         assignments.append("updated_at = ?")
         params.append(db._now())

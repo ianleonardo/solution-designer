@@ -12,6 +12,7 @@ class ProviderConfig:
     api_key: str = ""
     embedding_api_key: str = ""
     verify_ssl: bool = True
+    max_model_length: int = 128000
 
 
 def message_text(content) -> str:

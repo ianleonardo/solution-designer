@@ -18,6 +18,17 @@ MAX_BYTES = 20 * 1024 * 1024
 MAX_NAME = 200
 MAX_ENDPOINT = 500
 MAX_DESCRIPTION = 2000
+MAX_RULES = 20000
+MAX_FIELDS = 200
+MAX_PATH = 200
+MAX_FIELD_LENGTH = 200
+MAX_FIELD_VALIDATION = 1000
+MAX_EXAMPLE = 500
+EMBED_CHARS = 8000
+FIELD_TYPES = ("string", "number", "integer", "boolean", "date", "datetime", "object", "array", "enum")
+FIELD_DIRECTIONS = ("request", "response")
+REQUIRED_VALUES = ("Y", "N", "C")
+_REQUIRED_WORDS = {"Y": "required", "N": "optional", "C": "conditional"}
 
 
 def _now() -> datetime:
@@ -95,14 +106,181 @@ def _endpoint(value: str) -> str:
     return text
 
 
+def _limit(value: str, limit: int, label: str) -> str:
+    text = (value or "").strip()
+    if len(text) > limit:
+        raise AppError(400, f"{label} must be {limit} characters or fewer.")
+    return text
+
+
+def _rules(value: str, label: str) -> str:
+    return _limit(value, MAX_RULES, label)
+
+
+def _field_sentence(field: dict) -> str:
+    """One field line for chat: request amount (number, required): validation. description."""
+    required = _REQUIRED_WORDS.get(field.get("required") or "", "optional")
+    line = f"{field.get('direction') or 'request'} {field.get('field_path') or ''} ({field.get('field_type') or 'string'}, {required})"
+    validation = (field.get("validation") or "").strip()
+    description = (field.get("description") or "").strip()
+    if validation:
+        line = f"{line}: {validation}"
+    if description:
+        line = f"{line}. {description}"
+    return line
+
+
 def text_for(row: dict) -> str:
-    """The interface as one readable sentence: what is embedded, searched and shown to the chat model."""
+    """The interface as one readable sentence: what is embedded, searched and shown to the chat model.
+
+    Fields come before the long rule texts so a truncated embed still keeps the field list.
+    """
     description = f" {row['description']}" if row.get("description") else ""
     endpoint = f" Endpoint {row['endpoint']}." if row.get("endpoint") else ""
-    return (
-        f"Interface {row['interface_name']} ({row['channel']} channel, country {country_label(row.get('country') or '')}).{description}{endpoint} "
-        f"Protocol {row['protocol']}. Source {row['source']} -> Destination {row['destination']}."
+    lines = [
+        (
+            f"Interface {row['interface_name']} ({row['channel']} channel, country {country_label(row.get('country') or '')}).{description}{endpoint} "
+            f"Protocol {row['protocol']}. Source {row['source']} -> Destination {row['destination']}."
+        )
+    ]
+    for field in row.get("fields") or []:
+        lines.append(_field_sentence(field))
+    processing = (row.get("processing_rules") or "").strip()
+    validation = (row.get("validation_rules") or "").strip()
+    if processing:
+        lines.append(f"Processing rules: {processing}")
+    if validation:
+        lines.append(f"Validation rules: {validation}")
+    return "\n".join(lines)
+
+
+def fields_by_interface(interface_ids: list[str]) -> dict[str, list[dict]]:
+    """Field rows grouped by interface, request first, then position."""
+    if not interface_ids:
+        return {}
+    marks = ", ".join("?" for _ in interface_ids)
+    rows = db.fetchall(
+        f"""
+        SELECT field_id, interface_id, direction, position, field_path, field_type, required, length, validation, description, example
+        FROM interface_fields
+        WHERE interface_id IN ({marks})
+        ORDER BY direction, position, field_path
+        """,
+        list(interface_ids),
     )
+    grouped: dict[str, list[dict]] = {}
+    for row in rows:
+        grouped.setdefault(row["interface_id"], []).append({key: row[key] for key in row if key != "interface_id"})
+    return grouped
+
+
+def attach_fields(rows: list[dict]) -> list[dict]:
+    """Copy each row and add its fields. Used when embedding or searching, not on the list payload."""
+    grouped = fields_by_interface([row["interface_id"] for row in rows])
+    attached = []
+    for row in rows:
+        copy = dict(row)
+        copy["fields"] = grouped.get(row["interface_id"], [])
+        attached.append(copy)
+    return attached
+
+
+def _public_field(row: dict) -> dict:
+    return {
+        "field_id": row["field_id"],
+        "direction": row["direction"],
+        "position": row["position"],
+        "field_path": row["field_path"],
+        "field_type": row["field_type"],
+        "required": row["required"],
+        "length": row.get("length") or "",
+        "validation": row.get("validation") or "",
+        "description": row.get("description") or "",
+        "example": row.get("example") or "",
+    }
+
+
+def _parse_fields(body: dict) -> list[dict] | None:
+    """None means the caller did not send fields, so the stored rows stay."""
+    if "fields" not in body:
+        return None
+    raw = body.get("fields")
+    if not isinstance(raw, list):
+        raise AppError(400, "Fields must be a list.")
+    counts = {direction: 0 for direction in FIELD_DIRECTIONS}
+    seen: set[tuple[str, str]] = set()
+    parsed: list[dict] = []
+    positions = {direction: 0 for direction in FIELD_DIRECTIONS}
+    for item in raw:
+        if not isinstance(item, dict):
+            raise AppError(400, "Each field must be an object.")
+        direction = (item.get("direction") or "").strip().lower()
+        if direction not in FIELD_DIRECTIONS:
+            raise AppError(400, "Field direction must be request or response.")
+        path = _limit(str(item.get("field_path") or ""), MAX_PATH, "Field path")
+        if not path:
+            raise AppError(400, "Field path is required.")
+        key = (direction, path)
+        if key in seen:
+            label = "Request" if direction == "request" else "Response"
+            raise AppError(400, f"{label} field '{path}' is listed more than once.")
+        seen.add(key)
+        counts[direction] += 1
+        if counts[direction] > MAX_FIELDS:
+            label = "Request" if direction == "request" else "Response"
+            raise AppError(400, f"{label} has more than {MAX_FIELDS} fields.")
+        field_type = _canonical(str(item.get("field_type") or ""), FIELD_TYPES)
+        if field_type is None:
+            raise AppError(400, f"Field type must be one of: {', '.join(FIELD_TYPES)}.")
+        required = (item.get("required") or "").strip().upper()
+        if required not in REQUIRED_VALUES:
+            raise AppError(400, "Required must be Y, N, or C.")
+        parsed.append(
+            {
+                "direction": direction,
+                "position": positions[direction],
+                "field_path": path,
+                "field_type": field_type,
+                "required": required,
+                "length": _limit(str(item.get("length") or ""), MAX_FIELD_LENGTH, "Length"),
+                "validation": _limit(str(item.get("validation") or ""), MAX_FIELD_VALIDATION, "Validation"),
+                "description": _limit(str(item.get("description") or ""), MAX_DESCRIPTION, "Field description"),
+                "example": _limit(str(item.get("example") or ""), MAX_EXAMPLE, "Example"),
+            }
+        )
+        positions[direction] += 1
+    return parsed
+
+
+def _replace_fields(interface_id: str, fields: list[dict]) -> None:
+    db.exec_sql("DELETE FROM interface_fields WHERE interface_id = ?", [interface_id])
+    for field in fields:
+        db.exec_sql(
+            """
+            INSERT INTO interface_fields (
+                field_id, interface_id, direction, position, field_path, field_type, required, length, validation, description, example
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            [
+                str(uuid.uuid4()),
+                interface_id,
+                field["direction"],
+                field["position"],
+                field["field_path"],
+                field["field_type"],
+                field["required"],
+                field["length"],
+                field["validation"],
+                field["description"],
+                field["example"],
+            ],
+        )
+
+
+def _delete_interface_rows(interface_id: str) -> None:
+    db.exec_sql("DELETE FROM interface_fields WHERE interface_id = ?", [interface_id])
+    db.exec_sql("DELETE FROM kb_capability_interfaces WHERE interface_id = ?", [interface_id])
+    db.exec_sql("DELETE FROM interfaces WHERE interface_id = ?", [interface_id])
 
 
 def list_interfaces(channel: str) -> list[dict]:
@@ -119,14 +297,19 @@ def list_interfaces(channel: str) -> list[dict]:
 def get_interface(channel: str, interface_id: str) -> dict:
     row = db.fetchone(
         """
-        SELECT interface_id, channel, country, interface_name, endpoint, description, protocol, source, destination
+        SELECT interface_id, channel, country, interface_name, endpoint, description, protocol, source, destination,
+               processing_rules, validation_rules
         FROM interfaces WHERE channel = ? AND interface_id = ?
         """,
         [_channel(channel), interface_id],
     )
     if row is None:
         raise AppError(404, "Interface not found")
-    return row
+    detail = dict(row)
+    detail["processing_rules"] = detail.get("processing_rules") or ""
+    detail["validation_rules"] = detail.get("validation_rules") or ""
+    detail["fields"] = [_public_field(field) for field in fields_by_interface([interface_id]).get(interface_id, [])]
+    return detail
 
 
 def create_interface(user: dict, channel: str, body: dict) -> dict:
@@ -145,15 +328,21 @@ def create_interface(user: dict, channel: str, body: dict) -> dict:
     protocol = _protocol(str(body.get("protocol") or ""))
     source = _system_codes(str(body.get("source") or ""), "Source")
     destination = _system_codes(str(body.get("destination") or ""), "Destination")
+    processing_rules = _rules(str(body.get("processing_rules") or ""), "Processing rules")
+    validation_rules = _rules(str(body.get("validation_rules") or ""), "Validation rules")
+    fields = _parse_fields(body) or []
     interface_id = str(uuid.uuid4())
     db.exec_sql(
         """
         INSERT INTO interfaces (
-            interface_id, channel, country, interface_name, endpoint, description, protocol, source, destination, created_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            interface_id, channel, country, interface_name, endpoint, description, protocol, source, destination,
+            processing_rules, validation_rules, created_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
-        [interface_id, channel, country, name, endpoint, description, protocol, source, destination, _now()],
+        [interface_id, channel, country, name, endpoint, description, protocol, source, destination, processing_rules, validation_rules, _now()],
     )
+    if fields:
+        _replace_fields(interface_id, fields)
     from app.services import reindex
 
     reindex.embed_missing_in_background()
@@ -177,14 +366,20 @@ def update_interface(user: dict, channel: str, interface_id: str, body: dict) ->
     protocol = _protocol(str(body.get("protocol", current["protocol"]) or ""))
     source = _system_codes(str(body.get("source", current["source"]) or ""), "Source")
     destination = _system_codes(str(body.get("destination", current["destination"]) or ""), "Destination")
+    processing_rules = _rules(str(body.get("processing_rules", current.get("processing_rules") or "") or ""), "Processing rules")
+    validation_rules = _rules(str(body.get("validation_rules", current.get("validation_rules") or "") or ""), "Validation rules")
+    fields = _parse_fields(body)
     db.exec_sql(
         """
         UPDATE interfaces
-        SET country = ?, interface_name = ?, endpoint = ?, description = ?, protocol = ?, source = ?, destination = ?
+        SET country = ?, interface_name = ?, endpoint = ?, description = ?, protocol = ?, source = ?, destination = ?,
+            processing_rules = ?, validation_rules = ?, embedding = NULL
         WHERE interface_id = ?
         """,
-        [country, name, endpoint, description, protocol, source, destination, interface_id],
+        [country, name, endpoint, description, protocol, source, destination, processing_rules, validation_rules, interface_id],
     )
+    if fields is not None:
+        _replace_fields(interface_id, fields)
     from app.services import reindex
 
     reindex.embed_missing_in_background()
@@ -195,7 +390,7 @@ def update_interface(user: dict, channel: str, interface_id: str, body: dict) ->
 def delete_interface(user: dict, channel: str, interface_id: str) -> None:
     _require_editor(user)
     get_interface(channel, interface_id)
-    db.exec_sql("DELETE FROM interfaces WHERE interface_id = ?", [interface_id])
+    _delete_interface_rows(interface_id)
     gcs.upload_db()
 
 

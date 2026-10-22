@@ -5,8 +5,9 @@ from app.services.llm_adapters.base import LLMAdapter
 CHAT_URL = "https://s-egp.sg.uobnet.com/nlp/v1/chat/completions"
 EMBEDDING_URL = "https://s-egp.sg.uobnet.com/embedding/v1/embeddings"
 
-# Spirare rejects a request when prompt tokens plus requested output tokens exceed this window.
-CONTEXT_LIMIT = 32768
+# Qwen3.5-122B-A10B accepts this many tokens. Settings can replace it per deployment.
+DEFAULT_CONTEXT_LIMIT = 128000
+CONTEXT_LIMIT = DEFAULT_CONTEXT_LIMIT
 OUTPUT_TOKENS = 4096
 MIN_OUTPUT_TOKENS = 256
 # Over-estimate tokens (about 3 characters each) so a long prompt is cut before the server returns 400.
@@ -54,20 +55,21 @@ def _clip_user(user: str, max_chars: int) -> str:
     return _clip(user, max_chars)
 
 
-def fit_chat(system: str, user: str) -> tuple[str, str, int]:
-    """Return a system prompt, user prompt and max_tokens that fit in the Spirare context window."""
+def fit_chat(system: str, user: str, context_limit: int = DEFAULT_CONTEXT_LIMIT) -> tuple[str, str, int]:
+    """Return a system prompt, user prompt and max_tokens that fit in the configured context window."""
+    limit = context_limit if context_limit and context_limit > 0 else DEFAULT_CONTEXT_LIMIT
     output = OUTPUT_TOKENS
-    if _estimate_tokens(system) + _estimate_tokens(user) + output + _FRAMING_TOKENS <= CONTEXT_LIMIT:
+    if _estimate_tokens(system) + _estimate_tokens(user) + output + _FRAMING_TOKENS <= limit:
         return system, user, output
-    room = CONTEXT_LIMIT - _FRAMING_TOKENS - _estimate_tokens(system) - _estimate_tokens(user)
+    room = limit - _FRAMING_TOKENS - _estimate_tokens(system) - _estimate_tokens(user)
     if room >= MIN_OUTPUT_TOKENS:
         return system, user, min(output, room)
     output = MIN_OUTPUT_TOKENS
-    user_budget = CONTEXT_LIMIT - _FRAMING_TOKENS - output - _estimate_tokens(system)
+    user_budget = limit - _FRAMING_TOKENS - output - _estimate_tokens(system)
     if user_budget < 64:
-        system_tokens = max(128, CONTEXT_LIMIT - _FRAMING_TOKENS - output - 512)
+        system_tokens = max(128, limit - _FRAMING_TOKENS - output - 512)
         system = _clip(system, system_tokens * CHARS_PER_TOKEN)
-        user_budget = CONTEXT_LIMIT - _FRAMING_TOKENS - output - _estimate_tokens(system)
+        user_budget = limit - _FRAMING_TOKENS - output - _estimate_tokens(system)
     user = _clip_user(user, max(0, user_budget) * CHARS_PER_TOKEN)
     return system, user, output
 
@@ -105,14 +107,14 @@ class SpirareAdapter(LLMAdapter):
 
     def complete(self, system: str, user: str, temperature: float) -> str:
         url = _endpoint(self.config.chat_base_url, "chat/completions")
-        system, user, max_tokens = fit_chat(system, user)
+        system, user, max_tokens = fit_chat(system, user, self.config.max_model_length)
         try:
             body = self._post(url, self._chat_payload(system, user, temperature, max_tokens), self.config.api_key)
         except RuntimeError as exc:
             if not _context_overflow(str(exc)):
                 raise
             # The character estimate can still be short of the server's tokenizer. Shrink once and retry.
-            system, user, max_tokens = fit_chat(system[: len(system) // 2], user[: len(user) // 2])
+            system, user, max_tokens = fit_chat(system[: len(system) // 2], user[: len(user) // 2], self.config.max_model_length)
             body = self._post(url, self._chat_payload(system, user, temperature, min(max_tokens, MIN_OUTPUT_TOKENS)), self.config.api_key)
         message = ((body.get("choices") or [{}])[0].get("message") or {})
         return str(message.get("content") or "")
@@ -135,7 +137,7 @@ class SpirareAdapter(LLMAdapter):
         body = self._post(
             url,
             {
-                "input": text[:2000],
+                "input": text[:8000],
                 "model": self.config.embedding_model,
                 "encoding_format": "float",
                 "input_type": "passage",

@@ -37,7 +37,7 @@ class AnthropicAdapter(LLMAdapter):
         response = httpx.post(
             f"{self.config.embedding_base_url.rstrip('/')}/embeddings",
             headers={"Authorization": f"Bearer {self.embedding_key}", "Content-Type": "application/json"},
-            json={"model": self.config.embedding_model, "input": [text[:2000]]},
+            json={"model": self.config.embedding_model, "input": [text[:8000]]},
             timeout=30,
         )
         response.raise_for_status()

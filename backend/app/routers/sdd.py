@@ -150,6 +150,7 @@ def generate_document(
     project_id: str,
     document_id: str | None = None,
     only_empty: bool = False,
+    body: dict | None = Body(default=None),
     user: dict = Depends(current_user),
 ):
     _require_author(user)
@@ -157,6 +158,7 @@ def generate_document(
         raise LLMNotConfigured()
     row = documents.document_row(project_id, document_id)
     templates = documents.document_templates(row)
+    instruction = str((body or {}).get("instruction") or "")
 
     def stream():
         content = documents.payload(row)["content_json"]
@@ -175,7 +177,7 @@ def generate_document(
                     }
                 )
                 existing = content["sections"].get(template["template_id"])
-                section = generate_section(template, baselines, settings, project_id, existing)
+                section = generate_section(template, baselines, settings, project_id, existing, instruction)
                 content["sections"][template["template_id"]] = section
                 evaluate_missing(content)
                 documents.save_generated(row, content)

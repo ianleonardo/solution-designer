@@ -207,7 +207,7 @@ def _capability_hits(query_tokens: set[str], query_vector: list[float] | None) -
                 row["capability_id"],
                 "Capabilities",
                 f"{row['l1_capability']} / {row['l2_capability']} / {row['l3_capability']}",
-                text[:800],
+                text,
                 {
                     "country": row["country"],
                     "system": row["system_code"],
@@ -320,13 +320,17 @@ def format_context(hits: list[dict], limit_chars: int = 12000) -> str:
         out.append(header)
         used += len(header) + 1
         for hit in groups[name]:
-            if hit["inventory_type"] in ("Systems", "Interfaces", "Tables", "Reports", "Batches", "Bitbucket Repos"):
+            if hit["inventory_type"] in ("Systems", "Interfaces", "Tables", "Reports", "Batches", "Capabilities", "Bitbucket Repos"):
                 body = hit["raw_content"]
             else:
                 extra = {key: value for key, value in (hit.get("parsed") or {}).items() if value}
                 body = f"{hit['system_name'] or ''}: {hit['raw_content']} {json.dumps(extra) if extra else ''}".strip()
             line = f"- {hit['rag_id']}: {body}"
-            if used + len(line) > limit_chars:
+            remaining = limit_chars - used
+            if remaining < 80:
+                return "\n".join(out)
+            if len(line) > remaining:
+                out.append(line[: remaining - 1].rstrip() + "…")
                 return "\n".join(out)
             out.append(line)
             used += len(line) + 1

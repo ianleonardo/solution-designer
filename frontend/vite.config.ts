@@ -24,22 +24,20 @@ export default defineConfig(({ mode }) => {
   const hosts = allowedHosts(env.FRONTEND_ALLOWED_HOSTS);
   return {
     plugins: [react()],
-    resolve: {
-      alias: {
-        // The minified build bundles its own dependencies, so the dev server serves each
-        // diagram chunk directly instead of re-optimizing them mid-session (which caused
-        // "Failed to fetch dynamically imported module" errors).
-        mermaid: "mermaid/dist/mermaid.esm.min.mjs",
-      },
-    },
+    // Bundle Mermaid with the app. Its diagram chunks live in the workspace node_modules,
+    // outside this folder, and serving them as separate files left the dev server on a
+    // stale copy after an upgrade ("Failed to fetch dynamically imported module").
     optimizeDeps: {
-      exclude: ["mermaid"],
+      include: ["mermaid"],
     },
     server: {
       // 0.0.0.0 accepts 127.0.0.1 (what the browser uses for localhost) and the LAN address.
       host: "0.0.0.0",
       port: Number(env.FRONTEND_PORT) || 7777,
       allowedHosts: hosts,
+      fs: {
+        allow: [rootDir],
+      },
       proxy: {
         "/api": env.BACKEND_URL || "http://127.0.0.1:8000",
       },

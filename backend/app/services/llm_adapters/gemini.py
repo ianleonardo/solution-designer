@@ -29,4 +29,4 @@ class GeminiAdapter(LLMAdapter):
             google_api_key=self.embedding_key,
             base_url=self.config.embedding_base_url or None,
         )
-        return client.embed_query(text[:2000])
+        return client.embed_query(text[:8000])

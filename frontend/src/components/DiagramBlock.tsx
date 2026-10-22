@@ -113,7 +113,18 @@ function clampZoom(value: number): number {
 }
 
 /** Full-screen diagram viewer with zoom in / out. */
-export function DiagramPopup({ source, onClose }: { source: string; onClose: () => void }) {
+export function DiagramPopup({
+  source,
+  title = "Diagram",
+  onClose,
+  layerClass = "z-50",
+}: {
+  source: string;
+  title?: string;
+  onClose: () => void;
+  /** Stack above the dialog that opened the viewer. */
+  layerClass?: string;
+}) {
   const [zoom, setZoom] = useState(POPUP_ZOOM_DEFAULT);
   const stage = useRef<HTMLDivElement>(null);
 
@@ -148,7 +159,7 @@ export function DiagramPopup({ source, onClose }: { source: string; onClose: () 
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+      className={`fixed inset-0 ${layerClass} flex items-center justify-center bg-black/50 p-4`}
       role="presentation"
       onMouseDown={(event) => {
         if (event.target === event.currentTarget) onClose();
@@ -161,7 +172,7 @@ export function DiagramPopup({ source, onClose }: { source: string; onClose: () 
         className="flex h-[90vh] w-full max-w-6xl flex-col rounded-lg border border-hairline bg-panel shadow-xl"
       >
         <div className="flex flex-wrap items-center gap-2 border-b border-hairline px-4 py-3">
-          <h2 className="font-headline text-lg font-semibold">Diagram</h2>
+          <h2 className="font-headline text-lg font-semibold">{title}</h2>
           <div className="ml-auto flex items-center gap-1">
             <button
               type="button"

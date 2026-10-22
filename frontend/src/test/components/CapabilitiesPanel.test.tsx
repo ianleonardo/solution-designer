@@ -3,6 +3,14 @@ import { MemoryRouter } from "react-router-dom";
 import { afterEach, expect, test, vi } from "vitest";
 import { CapabilitiesPanel } from "../../components/CapabilitiesPanel";
 
+vi.mock("mermaid", () => ({
+  default: {
+    initialize: vi.fn(),
+    parse: vi.fn(async () => ({ diagramType: "sequence" })),
+    render: vi.fn(async () => ({ svg: '<svg viewBox="0 0 800 400"></svg>' })),
+  },
+}));
+
 function renderPanel() {
   return render(
     <MemoryRouter>
@@ -77,7 +85,7 @@ test("lists capabilities and filters by country", async () => {
   fireEvent.click(screen.getByText("Payments"));
   const detail = await screen.findByRole("dialog", { name: "View capability" });
   await within(detail).findByLabelText("Capability system");
-  for (const label of ["System", "Applicable for", "L1 capability", "Description", "Country specific behavior", "Sequence diagrams", "Processing rules", "Interfaces", "Tables", "Batches", "Reports"]) {
+  for (const label of ["System", "Applicable for", "L1 capability", "Description", "Country specific behavior", "Diagrams", "Processing rules", "Interfaces", "Tables", "Batches", "Reports"]) {
     expect(within(detail).getByText(label)).toBeTruthy();
   }
 });
@@ -143,7 +151,7 @@ test("shows a short description when description is empty", async () => {
     }),
   );
   renderPanel();
-  await waitFor(() => expect(screen.getByText("Provides Auth as a Card feature of Payments.")).toBeTruthy());
+  await waitFor(() => expect(screen.getByText("Provides auth as a card feature of payments.")).toBeTruthy());
   fireEvent.click(screen.getByText("Payments"));
   const detail = await screen.findByRole("dialog", { name: "View capability" });
   await waitFor(() => expect((within(detail).getByLabelText("Capability description") as HTMLInputElement).value).toBe("Provides Auth as a Card feature of Payments."));
@@ -414,4 +422,45 @@ test("link picker is a searchable table that links several items at once", async
   expect(within(add).getByText("SPL · Nightly GL")).toBeTruthy();
   expect(within(add).getByText("SPL · Nightly Cards")).toBeTruthy();
   expect(within(add).queryByText("SPL · Month-end Close")).toBeNull();
+});
+
+test("each capability diagram opens a zoomable viewer", async () => {
+  vi.stubGlobal("localStorage", { getItem: () => JSON.stringify({ role_name: "Analyst", username: "a" }) });
+  vi.stubGlobal(
+    "fetch",
+    vi.fn().mockImplementation((url: string) => {
+      if (url === "/api/catalogs") return Promise.resolve(json({ countries: ["SG", "MY"], databases: [], interface_channels: ["EAI"] }));
+      if (url === "/api/systems")
+        return Promise.resolve(json([{ system_code: "SPL", system_name: "SPL Core", description: "", upstreams: "", downstreams: "", has_batch: false, has_report: false, has_capability: true }]));
+      if (url === "/api/capabilities") return Promise.resolve(json([capability]));
+      if (url.startsWith("/api/capabilities/c1"))
+        return Promise.resolve(
+          json({
+            ...capability,
+            sequence_diagrams: [
+              { id: "d1", title: "Pay flow", mermaid: "sequenceDiagram\n  A->>B: pay" },
+              { id: "d2", title: "Refund flow", mermaid: "sequenceDiagram\n  A->>B: refund" },
+            ],
+            interfaces: [],
+            tables: [],
+            batches: [],
+            reports: [],
+          }),
+        );
+      return Promise.resolve(json([]));
+    }),
+  );
+  renderPanel();
+  fireEvent.click(await screen.findByText("Payments"));
+  const detail = await screen.findByRole("dialog", { name: "View capability" });
+  expect(await within(detail).findByRole("button", { name: "Expand Pay flow" })).toBeTruthy();
+  expect(within(detail).getByRole("button", { name: "Expand Refund flow" })).toBeTruthy();
+
+  fireEvent.click(within(detail).getByRole("button", { name: "Expand Pay flow" }));
+  const viewer = screen.getByRole("dialog", { name: "Diagram viewer" });
+  expect(within(viewer).getByRole("heading", { name: "Pay flow" })).toBeTruthy();
+  fireEvent.click(within(viewer).getByRole("button", { name: "Zoom in" }));
+  expect(within(viewer).getByRole("button", { name: "Reset zoom" }).textContent).toBe("125%");
+  fireEvent.click(within(viewer).getByRole("button", { name: "Close diagram viewer" }));
+  expect(screen.queryByRole("dialog", { name: "Diagram viewer" })).toBeNull();
 });

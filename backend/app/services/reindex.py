@@ -154,7 +154,7 @@ def _rows(kind: str, only_missing: bool) -> list[tuple[str, str]]:
         from app.services import capabilities as capabilities_svc
 
         rows = db.fetchall(f"SELECT * FROM kb_capabilities{where}")
-        return [(row["capability_id"], capabilities_svc.text_for(row)[:2000]) for row in rows]
+        return [(row["capability_id"], capabilities_svc.text_for(row)[: capabilities_svc.EMBED_CHARS]) for row in rows]
     if kind == "kb_bitbucket":
         from app.services import bitbucket_repos as bitbucket_svc
 

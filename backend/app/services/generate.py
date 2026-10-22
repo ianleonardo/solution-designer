@@ -54,6 +54,66 @@ def _first_text(block: dict, *names: str) -> str:
     return ""
 
 
+def _looks_like_block_dump(text: str) -> bool:
+    return bool(re.search(r"markdown[\"']?\s*:", text, re.I)) and bool(re.search(r"\b(?:blocks|type)\b", text, re.I))
+
+
+def _json_string(raw: str) -> str:
+    try:
+        loaded = json.loads(f'"{raw}"')
+    except json.JSONDecodeError:
+        return raw
+    return loaded if isinstance(loaded, str) else raw
+
+
+def _prose_from_payload(payload: dict) -> str:
+    blocks = payload.get("blocks")
+    if isinstance(blocks, dict):
+        blocks = [blocks]
+    if isinstance(blocks, str) and blocks.strip():
+        return _prose_from_raw(blocks)
+    if isinstance(blocks, list):
+        for block in blocks:
+            if isinstance(block, dict) and block.get("type") in (None, "prose", ""):
+                found = _first_text(block, "markdown", "content", "text", "body")
+                if found:
+                    return _prose_from_raw(found)
+    found = _first_text(payload, "markdown", "content", "text", "body")
+    return _prose_from_raw(found) if found else ""
+
+
+def _prose_from_raw(text: str, depth: int = 0) -> str:
+    """Pull the written prose out of a reply that restated the block schema instead of the text."""
+    cleaned = (text or "").strip()
+    if not cleaned or depth > 3:
+        return ""
+    if not _looks_like_block_dump(cleaned):
+        return cleaned
+    payload = None
+    for candidate in (cleaned, cleaned[cleaned.find("{") :] if "{" in cleaned else ""):
+        if not candidate:
+            continue
+        try:
+            parsed = _parse_json(candidate)
+        except (json.JSONDecodeError, ValueError):
+            parsed = None
+        if isinstance(parsed, dict):
+            payload = parsed
+            break
+    if payload is not None:
+        found = _prose_from_payload(payload)
+        if found and found != cleaned:
+            return found
+    for pattern in (r'"markdown"\s*:\s*"((?:\\.|[^"\\])*)"', r"'markdown'\s*:\s*'((?:\\.|[^'\\])*)'"):
+        match = re.search(pattern, cleaned, re.S)
+        if not match:
+            continue
+        found = _prose_from_raw(_json_string(match.group(1)).strip(), depth + 1)
+        if found:
+            return found
+    return ""
+
+
 def _keep_linked_rows(columns: list[str], generated: list[list[str]], previous: dict | None) -> dict:
     """Rows linked to the Knowledge Base survive auto fill; generated rows that repeat one of them are dropped."""
     links = (previous or {}).get("links") or []
@@ -128,7 +188,7 @@ def _apply(schema_blocks: list[dict], payload: dict, max_words: int, existing: l
         source = pools.get(kind, [])
         found = source.pop(0) if source else {}
         if kind == "prose":
-            result.append({"type": "prose", "markdown": _limit_words(_first_text(found, "markdown", "content", "text", "body"), max_words)})
+            result.append({"type": "prose", "markdown": _limit_words(_prose_from_raw(_first_text(found, "markdown", "content", "text", "body")), max_words)})
         elif kind == "table":
             columns = list(schema.get("columns") or [])
             rows = []
@@ -238,7 +298,7 @@ def generate_section(
     except (json.JSONDecodeError, ValueError):
         blocks = _apply(
             template["schema_json"]["blocks"],
-            {"blocks": [{"type": "prose", "markdown": raw[:4000]}]},
+            {"blocks": [{"type": "prose", "markdown": _prose_from_raw(raw)[:4000]}]},
             int(template["max_words"]),
             previous,
         )

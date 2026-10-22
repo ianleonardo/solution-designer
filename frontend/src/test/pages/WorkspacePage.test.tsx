@@ -342,10 +342,14 @@ test("auto fill for the document fills empty sections only unless told to replac
   fireEvent.click(screen.getByRole("button", { name: /Auto fill Document/ }));
   let dialog = screen.getByRole("dialog", { name: "Auto fill document" });
   expect((within(dialog).getByLabelText("Fill empty sections only") as HTMLInputElement).checked).toBe(true);
+  expect(within(dialog).getByLabelText("Extra instruction")).toBeTruthy();
   expect(within(dialog).queryByRole("alert")).toBeNull();
+  fireEvent.change(within(dialog).getByLabelText("Extra instruction"), { target: { value: "  Mention timeouts " } });
   fireEvent.click(within(dialog).getByRole("button", { name: "Auto fill" }));
   await waitFor(() => expect(calls.some((call) => call.url.includes("/generate"))).toBe(true));
-  expect(calls.find((call) => call.url.includes("/generate"))!.url).toBe("/api/projects/p1/documents/d1/generate?only_empty=true");
+  const generated = calls.find((call) => call.url.includes("/generate"))!;
+  expect(generated.url).toBe("/api/projects/p1/documents/d1/generate?only_empty=true");
+  expect(JSON.parse(generated.body)).toEqual({ instruction: "Mention timeouts" });
 
   await waitFor(() => expect((screen.getByRole("button", { name: /Auto fill Document/ }) as HTMLButtonElement).disabled).toBe(false));
   fireEvent.click(screen.getByRole("button", { name: /Auto fill Document/ }));
