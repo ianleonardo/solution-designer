@@ -17,6 +17,7 @@ import { LinkPickerDialog, type LinkPickerRow } from "./LinkPickerDialog";
 import { FileDrop } from "./FileDrop";
 import { DiagramPopup, MermaidPreview } from "./DiagramBlock";
 import { SequenceDiagramsDialog, type SequenceDiagram } from "./SequenceDiagramsDialog";
+import { InterfaceDetailDialog } from "./InterfaceSpec";
 import { BatchDetailsDialog } from "./BatchesPanel";
 import { ReportDetailsDialog } from "./ReportsPanel";
 import { TableDetailsDialog } from "./TablesPanel";
@@ -744,26 +745,13 @@ function CapabilityFormDialog({
       {inspect?.kind === "batch" && <BatchDetailsDialog batchId={inspect.batchId} layerClass="z-[70]" onClose={() => setInspect(null)} />}
       {inspect?.kind === "report" && <ReportDetailsDialog reportId={inspect.reportId} layerClass="z-[70]" onClose={() => setInspect(null)} />}
       {inspect?.kind === "interface" && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-4" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && setInspect(null)}>
-          <div role="dialog" aria-modal="true" aria-label="Linked item detail" className="w-full max-w-lg rounded-lg border border-hairline bg-panel p-6 shadow-xl space-y-3">
-            <div className="flex items-start justify-between gap-2">
-              <h3 className="font-headline text-lg font-semibold m-0">{inspect.row.interface_name}</h3>
-              <button type="button" className="icon-btn" aria-label="Close linked detail" onClick={() => setInspect(null)}>
-                <span className="material-symbols-outlined text-base">close</span>
-              </button>
-            </div>
-            <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-sm">
-              {Object.entries(inspect.row).map(([key, value]) =>
-                key.endsWith("_id") ? null : (
-                  <div key={key} className="contents">
-                    <dt className="font-label text-[10px] uppercase text-muted">{key.replace(/_/g, " ")}</dt>
-                    <dd className="m-0">{String(value || "—")}</dd>
-                  </div>
-                ),
-              )}
-            </dl>
-          </div>
-        </div>
+        <InterfaceDetailDialog
+          channel={inspect.row.channel}
+          interfaceId={inspect.row.interface_id}
+          fallbackName={inspect.row.interface_name}
+          layerClass="z-[70]"
+          onClose={() => setInspect(null)}
+        />
       )}
       {unlinking && (
         <ConfirmDialog

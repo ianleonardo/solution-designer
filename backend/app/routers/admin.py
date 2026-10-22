@@ -315,6 +315,12 @@ def list_interfaces(channel: str, user: dict = Depends(current_user)):
     return interfaces.list_interfaces(channel)
 
 
+@router.get("/interfaces/{channel}/{interface_id}")
+def get_interface(channel: str, interface_id: str, user: dict = Depends(current_user)):
+    del user
+    return interfaces.get_interface(channel, interface_id)
+
+
 @router.post("/interfaces/{channel}")
 def create_interface(channel: str, body: dict, user: dict = Depends(require_kb_editor)):
     return interfaces.create_interface(user, channel, body)
@@ -329,6 +335,16 @@ def update_interface(channel: str, interface_id: str, body: dict, user: dict = D
 def delete_interface(channel: str, interface_id: str, user: dict = Depends(require_kb_editor)):
     interfaces.delete_interface(user, channel, interface_id)
     return {"ok": True}
+
+
+@router.post("/interfaces/{channel}/fields/upload")
+async def upload_interface_fields(
+    channel: str,
+    file: UploadFile = File(...),
+    user: dict = Depends(require_kb_editor),
+):
+    data = await file.read()
+    return interfaces.preview_fields_from_excel(user, channel, file.filename or "fields.xlsx", data)
 
 
 @router.post("/interfaces/{channel}/upload")

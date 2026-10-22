@@ -13,6 +13,7 @@ from app.services import gcs, systems
 
 PROTOCOLS = ("API", "MQ", "Kafka", "gRPC", "FTP", "SMTP", "SMPP")
 HEADERS = ("Interface name", "Endpoint", "Description", "Protocol", "Source", "Destination")
+FIELD_HEADERS = ("Direction", "Field path", "Type", "Required", "Length", "Validation", "Description", "Example")
 MAX_ROWS = 5000
 MAX_BYTES = 20 * 1024 * 1024
 MAX_NAME = 200
@@ -200,6 +201,67 @@ def _public_field(row: dict) -> dict:
     }
 
 
+def _bounded(value: str, limit: int, label: str) -> tuple[str, str]:
+    """The trimmed text, or an error message when it is too long. Shared by the form and the field workbook."""
+    text = (value or "").strip()
+    if len(text) > limit:
+        return "", f"{label} must be {limit} characters or fewer."
+    return text, ""
+
+
+def _take_field(item: dict, seen: set[tuple[str, str]], counts: dict[str, int], positions: dict[str, int]) -> tuple[dict | None, str, str]:
+    """One field, checked the same way for a saved form and an uploaded sheet. (field, column, message)."""
+    if not isinstance(item, dict):
+        return None, "Field path", "Each field must be an object."
+    direction = (item.get("direction") or "").strip().lower()
+    if direction not in FIELD_DIRECTIONS:
+        return None, "Direction", "Field direction must be request or response."
+    path, path_error = _bounded(str(item.get("field_path") or ""), MAX_PATH, "Field path")
+    if path_error:
+        return None, "Field path", path_error
+    if not path:
+        return None, "Field path", "Field path is required."
+    key = (direction, path)
+    label = "Request" if direction == "request" else "Response"
+    if key in seen:
+        return None, "Field path", f"{label} field '{path}' is listed more than once."
+    if counts[direction] + 1 > MAX_FIELDS:
+        return None, "Field path", f"{label} has more than {MAX_FIELDS} fields."
+    field_type = _canonical(str(item.get("field_type") or ""), FIELD_TYPES)
+    if field_type is None:
+        return None, "Type", f"Field type must be one of: {', '.join(FIELD_TYPES)}."
+    required = (item.get("required") or "").strip().upper()
+    if required not in REQUIRED_VALUES:
+        return None, "Required", "Required must be Y, N, or C."
+    length, length_error = _bounded(str(item.get("length") or ""), MAX_FIELD_LENGTH, "Length")
+    if length_error:
+        return None, "Length", length_error
+    validation, validation_error = _bounded(str(item.get("validation") or ""), MAX_FIELD_VALIDATION, "Validation")
+    if validation_error:
+        return None, "Validation", validation_error
+    description, description_error = _bounded(str(item.get("description") or ""), MAX_DESCRIPTION, "Field description")
+    if description_error:
+        return None, "Description", description_error
+    example, example_error = _bounded(str(item.get("example") or ""), MAX_EXAMPLE, "Example")
+    if example_error:
+        return None, "Example", example_error
+    seen.add(key)
+    counts[direction] += 1
+    field = {
+        "direction": direction,
+        "position": positions[direction],
+        "field_path": path,
+        "field_type": field_type,
+        "required": required,
+        "length": length,
+        "validation": validation,
+        "description": description,
+        "example": example,
+    }
+    positions[direction] += 1
+    return field, "", ""
+
+
 def _parse_fields(body: dict) -> list[dict] | None:
     """None means the caller did not send fields, so the stored rows stay."""
     if "fields" not in body:
@@ -209,72 +271,41 @@ def _parse_fields(body: dict) -> list[dict] | None:
         raise AppError(400, "Fields must be a list.")
     counts = {direction: 0 for direction in FIELD_DIRECTIONS}
     seen: set[tuple[str, str]] = set()
-    parsed: list[dict] = []
     positions = {direction: 0 for direction in FIELD_DIRECTIONS}
+    parsed: list[dict] = []
     for item in raw:
-        if not isinstance(item, dict):
-            raise AppError(400, "Each field must be an object.")
-        direction = (item.get("direction") or "").strip().lower()
-        if direction not in FIELD_DIRECTIONS:
-            raise AppError(400, "Field direction must be request or response.")
-        path = _limit(str(item.get("field_path") or ""), MAX_PATH, "Field path")
-        if not path:
-            raise AppError(400, "Field path is required.")
-        key = (direction, path)
-        if key in seen:
-            label = "Request" if direction == "request" else "Response"
-            raise AppError(400, f"{label} field '{path}' is listed more than once.")
-        seen.add(key)
-        counts[direction] += 1
-        if counts[direction] > MAX_FIELDS:
-            label = "Request" if direction == "request" else "Response"
-            raise AppError(400, f"{label} has more than {MAX_FIELDS} fields.")
-        field_type = _canonical(str(item.get("field_type") or ""), FIELD_TYPES)
-        if field_type is None:
-            raise AppError(400, f"Field type must be one of: {', '.join(FIELD_TYPES)}.")
-        required = (item.get("required") or "").strip().upper()
-        if required not in REQUIRED_VALUES:
-            raise AppError(400, "Required must be Y, N, or C.")
-        parsed.append(
-            {
-                "direction": direction,
-                "position": positions[direction],
-                "field_path": path,
-                "field_type": field_type,
-                "required": required,
-                "length": _limit(str(item.get("length") or ""), MAX_FIELD_LENGTH, "Length"),
-                "validation": _limit(str(item.get("validation") or ""), MAX_FIELD_VALIDATION, "Validation"),
-                "description": _limit(str(item.get("description") or ""), MAX_DESCRIPTION, "Field description"),
-                "example": _limit(str(item.get("example") or ""), MAX_EXAMPLE, "Example"),
-            }
-        )
-        positions[direction] += 1
+        field, _column, message = _take_field(item, seen, counts, positions)
+        if message:
+            raise AppError(400, message)
+        if field is not None:
+            parsed.append(field)
     return parsed
 
 
 def _replace_fields(interface_id: str, fields: list[dict]) -> None:
-    db.exec_sql("DELETE FROM interface_fields WHERE interface_id = ?", [interface_id])
-    for field in fields:
-        db.exec_sql(
-            """
-            INSERT INTO interface_fields (
-                field_id, interface_id, direction, position, field_path, field_type, required, length, validation, description, example
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """,
-            [
-                str(uuid.uuid4()),
-                interface_id,
-                field["direction"],
-                field["position"],
-                field["field_path"],
-                field["field_type"],
-                field["required"],
-                field["length"],
-                field["validation"],
-                field["description"],
-                field["example"],
-            ],
-        )
+    with db.transaction():
+        db.exec_sql("DELETE FROM interface_fields WHERE interface_id = ?", [interface_id])
+        for field in fields:
+            db.exec_sql(
+                """
+                INSERT INTO interface_fields (
+                    field_id, interface_id, direction, position, field_path, field_type, required, length, validation, description, example
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                [
+                    str(uuid.uuid4()),
+                    interface_id,
+                    field["direction"],
+                    field["position"],
+                    field["field_path"],
+                    field["field_type"],
+                    field["required"],
+                    field["length"],
+                    field["validation"],
+                    field["description"],
+                    field["example"],
+                ],
+            )
 
 
 def _delete_interface_rows(interface_id: str) -> None:
@@ -413,6 +444,62 @@ def _read_sheet(data: bytes) -> list[list[str]]:
         raise AppError(400, "Could not read the Excel file. Upload an .xlsx file.") from exc
 
 
+def parse_field_workbook(data: bytes) -> list[dict]:
+    """Request and response fields from one sheet. Does not write. Request rows come first, then response, each in file order."""
+    rows = _read_sheet(data)
+    if not rows:
+        raise AppError(400, "The Excel file is empty.")
+    header = [value.strip().lower() for value in rows[0]]
+    missing = [name for name in FIELD_HEADERS if name.lower() not in header]
+    if missing:
+        raise AppError(400, f"Missing column(s): {', '.join(missing)}. Expected: {', '.join(FIELD_HEADERS)}.")
+    index = {name: header.index(name.lower()) for name in FIELD_HEADERS}
+    counts = {direction: 0 for direction in FIELD_DIRECTIONS}
+    seen: set[tuple[str, str]] = set()
+    positions = {direction: 0 for direction in FIELD_DIRECTIONS}
+    parsed: list[dict] = []
+    errors: list[dict] = []
+    for offset, row in enumerate(rows[1:], start=2):
+        values = {name: row[index[name]] if index[name] < len(row) else "" for name in FIELD_HEADERS}
+        if not any(values.values()):
+            continue
+        field, column, message = _take_field(
+            {
+                "direction": values["Direction"],
+                "field_path": values["Field path"],
+                "field_type": values["Type"],
+                "required": values["Required"],
+                "length": values["Length"],
+                "validation": values["Validation"],
+                "description": values["Description"],
+                "example": values["Example"],
+            },
+            seen,
+            counts,
+            positions,
+        )
+        if message:
+            errors.append({"row": offset, "field": column, "message": message})
+        elif field is not None:
+            parsed.append(field)
+    if errors:
+        raise AppError(400, f"{len(errors)} problem(s) found. Nothing was imported.", errors)
+    request = [field for field in parsed if field["direction"] == "request"]
+    response = [field for field in parsed if field["direction"] == "response"]
+    return request + response
+
+
+def preview_fields_from_excel(user: dict, channel: str, filename: str, data: bytes) -> dict:
+    """Check a field workbook and return the fields. The interface itself is not changed."""
+    _require_editor(user)
+    _channel(channel)
+    if not (filename or "").lower().endswith(".xlsx"):
+        raise AppError(400, "Upload an Excel file (.xlsx).")
+    if len(data) > MAX_BYTES:
+        raise AppError(400, "The file is larger than 20 MB.")
+    return {"fields": parse_field_workbook(data)}
+
+
 def parse_and_validate(data: bytes) -> list[dict]:
     rows = _read_sheet(data)
     if not rows:
@@ -471,19 +558,41 @@ def replace_from_excel(user: dict, channel: str, country_raw: str, filename: str
         raise AppError(400, "The file is larger than 20 MB.")
     records = parse_and_validate(data)
     now = _now()
-    db.exec_sql("DELETE FROM interfaces WHERE channel = ? AND country = ?", [channel, country])
+    existing = db.fetchall(
+        "SELECT interface_id, interface_name FROM interfaces WHERE channel = ? AND country = ?",
+        [channel, country],
+    )
+    by_name: dict[str, str] = {}
+    for row in existing:
+        by_name.setdefault(row["interface_name"], row["interface_id"])
+    kept: set[str] = set()
     for record in records:
+        name = record["interface_name"]
+        interface_id = by_name.get(name)
+        if interface_id:
+            db.exec_sql(
+                """
+                UPDATE interfaces
+                SET endpoint = ?, description = ?, protocol = ?, source = ?, destination = ?, embedding = NULL
+                WHERE interface_id = ?
+                """,
+                [record["endpoint"], record["description"], record["protocol"], record["source"], record["destination"], interface_id],
+            )
+            kept.add(interface_id)
+            continue
+        interface_id = str(uuid.uuid4())
         db.exec_sql(
             """
             INSERT INTO interfaces (
-                interface_id, channel, country, interface_name, endpoint, description, protocol, source, destination, created_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                interface_id, channel, country, interface_name, endpoint, description, protocol, source, destination,
+                processing_rules, validation_rules, created_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, '', '', ?)
             """,
             [
-                str(uuid.uuid4()),
+                interface_id,
                 channel,
                 country,
-                record["interface_name"],
+                name,
                 record["endpoint"],
                 record["description"],
                 record["protocol"],
@@ -492,6 +601,11 @@ def replace_from_excel(user: dict, channel: str, country_raw: str, filename: str
                 now,
             ],
         )
+        by_name[name] = interface_id
+        kept.add(interface_id)
+    for row in existing:
+        if row["interface_id"] not in kept:
+            _delete_interface_rows(row["interface_id"])
     from app.services import reindex
 
     reindex.embed_missing_in_background()

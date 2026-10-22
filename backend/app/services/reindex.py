@@ -161,7 +161,7 @@ def _rows(kind: str, only_missing: bool) -> list[tuple[str, str]]:
         rows = db.fetchall(f"SELECT * FROM kb_bitbucket_repos{where}")
         return [(row["repo_id"], bitbucket_svc.text_for(row)[:2000]) for row in rows]
     rows = db.fetchall(f"SELECT * FROM interfaces{where}")
-    return [(row["interface_id"], interfaces.text_for(row)) for row in rows]
+    return [(row["interface_id"], interfaces.text_for(row)[: interfaces.EMBED_CHARS]) for row in interfaces.attach_fields(rows)]
 
 
 def _run(mode: str, target: str) -> None:

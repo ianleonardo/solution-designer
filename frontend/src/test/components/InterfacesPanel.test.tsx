@@ -125,3 +125,86 @@ test("lists the row problems of a rejected upload and keeps the table", async ()
   expect(within(list).getAllByRole("listitem").map((entry) => entry.textContent)).toEqual(["Row 2, Country: 'JP' is not allowed.", "Row 5, Source: 'NOPE' is not a known system code."]);
   expect(screen.getByText("Zeta")).toBeTruthy();
 });
+
+test("the interface dialog saves request and response fields with the rules", async () => {
+  const zeta = item("SPL", "Zeta");
+  const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
+    if (url === "/api/catalogs") return json({ countries: ["SG"], databases: [], interface_channels: ["SPL"] });
+    if (url === "/api/systems")
+      return json([{ system_code: "SPL", system_name: "SPL", description: "", upstreams: "", downstreams: "", has_batch: false, has_report: false, has_capability: false, created_at: "", last_modified: "" }, { system_code: "DGE", system_name: "DGE", description: "", upstreams: "", downstreams: "", has_batch: false, has_report: false, has_capability: false, created_at: "", last_modified: "" }]);
+    if (url === `/api/interfaces/SPL/${zeta.interface_id}` && (!init?.method || init.method === "GET"))
+      return json({
+        ...zeta,
+        processing_rules: "Post the ledger.",
+        validation_rules: "",
+        fields: [{ field_id: "f1", direction: "response", position: 0, field_path: "balance", field_type: "number", required: "Y", length: "", validation: "", description: "Posted balance", example: "10.00" }],
+      });
+    if (init?.method === "PATCH") return json({ ...zeta, fields: [] });
+    return json([zeta]);
+  });
+  vi.stubGlobal("fetch", fetchMock);
+  renderAt();
+  fireEvent.click(await screen.findByRole("button", { name: "Edit Zeta" }));
+  const dialog = await screen.findByRole("dialog", { name: "Edit interface" });
+  await within(dialog).findByRole("tab", { name: "Request" });
+  fireEvent.click(within(dialog).getByRole("tab", { name: "Request" }));
+  fireEvent.click(await within(dialog).findByRole("button", { name: "Add field" }));
+  const fieldDialog = screen.getByRole("dialog", { name: "Add field" });
+  fireEvent.change(within(fieldDialog).getByLabelText("Field path"), { target: { value: "account.currency" } });
+  fireEvent.change(within(fieldDialog).getByLabelText("Length"), { target: { value: "3" } });
+  fireEvent.click(within(fieldDialog).getByRole("button", { name: "Add field" }));
+  expect(within(dialog).getByText("account.currency")).toBeTruthy();
+
+  fireEvent.click(within(dialog).getByRole("tab", { name: "Response" }));
+  expect(within(dialog).getByText("balance")).toBeTruthy();
+  expect(within(dialog).queryByRole("button", { name: "Add field" })).toBeTruthy();
+
+  fireEvent.click(within(dialog).getByRole("button", { name: "Save" }));
+  await waitFor(() => expect(fetchMock.mock.calls.some((call) => (call[1] as RequestInit | undefined)?.method === "PATCH")).toBe(true));
+  const patch = fetchMock.mock.calls.find((call) => (call[1] as RequestInit | undefined)?.method === "PATCH")!;
+  const body = JSON.parse(String((patch[1] as RequestInit).body));
+  expect(body.processing_rules).toBe("Post the ledger.");
+  expect(body.fields.map((field: { direction: string; field_path: string }) => `${field.direction}:${field.field_path}`)).toEqual(["response:balance", "request:account.currency"]);
+  expect(body.fields.find((field: { field_path: string }) => field.field_path === "account.currency").length).toBe("3");
+});
+
+test("uploading a field workbook replaces the request and response lists until save", async () => {
+  const zeta = item("SPL", "Zeta");
+  const uploaded = [
+    { direction: "request", position: 0, field_path: "account.currency", field_type: "string", required: "Y", length: "3", validation: "ISO currency", description: "Currency", example: "SGD" },
+    { direction: "response", position: 0, field_path: "balance", field_type: "number", required: "Y", length: "", validation: "", description: "Posted balance", example: "10.00" },
+  ];
+  const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
+    if (url === "/api/catalogs") return json({ countries: ["SG"], databases: [], interface_channels: ["SPL"] });
+    if (url === "/api/systems")
+      return json([{ system_code: "SPL", system_name: "SPL", description: "", upstreams: "", downstreams: "", has_batch: false, has_report: false, has_capability: false, created_at: "", last_modified: "" }, { system_code: "DGE", system_name: "DGE", description: "", upstreams: "", downstreams: "", has_batch: false, has_report: false, has_capability: false, created_at: "", last_modified: "" }]);
+    if (url === "/api/interfaces/SPL/fields/upload") return json({ fields: uploaded });
+    if (url === `/api/interfaces/SPL/${zeta.interface_id}` && (!init?.method || init.method === "GET"))
+      return json({ ...zeta, processing_rules: "Post the ledger.", validation_rules: "Keep this.", fields: [] });
+    if (init?.method === "PATCH") return json({ ...zeta });
+    return json([zeta]);
+  });
+  vi.stubGlobal("fetch", fetchMock);
+  renderAt();
+  fireEvent.click(await screen.findByRole("button", { name: "Edit Zeta" }));
+  const dialog = await screen.findByRole("dialog", { name: "Edit interface" });
+  fireEvent.click(within(dialog).getByRole("tab", { name: "Request" }));
+  fireEvent.click(await within(dialog).findByRole("button", { name: "Upload fields" }));
+  const upload = screen.getByRole("dialog", { name: "Upload fields" });
+  fireEvent.change(within(upload).getByLabelText("Upload fields Excel"), { target: { files: [new File(["x"], "fields.xlsx")] } });
+  fireEvent.click(within(upload).getByRole("button", { name: "Upload file" }));
+  await within(dialog).findByText("account.currency");
+  expect(screen.queryByRole("dialog", { name: "Upload fields" })).toBeNull();
+
+  fireEvent.click(within(dialog).getByRole("tab", { name: "Response" }));
+  expect(within(dialog).getByText("balance")).toBeTruthy();
+  fireEvent.click(within(dialog).getByRole("button", { name: "Save" }));
+  await waitFor(() => expect(fetchMock.mock.calls.some((call) => (call[1] as RequestInit | undefined)?.method === "PATCH")).toBe(true));
+  const patch = fetchMock.mock.calls.find((call) => (call[1] as RequestInit | undefined)?.method === "PATCH")!;
+  const body = JSON.parse(String((patch[1] as RequestInit).body));
+  expect(body.processing_rules).toBe("Post the ledger.");
+  expect(body.validation_rules).toBe("Keep this.");
+  expect(body.fields.map((field: { direction: string; field_path: string }) => `${field.direction}:${field.field_path}`)).toEqual(["request:account.currency", "response:balance"]);
+  const uploadCall = fetchMock.mock.calls.find((call) => call[0] === "/api/interfaces/SPL/fields/upload")!;
+  expect((uploadCall[1] as RequestInit).method).toBe("POST");
+});

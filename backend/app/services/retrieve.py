@@ -99,7 +99,7 @@ def _interface_hits(query_tokens: set[str], query_vector: list[float] | None) ->
     from app.services import interfaces
 
     hits = []
-    for row in db.fetchall("SELECT * FROM interfaces"):
+    for row in interfaces.attach_fields(db.fetchall("SELECT * FROM interfaces")):
         text = interfaces.text_for(row)
         score = score_text(query_tokens, text, query_vector, row.get("embedding"))
         score += sum(1 for code in (row["source"], row["destination"]) if code.lower() in query_tokens)

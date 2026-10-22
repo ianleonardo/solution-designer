@@ -2,13 +2,15 @@ import { FormEvent, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { api, ApiError, type RowError } from "../api";
 import { useOptionalAuth } from "../auth";
-import type { Catalogs, InterfaceRecord, SystemRecord } from "../types";
+import type { Catalogs, InterfaceField, InterfaceRecord, SystemRecord } from "../types";
 import { appliesToCountry } from "../countries";
 import { ConfirmDialog } from "./ConfirmDialog";
 import { FileDrop } from "./FileDrop";
 import { type Column, DataTable } from "./DataTable";
 import { KB_PAGE_SIZES } from "./TablePager";
 import { SelectField } from "./SelectField";
+import { InterfaceFieldTable } from "./InterfaceSpec";
+import { ProcessingRulesEditor } from "./ProcessingRulesEditor";
 import { can } from "../permissions";
 
 export const INTERFACES_PAGE_SIZE = 25;
@@ -94,11 +96,87 @@ function SystemChecks({
   );
 }
 
+function UploadFieldsDialog({
+  channel,
+  onUploaded,
+  onClose,
+}: {
+  channel: string;
+  onUploaded: (fields: InterfaceField[]) => void;
+  onClose: () => void;
+}) {
+  const [file, setFile] = useState<File | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const [problems, setProblems] = useState<RowError[]>([]);
+
+  async function submit(event: FormEvent) {
+    event.preventDefault();
+    if (!file) {
+      setError("Please select an Excel (.xlsx) file.");
+      return;
+    }
+    setBusy(true);
+    setError("");
+    setProblems([]);
+    try {
+      const body = new FormData();
+      body.append("file", file);
+      const saved = await api<{ fields: InterfaceField[] }>(`/api/interfaces/${encodeURIComponent(channel)}/fields/upload`, { method: "POST", body });
+      onUploaded(saved.fields ?? []);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Upload failed");
+      if (err instanceof ApiError) setProblems(err.errors);
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/50 p-4" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && !busy && onClose()}>
+      <form role="dialog" aria-modal="true" aria-label="Upload fields" className="w-full max-w-lg rounded-lg border border-hairline bg-panel p-6 shadow-xl space-y-4" onSubmit={(event) => void submit(event)}>
+        <div>
+          <h2 className="font-headline text-xl font-semibold">Upload fields</h2>
+          <p className="text-xs text-muted mt-1">
+            Excel (.xlsx) with columns: Direction, Field path, Type, Required, Length, Validation, Description, Example. Direction is request or response. This replaces the request and response fields in this dialog. Save to keep them.
+          </p>
+        </div>
+        <div>
+          <span className="font-label text-[10px] uppercase text-muted">Excel file (.xlsx)</span>
+          <div className="mt-1">
+            <FileDrop accept=".xlsx" ariaLabel="Upload fields Excel" file={file} disabled={busy} grow onFile={setFile} />
+          </div>
+        </div>
+        {error && <p className="text-alert text-sm">{error}</p>}
+        {problems.length > 0 && (
+          <ul className="max-h-40 overflow-auto rounded-lg border border-hairline p-3 text-alert text-xs space-y-1" aria-label="Upload problems">
+            {problems.map((problem, index) => (
+              <li key={index}>
+                Row {problem.row}, {problem.field}: {problem.message}
+              </li>
+            ))}
+          </ul>
+        )}
+        <div className="flex justify-end gap-2 pt-2">
+          <button type="button" className="btn" disabled={busy} onClick={onClose}>
+            Cancel
+          </button>
+          <button type="submit" className="btn btn-primary" disabled={busy || !file}>
+            {busy ? "Uploading…" : "Upload file"}
+          </button>
+        </div>
+      </form>
+    </div>
+  );
+}
+
+type SpecSection = "details" | "request" | "response" | "rules";
+
 function InterfaceFormDialog({
   channel,
   countries,
   systems,
   record,
+  readOnly = false,
   onSaved,
   onClose,
 }: {
@@ -106,6 +184,7 @@ function InterfaceFormDialog({
   countries: string[];
   systems: SystemRecord[];
   record?: InterfaceRecord;
+  readOnly?: boolean;
   onSaved: (saved: InterfaceRecord) => void;
   onClose: () => void;
 }) {
@@ -121,8 +200,35 @@ function InterfaceFormDialog({
   const [protocol, setProtocol] = useState(record?.protocol ?? "API");
   const [sources, setSources] = useState<string[]>(record ? countryCodes(record.source) : []);
   const [destinations, setDestinations] = useState<string[]>(record ? countryCodes(record.destination) : []);
+  const [fields, setFields] = useState<InterfaceField[]>(record?.fields ?? []);
+  const [processingRules, setProcessingRules] = useState(record?.processing_rules ?? "");
+  const [validationRules, setValidationRules] = useState(record?.validation_rules ?? "");
+  const [section, setSection] = useState<SpecSection>("details");
+  const [uploadingFields, setUploadingFields] = useState(false);
+  const [ready, setReady] = useState(!record);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+
+  useEffect(() => {
+    if (!record) return;
+    let current = true;
+    api<InterfaceRecord>(`/api/interfaces/${encodeURIComponent(channel)}/${encodeURIComponent(record.interface_id)}`)
+      .then((data) => {
+        if (!current) return;
+        setFields(data.fields ?? []);
+        setProcessingRules(data.processing_rules ?? "");
+        setValidationRules(data.validation_rules ?? "");
+        setReady(true);
+      })
+      .catch((err: unknown) => {
+        if (!current) return;
+        setError(err instanceof ApiError ? err.message : "Could not load interface");
+        setReady(true);
+      });
+    return () => {
+      current = false;
+    };
+  }, [channel, record]);
 
   function toggle(list: string[], code: string, setList: (next: string[]) => void) {
     setList(list.includes(code) ? list.filter((item) => item !== code) : [...list, code]);
@@ -145,6 +251,9 @@ function InterfaceFormDialog({
       protocol,
       source: sources.join(", "),
       destination: destinations.join(", "),
+      processing_rules: processingRules,
+      validation_rules: validationRules,
+      fields,
     };
     try {
       const saved = record
@@ -163,7 +272,14 @@ function InterfaceFormDialog({
     }
   }
 
-  const title = editing ? "Edit interface" : "Add interface";
+  const title = readOnly ? "View interface" : editing ? "Edit interface" : "Add interface";
+  const locked = busy || readOnly;
+  const sections: { id: SpecSection; label: string }[] = [
+    { id: "details", label: "Details" },
+    { id: "request", label: "Request" },
+    { id: "response", label: "Response" },
+    { id: "rules", label: "Rules" },
+  ];
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
@@ -174,16 +290,39 @@ function InterfaceFormDialog({
         role="dialog"
         aria-modal="true"
         aria-label={title}
-        className="w-full max-w-lg max-h-[90vh] overflow-y-auto rounded-lg border border-hairline bg-panel p-6 shadow-xl space-y-3"
+        className="flex w-full max-w-5xl max-h-[90vh] flex-col overflow-hidden rounded-lg border border-hairline bg-panel shadow-xl"
         onSubmit={(event) => void submit(event)}
       >
-        <h2 className="font-headline text-xl font-semibold">{title}</h2>
-        <p className="text-xs text-muted">Channel: {channel}</p>
+        <div className="border-b border-hairline px-6 py-4">
+          <h2 className="font-headline text-xl font-semibold">{title}</h2>
+          <p className="text-xs text-muted">Channel: {channel}</p>
+        </div>
+        <div role="tablist" aria-label="Interface sections" className="flex gap-1 border-b border-hairline px-6">
+          {sections.map((item) => (
+            <button
+              key={item.id}
+              type="button"
+              role="tab"
+              aria-selected={section === item.id}
+              className={`px-3 py-2 text-sm border-b-2 -mb-px ${section === item.id ? "border-[var(--accent,currentColor)] font-semibold" : "border-transparent text-muted hover:text-inherit"}`}
+              onClick={() => setSection(item.id)}
+            >
+              {item.label}
+            </button>
+          ))}
+        </div>
+        <div className="min-h-0 flex-1 overflow-y-auto px-6 py-4 space-y-3">
+        {!ready ? (
+          <p className="text-muted">Loading…</p>
+        ) : (
+          <>
+        {section === "details" && (
+          <>
         <CountryChecks
           countries={countries}
           allCountries={allCountries}
           selected={selectedCountries}
-          disabled={busy}
+          disabled={locked}
           onAll={(checked) => {
             setAllCountries(checked);
             if (checked) setSelectedCountries([]);
@@ -195,11 +334,11 @@ function InterfaceFormDialog({
         />
         <label className="block">
           <span className="font-label text-[10px] uppercase text-muted">Interface name</span>
-          <input className="field mt-1" aria-label="Interface name" value={name} required disabled={busy} onChange={(e) => setName(e.target.value)} />
+          <input className="field mt-1" aria-label="Interface name" value={name} required disabled={locked} onChange={(e) => setName(e.target.value)} />
         </label>
         <label className="block">
           <span className="font-label text-[10px] uppercase text-muted">Endpoint</span>
-          <input className="field mt-1" aria-label="Endpoint" value={endpoint} disabled={busy} onChange={(e) => setEndpoint(e.target.value)} />
+          <input className="field mt-1" aria-label="Endpoint" value={endpoint} disabled={locked} onChange={(e) => setEndpoint(e.target.value)} />
         </label>
         <label className="block">
           <span className="font-label text-[10px] uppercase text-muted">Protocol</span>
@@ -207,7 +346,7 @@ function InterfaceFormDialog({
             <SelectField
               aria-label="Protocol"
               value={protocol}
-              disabled={busy}
+              disabled={locked}
               className="w-full [&_button]:w-full [&_button]:max-w-none"
               options={PROTOCOLS.map((item) => ({ value: item, label: item }))}
               onChange={setProtocol}
@@ -216,20 +355,66 @@ function InterfaceFormDialog({
         </label>
         <label className="block">
           <span className="font-label text-[10px] uppercase text-muted">Description</span>
-          <textarea className="field mt-1 min-h-[70px]" aria-label="Description" value={description} disabled={busy} onChange={(e) => setDescription(e.target.value)} />
+          <textarea className="field mt-1 min-h-[70px]" aria-label="Description" value={description} disabled={locked} onChange={(e) => setDescription(e.target.value)} />
         </label>
-        <SystemChecks label="Source" systems={systems} selected={sources} disabled={busy} onToggle={(code) => toggle(sources, code, setSources)} />
-        <SystemChecks label="Destination" systems={systems} selected={destinations} disabled={busy} onToggle={(code) => toggle(destinations, code, setDestinations)} />
+        <SystemChecks label="Source" systems={systems} selected={sources} disabled={locked} onToggle={(code) => toggle(sources, code, setSources)} />
+        <SystemChecks label="Destination" systems={systems} selected={destinations} disabled={locked} onToggle={(code) => toggle(destinations, code, setDestinations)} />
+          </>
+        )}
+        {(section === "request" || section === "response") && (
+          <>
+            {!readOnly && (
+              <div className="flex justify-end">
+                <button type="button" className="btn" onClick={() => setUploadingFields(true)}>
+                  <span className="material-symbols-outlined text-base" aria-hidden="true">upload</span>
+                  Upload fields
+                </button>
+              </div>
+            )}
+            <InterfaceFieldTable direction={section} fields={fields} readOnly={readOnly} onChange={setFields} />
+          </>
+        )}
+        {section === "rules" && (
+          <div className="space-y-4">
+            <div>
+              <span className="font-label text-[10px] uppercase text-muted">Processing rules</span>
+              <div className="mt-1">
+                <ProcessingRulesEditor value={processingRules} onChange={setProcessingRules} readOnly={readOnly} label="Processing rules" toolbarLabel="Processing rules formatting" />
+              </div>
+            </div>
+            <div>
+              <span className="font-label text-[10px] uppercase text-muted">Validation rules</span>
+              <div className="mt-1">
+                <ProcessingRulesEditor value={validationRules} onChange={setValidationRules} readOnly={readOnly} label="Validation rules" toolbarLabel="Validation rules formatting" />
+              </div>
+            </div>
+          </div>
+        )}
+          </>
+        )}
         {error && <p className="text-alert text-sm">{error}</p>}
-        <div className="flex justify-end gap-2 pt-2">
+        </div>
+        <div className="flex justify-end gap-2 border-t border-hairline px-6 py-4">
           <button type="button" className="btn" disabled={busy} onClick={onClose}>
-            Cancel
+            {readOnly ? "Close" : "Cancel"}
           </button>
-          <button type="submit" className="btn btn-primary" disabled={busy || !name.trim() || sources.length === 0 || destinations.length === 0}>
-            {editing ? "Save" : "Add"}
-          </button>
+          {!readOnly && (
+            <button type="submit" className="btn btn-primary" disabled={busy || !ready || !name.trim() || sources.length === 0 || destinations.length === 0}>
+              {editing ? "Save" : "Add"}
+            </button>
+          )}
         </div>
       </form>
+      {uploadingFields && (
+        <UploadFieldsDialog
+          channel={channel}
+          onClose={() => setUploadingFields(false)}
+          onUploaded={(next) => {
+            setFields(next);
+            setUploadingFields(false);
+          }}
+        />
+      )}
     </div>
   );
 }
@@ -342,7 +527,7 @@ export function InterfacesPanel() {
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
-  const [form, setForm] = useState<{ record?: InterfaceRecord } | null>(null);
+  const [form, setForm] = useState<{ record?: InterfaceRecord; readOnly?: boolean } | null>(null);
   const [deleting, setDeleting] = useState<InterfaceRecord | null>(null);
   const [countryFilter, setCountryFilter] = useState(() => params.get("country") || "SG");
 
@@ -397,25 +582,29 @@ export function InterfacesPanel() {
     { key: "description", header: "Description", sortValue: (row) => row.description, className: "text-muted max-w-md", render: (row) => <span className="line-clamp-2">{row.description || "—"}</span> },
     { key: "source", header: "Source", sortValue: (row) => row.source, className: "font-label text-xs whitespace-nowrap", render: (row) => row.source },
     { key: "destination", header: "Destination", sortValue: (row) => row.destination, className: "font-label text-xs whitespace-nowrap", render: (row) => row.destination },
-    ...(canEdit
-      ? [
-          {
-            key: "actions",
-            header: "",
-            className: "whitespace-nowrap",
-            render: (row: InterfaceRecord) => (
-              <div className="flex items-center gap-1">
-                <button type="button" className="icon-btn" aria-label={`Edit ${row.interface_name}`} title="Edit" onClick={() => setForm({ record: row })}>
-                  <span className="material-symbols-outlined text-base">edit</span>
-                </button>
-                <button type="button" className="icon-btn icon-btn-danger" aria-label={`Delete ${row.interface_name}`} title="Delete" onClick={() => setDeleting(row)}>
-                  <span className="material-symbols-outlined text-base">delete</span>
-                </button>
-              </div>
-            ),
-          },
-        ]
-      : []),
+    {
+      key: "actions",
+      header: "",
+      className: "whitespace-nowrap",
+      render: (row: InterfaceRecord) => (
+        <div className="flex items-center gap-1">
+          {canEdit ? (
+            <>
+              <button type="button" className="icon-btn" aria-label={`Edit ${row.interface_name}`} title="Edit" onClick={() => setForm({ record: row })}>
+                <span className="material-symbols-outlined text-base">edit</span>
+              </button>
+              <button type="button" className="icon-btn icon-btn-danger" aria-label={`Delete ${row.interface_name}`} title="Delete" onClick={() => setDeleting(row)}>
+                <span className="material-symbols-outlined text-base">delete</span>
+              </button>
+            </>
+          ) : (
+            <button type="button" className="icon-btn" aria-label={`View ${row.interface_name}`} title="View" onClick={() => setForm({ record: row, readOnly: true })}>
+              <span className="material-symbols-outlined text-base">visibility</span>
+            </button>
+          )}
+        </div>
+      ),
+    },
   ];
 
   return (
@@ -515,6 +704,7 @@ export function InterfacesPanel() {
           countries={countries}
           systems={systems}
           record={form.record}
+          readOnly={form.readOnly}
           onClose={() => setForm(null)}
           onSaved={(saved) => {
             setRows((current) => {

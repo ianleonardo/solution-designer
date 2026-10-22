@@ -464,3 +464,67 @@ test("each capability diagram opens a zoomable viewer", async () => {
   fireEvent.click(within(viewer).getByRole("button", { name: "Close diagram viewer" }));
   expect(screen.queryByRole("dialog", { name: "Diagram viewer" })).toBeNull();
 });
+
+test("a linked interface opens its specification", async () => {
+  vi.stubGlobal("localStorage", { getItem: () => JSON.stringify({ role_name: "Analyst", username: "a" }) });
+  vi.stubGlobal(
+    "fetch",
+    vi.fn().mockImplementation((url: string) => {
+      if (url === "/api/catalogs") return Promise.resolve(json({ countries: ["SG"], databases: [], interface_channels: ["SPL"] }));
+      if (url === "/api/systems")
+        return Promise.resolve(json([{ system_code: "SPL", system_name: "SPL Core", description: "", upstreams: "", downstreams: "", has_batch: false, has_report: false, has_capability: true }]));
+      if (url === "/api/capabilities") return Promise.resolve(json([capability]));
+      if (url.startsWith("/api/capabilities/c1"))
+        return Promise.resolve(
+          json({
+            ...capability,
+            interfaces: [
+              {
+                interface_id: "i1",
+                channel: "SPL",
+                country: "SG",
+                interface_name: "Balance API",
+                endpoint: "/balance",
+                description: "Get balance",
+                protocol: "API",
+                source: "SPL",
+                destination: "DGE",
+              },
+            ],
+            tables: [],
+            batches: [],
+            reports: [],
+          }),
+        );
+      if (url === "/api/interfaces/SPL/i1")
+        return Promise.resolve(
+          json({
+            interface_id: "i1",
+            channel: "SPL",
+            country: "SG",
+            interface_name: "Balance API",
+            endpoint: "/balance",
+            description: "Get balance",
+            protocol: "API",
+            source: "SPL",
+            destination: "DGE",
+            processing_rules: "Return the ledger balance.",
+            validation_rules: "",
+            fields: [
+              { field_id: "f1", direction: "request", position: 0, field_path: "account.currency", field_type: "string", required: "Y", length: "3", validation: "ISO currency", description: "Currency", example: "SGD" },
+            ],
+          }),
+        );
+      return Promise.resolve(json([]));
+    }),
+  );
+  renderPanel();
+  fireEvent.click(await screen.findByText("Payments"));
+  const detail = await screen.findByRole("dialog", { name: "View capability" });
+  fireEvent.click(await within(detail).findByRole("button", { name: "SPL · Balance API" }));
+  const spec = await screen.findByRole("dialog", { name: "Interface specification" });
+  expect(await within(spec).findByText("account.currency")).toBeTruthy();
+  expect(within(spec).getByText("ISO currency")).toBeTruthy();
+  expect(within(spec).getByText("Return the ledger balance.")).toBeTruthy();
+  expect(within(spec).getByText("No validation rules.")).toBeTruthy();
+});

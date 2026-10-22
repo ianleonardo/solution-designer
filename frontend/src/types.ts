@@ -224,6 +224,19 @@ export type SystemRecord = {
 
 export type InterfaceChannel = string;
 
+export type InterfaceField = {
+  field_id?: string;
+  direction: "request" | "response";
+  position: number;
+  field_path: string;
+  field_type: string;
+  required: "Y" | "N" | "C" | string;
+  length: string;
+  validation: string;
+  description: string;
+  example: string;
+};
+
 export type InterfaceRecord = {
   interface_id: string;
   channel: InterfaceChannel;
@@ -234,6 +247,9 @@ export type InterfaceRecord = {
   protocol: string;
   source: string;
   destination: string;
+  processing_rules?: string;
+  validation_rules?: string;
+  fields?: InterfaceField[];
 };
 
 export type Catalogs = {
