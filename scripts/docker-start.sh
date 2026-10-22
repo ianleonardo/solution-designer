@@ -129,7 +129,11 @@ for _ in $(seq 1 60); do
     echo "Logs: $ENGINE logs -f $CONTAINER_NAME    Stop: ./scripts/docker-stop.sh"
     exit 0
   fi
-  if [[ "$("$ENGINE" container inspect -f '{{.State.Running}}' "$CONTAINER_NAME" 2>/dev/null)" != "true" ]]; then
+  # A crash shows as stopped, or as restarted (the restart policy brings it straight back), so stop waiting.
+  state="$("$ENGINE" container inspect -f '{{.State.Status}} {{.RestartCount}}' "$CONTAINER_NAME" 2>/dev/null || echo "missing 0")"
+  if [[ "${state%% *}" != "running" || "${state##* }" != "0" ]]; then
+    echo
+    echo "SpecForge stopped while starting (state: ${state%% *}, restarts: ${state##* })." >&2
     break
   fi
   printf "."
@@ -138,4 +142,8 @@ done
 echo
 echo "SpecForge did not come up. Last log lines:" >&2
 "$ENGINE" logs --tail 40 "$CONTAINER_NAME" >&2 || true
+# Do not leave it crashing and restarting in a loop.
+"$ENGINE" stop --time 5 "$CONTAINER_NAME" >/dev/null 2>&1 || true
+echo >&2
+echo "The container was stopped. Fix the error above, then run this script again." >&2
 exit 1

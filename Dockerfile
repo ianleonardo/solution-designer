@@ -51,8 +51,11 @@ ENV SDD_TEMPLATE_PATH=/app/specs/solution_design_document.md \
     DATA_DIR=/data \
     FRONTEND_DIR=/app/frontend
 
-# The container may run as any user id (the start script uses the host user), so /data is open to all.
-RUN mkdir -p /data && chmod 0777 /data
+# The container runs as the host user's id (the start script passes --user), not root, so:
+#  - the app files must be readable by everyone: COPY keeps the build machine's permissions, and a checkout
+#    with owner-only files (-rw-------) would otherwise give "Permission denied: '/app/app/db.py'";
+#  - /data is open to all, as the mounted data folder replaces it anyway.
+RUN chmod -R a+rX /app && mkdir -p /data && chmod 0777 /data
 
 EXPOSE 8000
 # hadolint ignore=DL3025
