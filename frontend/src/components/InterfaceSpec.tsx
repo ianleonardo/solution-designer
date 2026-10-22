@@ -3,6 +3,7 @@ import { api, ApiError } from "../api";
 import type { InterfaceField, InterfaceRecord } from "../types";
 import { ProcessingRulesEditor } from "./ProcessingRulesEditor";
 import { SelectField } from "./SelectField";
+import { DownloadButtons } from "./DownloadButtons";
 
 export const FIELD_TYPES = ["string", "number", "integer", "boolean", "date", "datetime", "object", "array", "enum"] as const;
 
@@ -284,8 +285,9 @@ export function InterfaceDetailDialog({
   return (
     <div className={`fixed inset-0 ${layerClass} flex items-center justify-center bg-black/50 p-4`} role="presentation" onMouseDown={(event) => event.target === event.currentTarget && onClose()}>
       <div role="dialog" aria-modal="true" aria-label="Interface specification" className="flex w-full max-w-5xl max-h-[90vh] flex-col overflow-hidden rounded-lg border border-hairline bg-panel shadow-xl">
-        <div className="flex items-start justify-between gap-2 border-b border-hairline px-6 py-4">
-          <h3 className="font-headline text-lg font-semibold m-0">{name}</h3>
+        <div className="flex flex-wrap items-center justify-end gap-2 border-b border-hairline px-6 py-4">
+          <h3 className="font-headline text-lg font-semibold m-0 mr-auto">{name}</h3>
+          <DownloadButtons path={`/api/interfaces/${encodeURIComponent(channel)}/${encodeURIComponent(interfaceId)}/export`} filename={name} />
           <button type="button" className="icon-btn" aria-label="Close linked detail" onClick={onClose}>
             <span className="material-symbols-outlined text-base">close</span>
           </button>

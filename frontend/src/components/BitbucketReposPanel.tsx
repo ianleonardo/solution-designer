@@ -8,6 +8,9 @@ import { FileDrop } from "./FileDrop";
 import { type Column, DataTable } from "./DataTable";
 import { KB_PAGE_SIZES } from "./TablePager";
 import { ProcessingRulesEditor } from "./ProcessingRulesEditor";
+import { SequenceDiagramsDialog, type SequenceDiagram } from "./SequenceDiagramsDialog";
+import { DiagramPopup, MermaidPreview } from "./DiagramBlock";
+import { DownloadButtons } from "./DownloadButtons";
 import { can } from "../permissions";
 
 const PAGE_SIZE = 25;
@@ -27,6 +30,9 @@ function RepoFormDialog({
   const editing = Boolean(repo);
   const [name, setName] = useState(repo?.repo_name ?? "");
   const [description, setDescription] = useState(repo?.description ?? "");
+  const [diagrams, setDiagrams] = useState<SequenceDiagram[]>(repo?.diagrams ?? []);
+  const [diagramsOpen, setDiagramsOpen] = useState(false);
+  const [viewingDiagram, setViewingDiagram] = useState<SequenceDiagram | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
 
@@ -42,6 +48,7 @@ function RepoFormDialog({
       const payload = {
         repo_name: name.trim(),
         description: description.trim(),
+        diagrams,
       };
       const saved = repo
         ? await api<KbBitbucketRepoRecord>(`/api/bitbucket-repos/${encodeURIComponent(project)}/${encodeURIComponent(repo.repo_id)}`, {
@@ -62,11 +69,12 @@ function RepoFormDialog({
   const title = editing ? "Edit repository" : "Add repository";
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" role="presentation" onMouseDown={(e) => e.target === e.currentTarget && !busy && onClose()}>
-      <form role="dialog" aria-modal="true" aria-label={title} className="w-full max-w-lg rounded-lg border border-hairline bg-panel p-6 shadow-xl space-y-3" onSubmit={(e) => void submit(e)}>
-        <div>
+      <form role="dialog" aria-modal="true" aria-label={title} className="flex w-full max-w-4xl max-h-[90vh] flex-col overflow-hidden rounded-lg border border-hairline bg-panel shadow-xl" onSubmit={(e) => void submit(e)}>
+        <div className="border-b border-hairline px-6 py-4">
           <h2 className="font-headline text-xl font-semibold">{title}</h2>
           <p className="text-xs text-muted mt-1">Project: {project}</p>
         </div>
+        <div className="min-h-0 flex-1 overflow-y-auto px-6 py-4 space-y-3">
         <label className="block">
           <span className="font-label text-[10px] uppercase text-muted">Repository name</span>
           <input className="field mt-1" aria-label="Repository name" value={name} disabled={busy} onChange={(e) => setName(e.target.value)} />
@@ -75,8 +83,35 @@ function RepoFormDialog({
           <span className="font-label text-[10px] uppercase text-muted">Description</span>
           <textarea className="field mt-1 min-h-20" aria-label="Description" value={description} disabled={busy} placeholder="Leave empty to infer a description" onChange={(e) => setDescription(e.target.value)} />
         </label>
+        <div>
+          <div className="flex items-center justify-between gap-2">
+            <span className="font-label text-[10px] uppercase text-muted">Diagrams</span>
+            <button type="button" className="btn" disabled={busy} onClick={() => setDiagramsOpen(true)}>
+              Add / edit
+            </button>
+          </div>
+          {diagrams.length === 0 ? (
+            <p className="mt-1 text-sm text-muted">No diagrams.</p>
+          ) : (
+            <ul className="mt-1 space-y-3">
+              {diagrams.map((diagram) => (
+                <li key={diagram.id} className="rounded-lg border border-hairline p-3">
+                  <div className="mb-2 flex items-center justify-between gap-2">
+                    <p className="text-sm font-medium">{diagram.title}</p>
+                    <button type="button" className="btn" aria-label={`Expand ${diagram.title}`} onClick={() => setViewingDiagram(diagram)}>
+                      Expand
+                    </button>
+                  </div>
+                  <MermaidPreview source={diagram.mermaid} />
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
         {error && <p className="text-alert text-sm">{error}</p>}
-        <div className="flex justify-end gap-2 pt-2">
+        </div>
+        <div className="flex flex-wrap items-center justify-end gap-2 border-t border-hairline px-6 py-4">
+          {repo && <DownloadButtons path={`/api/bitbucket-repos/${encodeURIComponent(project)}/${encodeURIComponent(repo.repo_id)}/export`} filename={repo.repo_name} />}
           <button type="button" className="btn" disabled={busy} onClick={onClose}>
             Cancel
           </button>
@@ -85,6 +120,17 @@ function RepoFormDialog({
           </button>
         </div>
       </form>
+      {diagramsOpen && (
+        <SequenceDiagramsDialog
+          diagrams={diagrams}
+          onClose={() => setDiagramsOpen(false)}
+          onSave={(next) => {
+            setDiagrams(next);
+            setDiagramsOpen(false);
+          }}
+        />
+      )}
+      {viewingDiagram && <DiagramPopup source={viewingDiagram.mermaid} title={viewingDiagram.title} layerClass="z-[80]" onClose={() => setViewingDiagram(null)} />}
     </div>
   );
 }
@@ -125,16 +171,19 @@ function RepoDetailDialog({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" role="presentation" onMouseDown={(e) => e.target === e.currentTarget && !busy && onClose()}>
       <div role="dialog" aria-modal="true" aria-label="Repository detail" className="w-full max-w-4xl max-h-[90vh] overflow-y-auto rounded-lg border border-hairline bg-panel p-6 shadow-xl space-y-4">
-        <div className="flex items-start justify-between gap-3">
-          <div>
-            <p className="font-label text-[10px] uppercase text-muted">{project}</p>
-            <h2 className="font-headline text-xl font-semibold mt-0.5">{repo.repo_name}</h2>
-            {repo.description && <p className="text-sm text-muted mt-1">{repo.description}</p>}
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <p className="font-label text-[10px] uppercase text-muted">{project}</p>
+              <h2 className="font-headline text-xl font-semibold mt-0.5">{repo.repo_name}</h2>
+              {repo.description && <p className="text-sm text-muted mt-1">{repo.description}</p>}
+            </div>
+            <div className="flex items-center gap-2">
+              <DownloadButtons path={`/api/bitbucket-repos/${encodeURIComponent(project)}/${encodeURIComponent(repo.repo_id)}/export`} filename={repo.repo_name} />
+              <button type="button" className="icon-btn" aria-label="Close" onClick={onClose}>
+                <span className="material-symbols-outlined text-base">close</span>
+              </button>
+            </div>
           </div>
-          <button type="button" className="icon-btn" aria-label="Close" onClick={onClose}>
-            <span className="material-symbols-outlined text-base">close</span>
-          </button>
-        </div>
         {error && <p className="text-alert text-sm">{error}</p>}
         <div>
           <div className="flex items-center justify-between gap-2 mb-1">
@@ -146,6 +195,21 @@ function RepoDetailDialog({
             )}
           </div>
           <ProcessingRulesEditor value={components} onChange={setComponents} readOnly={!canEdit || busy} label="Main components" toolbarLabel="Main components formatting" />
+        </div>
+        <div>
+          <span className="font-label text-[10px] uppercase text-muted">Diagrams</span>
+          {(repo.diagrams ?? []).length === 0 ? (
+            <p className="mt-1 text-sm text-muted">No diagrams.</p>
+          ) : (
+            <ul className="mt-1 space-y-3">
+              {(repo.diagrams ?? []).map((diagram) => (
+                <li key={diagram.id} className="rounded-lg border border-hairline p-3">
+                  <p className="mb-2 text-sm font-medium">{diagram.title}</p>
+                  <MermaidPreview source={diagram.mermaid} />
+                </li>
+              ))}
+            </ul>
+          )}
         </div>
       </div>
     </div>

@@ -208,3 +208,29 @@ test("uploading a field workbook replaces the request and response lists until s
   const uploadCall = fetchMock.mock.calls.find((call) => call[0] === "/api/interfaces/SPL/fields/upload")!;
   expect((uploadCall[1] as RequestInit).method).toBe("POST");
 });
+
+test("clicking an interface row opens the specification", async () => {
+  const zeta = item("SPL", "Zeta", "SG", { endpoint: "/zeta", description: "Reads a balance" });
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async (url: string) => {
+      if (url === "/api/catalogs") return json({ countries: ["SG"], databases: [], interface_channels: ["SPL"] });
+      if (url === "/api/systems") return json([]);
+      if (url === `/api/interfaces/SPL/${zeta.interface_id}`)
+        return json({
+          ...zeta,
+          processing_rules: "",
+          validation_rules: "",
+          fields: [{ field_id: "f1", direction: "request", position: 0, field_path: "amount", field_type: "number", required: "Y", length: "", validation: "", description: "", example: "" }],
+        });
+      return json([zeta]);
+    }),
+  );
+  renderAt();
+  fireEvent.click(await screen.findByText("Zeta"));
+  const spec = await screen.findByRole("dialog", { name: "Interface specification" });
+  expect(await within(spec).findByText("amount")).toBeTruthy();
+  expect(within(spec).getByRole("button", { name: "Markdown" })).toBeTruthy();
+  expect(within(spec).getByRole("button", { name: "PDF" })).toBeTruthy();
+  expect(screen.queryByRole("dialog", { name: "Edit interface" })).toBeNull();
+});

@@ -412,6 +412,47 @@ def list_capabilities() -> list[dict]:
     return [_payload(row) for row in rows]
 
 
+def markdown_body(record: dict) -> tuple[str, str]:
+    """Title and Markdown for the capability download. Diagrams stay as Mermaid fences."""
+    title = " / ".join(part for part in (record.get("l1_capability"), record.get("l2_capability"), record.get("l3_capability")) if part) or "Capability"
+    country = record.get("country") or "All countries"
+    lines = [
+        f"**System:** {record.get('system_code') or ''}",
+        f"**Applicable for:** {country}",
+        "",
+        "## Description",
+        "",
+        record.get("description") or "",
+        "",
+        "## Country specific behavior",
+        "",
+        record.get("country_behavior") or "",
+        "",
+        "## Diagrams",
+        "",
+    ]
+    diagrams = record.get("sequence_diagrams") or []
+    if not diagrams:
+        lines.extend(["No diagrams.", ""])
+    for diagram in diagrams:
+        lines.extend([f"### {diagram.get('title') or 'Diagram'}", "", "```mermaid", diagram.get("mermaid") or "", "```", ""])
+    lines.extend(["## Processing rules", "", record.get("processing_rules") or "", ""])
+    for heading, key, label in (
+        ("Interfaces", "interfaces", "interface_name"),
+        ("Tables", "tables", "table_name"),
+        ("Batches", "batches", "batch_name"),
+        ("Reports", "reports", "report_name"),
+    ):
+        lines.extend([f"## {heading}", ""])
+        rows = record.get(key) or []
+        if not rows:
+            lines.append("None.")
+        else:
+            lines.extend(f"- {row.get(label) or ''}" for row in rows)
+        lines.append("")
+    return title, "\n".join(lines).rstrip() + "\n"
+
+
 def get_capability(capability_id: str) -> dict:
     row = db.fetchone("SELECT * FROM kb_capabilities WHERE capability_id = ?", [capability_id])
     if row is None:

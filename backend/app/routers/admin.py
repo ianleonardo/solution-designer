@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends, File, Form, Query, UploadFile
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, Response
 
 from app import cache, db
 from app.config import kb_bitbucket_projects, kb_countries, kb_databases, kb_interface_channels
@@ -8,6 +8,7 @@ from app.services import (
     audit,
     batches,
     bitbucket_repos,
+    catalogue_export,
     capabilities,
     guidelines,
     interfaces,
@@ -321,6 +322,13 @@ def get_interface(channel: str, interface_id: str, user: dict = Depends(current_
     return interfaces.get_interface(channel, interface_id)
 
 
+@router.get("/interfaces/{channel}/{interface_id}/export")
+def export_interface(channel: str, interface_id: str, format: str = "md", user: dict = Depends(current_user)):
+    del user
+    title, markdown = interfaces.markdown_body(interfaces.get_interface(channel, interface_id))
+    return _catalogue_download(title, markdown, format)
+
+
 @router.post("/interfaces/{channel}")
 def create_interface(channel: str, body: dict, user: dict = Depends(require_kb_editor)):
     return interfaces.create_interface(user, channel, body)
@@ -529,6 +537,13 @@ def update_bitbucket_repo(project: str, repo_id: str, body: dict, user: dict = D
     return bitbucket_repos.update_repo(user, project, repo_id, body)
 
 
+@router.get("/bitbucket-repos/{project}/{repo_id}/export")
+def export_bitbucket_repo(project: str, repo_id: str, format: str = "md", user: dict = Depends(current_user)):
+    del user
+    title, markdown = bitbucket_repos.markdown_body(bitbucket_repos.get_repo(project, repo_id))
+    return _catalogue_download(title, markdown, format)
+
+
 @router.delete("/bitbucket-repos/{project}/{repo_id}")
 def delete_bitbucket_repo(project: str, repo_id: str, user: dict = Depends(require_kb_editor)):
     bitbucket_repos.delete_repo(user, project, repo_id)
@@ -554,6 +569,18 @@ async def upload_capabilities(
 ):
     data = await file.read()
     return capabilities.upload_from_excel(user, system, file.filename or "capabilities.xlsx", data)
+
+
+def _catalogue_download(title: str, markdown: str, format: str) -> Response:
+    body, media_type, name = catalogue_export.render_download(title, markdown, format)
+    return Response(content=body, media_type=media_type, headers={"Content-Disposition": f'attachment; filename="{name}"'})
+
+
+@router.get("/capabilities/{capability_id}/export")
+def export_capability(capability_id: str, format: str = "md", user: dict = Depends(current_user)):
+    del user
+    title, markdown = capabilities.markdown_body(capabilities.get_capability(capability_id))
+    return _catalogue_download(title, markdown, format)
 
 
 @router.get("/capabilities/{capability_id}")

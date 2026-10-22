@@ -401,3 +401,31 @@ def test_names_are_sentence_case_and_diagrams_accept_any_mermaid_type(client, mo
     )
     assert plain.status_code == 400
     assert "Mermaid" in plain.json()["detail"]
+
+
+def test_view_can_be_downloaded_as_markdown_and_pdf(client):
+    admin = login(client, "Admin")
+    _system(client, admin)
+    created = client.post(
+        "/api/capabilities",
+        json={
+            "country": "SG",
+            "system_code": "SPL",
+            "l1_capability": "Pay",
+            "l2_capability": "Card",
+            "l3_capability": "Auth",
+            "description": "Checks the card.",
+            "processing_rules": "Decline after three failures.",
+            "sequence_diagrams": [{"title": "Pay flow", "mermaid": "sequenceDiagram\n  A->>B: pay"}],
+        },
+        headers=auth(admin),
+    )
+    assert created.status_code == 200, created.text
+    capability_id = created.json()["capability_id"]
+    markdown = client.get(f"/api/capabilities/{capability_id}/export?format=md", headers=auth(admin))
+    assert markdown.status_code == 200
+    assert markdown.headers["content-type"].startswith("text/markdown")
+    assert "Pay flow" in markdown.text and "sequenceDiagram" in markdown.text and "Decline after three failures." in markdown.text
+    pdf = client.get(f"/api/capabilities/{capability_id}/export?format=pdf", headers=auth(admin))
+    assert pdf.status_code == 200 and pdf.content.startswith(b"%PDF")
+    assert client.get(f"/api/capabilities/{capability_id}/export?format=csv", headers=auth(admin)).status_code == 400

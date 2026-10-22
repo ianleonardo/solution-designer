@@ -88,6 +88,8 @@ test("lists capabilities and filters by country", async () => {
   for (const label of ["System", "Applicable for", "L1 capability", "Description", "Country specific behavior", "Diagrams", "Processing rules", "Interfaces", "Tables", "Batches", "Reports"]) {
     expect(within(detail).getByText(label)).toBeTruthy();
   }
+  expect(within(detail).getByRole("button", { name: "Markdown" })).toBeTruthy();
+  expect(within(detail).getByRole("button", { name: "PDF" })).toBeTruthy();
 });
 
 test("view hierarchy expands one branch at a time and opens the L3 detail", async () => {

@@ -314,6 +314,56 @@ def _delete_interface_rows(interface_id: str) -> None:
     db.exec_sql("DELETE FROM interfaces WHERE interface_id = ?", [interface_id])
 
 
+def _md_cell(value: str) -> str:
+    return (value or "").replace("|", "\\|").replace("\n", " ")
+
+
+def markdown_body(record: dict) -> tuple[str, str]:
+    """Title and Markdown for the interface download."""
+    title = record.get("interface_name") or "Interface"
+    country = record.get("country") or "All countries"
+    lines = [
+        f"**Channel:** {record.get('channel') or ''}",
+        f"**Applicable for:** {country}",
+        f"**Endpoint:** {record.get('endpoint') or ''}",
+        f"**Protocol:** {record.get('protocol') or ''}",
+        f"**Source:** {record.get('source') or ''}",
+        f"**Destination:** {record.get('destination') or ''}",
+        "",
+        "## Description",
+        "",
+        record.get("description") or "",
+        "",
+    ]
+    required = {"Y": "Required", "N": "Optional", "C": "Conditional"}
+    for heading, direction in (("Request", "request"), ("Response", "response")):
+        lines.extend([f"## {heading}", ""])
+        fields = [field for field in record.get("fields") or [] if field.get("direction") == direction]
+        if not fields:
+            lines.extend([f"No {direction} fields.", ""])
+            continue
+        lines.extend(
+            [
+                "| Path | Type | Required | Length | Validation | Description | Example |",
+                "| --- | --- | --- | --- | --- | --- | --- |",
+            ]
+        )
+        for field in fields:
+            cells = [
+                field.get("field_path") or "",
+                field.get("field_type") or "",
+                required.get(field.get("required") or "", field.get("required") or ""),
+                field.get("length") or "",
+                field.get("validation") or "",
+                field.get("description") or "",
+                field.get("example") or "",
+            ]
+            lines.append("| " + " | ".join(_md_cell(cell) for cell in cells) + " |")
+        lines.append("")
+    lines.extend(["## Processing rules", "", record.get("processing_rules") or "", "", "## Validation rules", "", record.get("validation_rules") or "", ""])
+    return title, "\n".join(lines).rstrip() + "\n"
+
+
 def list_interfaces(channel: str) -> list[dict]:
     rows = db.fetchall(
         """

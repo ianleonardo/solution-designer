@@ -129,3 +129,30 @@ def test_empty_description_is_kept_on_reupload_and_inferred_when_missing(client,
     hits = retrieve.retrieve("notify-svc mailer")
     assert any(hit["inventory_type"] == "Bitbucket Repos" and hit["system_name"] == "notify-svc" for hit in hits)
     assert "Bitbucket Repos: PIB 1, SOF 1" in retrieve.summary()
+
+
+def test_repository_stores_diagrams_and_downloads_them(client):
+    analyst = login(client, "SuperAnalyst")
+    created = client.post(
+        "/api/bitbucket-repos/SPL",
+        json={
+            "repo_name": "payments-api",
+            "description": "Card payments.",
+            "diagrams": [{"title": "Pay flow", "mermaid": "flowchart LR\n  A[One] --> B[Two]"}],
+        },
+        headers=auth(analyst),
+    )
+    assert created.status_code == 200, created.text
+    body = created.json()
+    assert body["diagrams"][0]["title"] == "Pay flow"
+    markdown = client.get(f"/api/bitbucket-repos/SPL/{body['repo_id']}/export?format=md", headers=auth(analyst))
+    assert markdown.status_code == 200
+    assert "Pay flow" in markdown.text and "flowchart LR" in markdown.text and "Card payments." in markdown.text
+    kept = client.post(
+        "/api/bitbucket-repos/SPL/upload",
+        files={"file": ("repos.xlsx", _excel([["SPL", "payments-api", "Card payments.", "api"]]), "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")},
+        headers=auth(analyst),
+    )
+    assert kept.status_code == 200, kept.text
+    again = client.get(f"/api/bitbucket-repos/SPL/{body['repo_id']}/export?format=md", headers=auth(analyst)).text
+    assert "flowchart LR" in again

@@ -331,6 +331,7 @@ export type KbBitbucketRepoRecord = {
   repo_name: string;
   description: string;
   main_components: string;
+  diagrams?: { id: string; title: string; mermaid: string }[];
   created_at: string;
   last_modified: string;
 };

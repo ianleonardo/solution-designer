@@ -9,7 +9,7 @@ import { FileDrop } from "./FileDrop";
 import { type Column, DataTable } from "./DataTable";
 import { KB_PAGE_SIZES } from "./TablePager";
 import { SelectField } from "./SelectField";
-import { InterfaceFieldTable } from "./InterfaceSpec";
+import { InterfaceDetailDialog, InterfaceFieldTable } from "./InterfaceSpec";
 import { ProcessingRulesEditor } from "./ProcessingRulesEditor";
 import { can } from "../permissions";
 
@@ -528,6 +528,7 @@ export function InterfacesPanel() {
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [form, setForm] = useState<{ record?: InterfaceRecord; readOnly?: boolean } | null>(null);
+  const [viewing, setViewing] = useState<InterfaceRecord | null>(null);
   const [deleting, setDeleting] = useState<InterfaceRecord | null>(null);
   const [countryFilter, setCountryFilter] = useState(() => params.get("country") || "SG");
 
@@ -587,7 +588,7 @@ export function InterfacesPanel() {
       header: "",
       className: "whitespace-nowrap",
       render: (row: InterfaceRecord) => (
-        <div className="flex items-center gap-1">
+        <div className="flex items-center gap-1" onClick={(event) => event.stopPropagation()}>
           {canEdit ? (
             <>
               <button type="button" className="icon-btn" aria-label={`Edit ${row.interface_name}`} title="Edit" onClick={() => setForm({ record: row })}>
@@ -598,7 +599,7 @@ export function InterfacesPanel() {
               </button>
             </>
           ) : (
-            <button type="button" className="icon-btn" aria-label={`View ${row.interface_name}`} title="View" onClick={() => setForm({ record: row, readOnly: true })}>
+            <button type="button" className="icon-btn" aria-label={`View ${row.interface_name}`} title="View" onClick={() => setViewing(row)}>
               <span className="material-symbols-outlined text-base">visibility</span>
             </button>
           )}
@@ -669,6 +670,7 @@ export function InterfacesPanel() {
         searchText={(row) => `${applicableFor(row.country)} ${row.interface_name} ${row.endpoint} ${row.description} ${row.protocol} ${row.source} ${row.destination}`}
         searchLabel={`Search ${channel} interfaces`}
         searchPlaceholder={`Search ${channel} interfaces`}
+        onRowClick={setViewing}
         toolbar={
           canEdit ? (
             <div className="flex items-center gap-2">
@@ -721,6 +723,14 @@ export function InterfacesPanel() {
           message={`Delete ${deleting.interface_name}? This cannot be undone.`}
           onConfirm={remove}
           onClose={() => setDeleting(null)}
+        />
+      )}
+      {viewing && (
+        <InterfaceDetailDialog
+          channel={channel}
+          interfaceId={viewing.interface_id}
+          fallbackName={viewing.interface_name}
+          onClose={() => setViewing(null)}
         />
       )}
     </div>

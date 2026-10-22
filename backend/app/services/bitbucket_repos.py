@@ -18,6 +18,7 @@ MAX_BYTES = 20 * 1024 * 1024
 MAX_NAME = 200
 MAX_DESCRIPTION = 4000
 MAX_COMPONENTS = 100000
+EMBED_CHARS = 8000
 
 
 def _now() -> datetime:
@@ -99,20 +100,37 @@ def inferred_description(project: str, repo: str, components: str = "") -> str:
     return infer_descriptions([(project, repo, components)])[0]
 
 
+def _diagram_items(value) -> list[dict]:
+    if isinstance(value, list):
+        return [item for item in value if isinstance(item, dict)]
+    text = (value or "").strip()
+    if not text:
+        return []
+    try:
+        parsed = json.loads(text)
+    except json.JSONDecodeError:
+        return []
+    return [item for item in parsed if isinstance(item, dict)] if isinstance(parsed, list) else []
+
+
 def text_for(row: dict) -> str:
     components = (row.get("main_components") or "").strip()
     components_bit = f" Main components: {components[:800]}." if components else ""
     desc = f" {row['description']}" if row.get("description") else ""
-    return (
-        f"Bitbucket repository {row['repo_name']} in project {row['bitbucket_project']}.{desc}{components_bit}"
-    )
+    lines = [f"Bitbucket repository {row['repo_name']} in project {row['bitbucket_project']}.{desc}{components_bit}"]
+    for diagram in _diagram_items(row.get("diagrams")):
+        title = diagram.get("title") or "Diagram"
+        mermaid = (diagram.get("mermaid") or "").strip()
+        if mermaid:
+            lines.append(f"Diagram {title}: {mermaid}")
+    return "\n".join(lines)
 
 
 def _embed(repo_id: str) -> None:
     row = db.fetchone("SELECT * FROM kb_bitbucket_repos WHERE repo_id = ?", [repo_id])
     if row is None:
         return
-    vector = llm.embed(text_for(row)[:2000]) if llm.embedding_configured() else None
+    vector = llm.embed(text_for(row)[:EMBED_CHARS]) if llm.embedding_configured() else None
     db.exec_sql("UPDATE kb_bitbucket_repos SET embedding = ? WHERE repo_id = ?", [vector, repo_id])
 
 
@@ -123,6 +141,7 @@ def _payload(row: dict) -> dict:
         "repo_name": row["repo_name"],
         "description": row["description"],
         "main_components": row["main_components"],
+        "diagrams": _diagram_items(row.get("diagrams")),
         "created_at": row["created_at"],
         "last_modified": row["last_modified"],
     }
@@ -172,6 +191,9 @@ def create_repo(user: dict, project_raw: str, body: dict) -> dict:
         raise AppError(400, f"Description must be {MAX_DESCRIPTION} characters or fewer.")
     if not description:
         description = inferred_description(project, repo_name, components)
+    from app.services.capabilities import _diagrams
+
+    diagrams = _diagrams(body.get("diagrams") or [])
     if _find(project, repo_name) is not None:
         raise AppError(400, f"Repository {repo_name} already exists in {project}.")
     repo_id = str(uuid.uuid4())
@@ -179,10 +201,10 @@ def create_repo(user: dict, project_raw: str, body: dict) -> dict:
     db.exec_sql(
         """
         INSERT INTO kb_bitbucket_repos (
-            repo_id, bitbucket_project, repo_name, description, main_components, created_at, last_modified
-        ) VALUES (?, ?, ?, ?, ?, ?, ?)
+            repo_id, bitbucket_project, repo_name, description, main_components, diagrams, created_at, last_modified
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
         """,
-        [repo_id, project, repo_name, description, components, now, now],
+        [repo_id, project, repo_name, description, components, diagrams, now, now],
     )
     _embed(repo_id)
     gcs.upload_db()
@@ -205,15 +227,18 @@ def update_repo(user: dict, project_raw: str, repo_id: str, body: dict) -> dict:
         raise AppError(400, f"Description must be {MAX_DESCRIPTION} characters or fewer.")
     if not description:
         description = inferred_description(project, repo_name, components)
+    from app.services.capabilities import _diagrams
+
+    diagrams = _diagrams(body["diagrams"]) if "diagrams" in body else (current.get("diagrams") or "[]")
     if _find(project, repo_name, exclude=repo_id) is not None:
         raise AppError(400, f"Repository {repo_name} already exists in {project}.")
     db.exec_sql(
         """
         UPDATE kb_bitbucket_repos
-        SET repo_name = ?, description = ?, main_components = ?, last_modified = ?
+        SET repo_name = ?, description = ?, main_components = ?, diagrams = ?, last_modified = ?
         WHERE repo_id = ?
         """,
-        [repo_name, description, components, _now(), repo_id],
+        [repo_name, description, components, diagrams, _now(), repo_id],
     )
     _embed(repo_id)
     gcs.upload_db()
@@ -361,3 +386,28 @@ def upload_from_excel(user: dict, project_raw: str, filename: str, data: bytes) 
     reindex.embed_missing_in_background()
     gcs.upload_db()
     return list_repos(project)
+
+
+def markdown_body(record: dict) -> tuple[str, str]:
+    """Title and Markdown for the repository download. Diagrams stay as Mermaid fences."""
+    title = record.get("repo_name") or "Repository"
+    lines = [
+        f"**Project:** {record.get('bitbucket_project') or ''}",
+        "",
+        "## Description",
+        "",
+        record.get("description") or "",
+        "",
+        "## Main components",
+        "",
+        record.get("main_components") or "",
+        "",
+        "## Diagrams",
+        "",
+    ]
+    diagrams = record.get("diagrams") or []
+    if not diagrams:
+        lines.extend(["No diagrams.", ""])
+    for diagram in diagrams:
+        lines.extend([f"### {diagram.get('title') or 'Diagram'}", "", "```mermaid", diagram.get("mermaid") or "", "```", ""])
+    return title, "\n".join(lines).rstrip() + "\n"

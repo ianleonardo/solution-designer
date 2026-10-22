@@ -159,7 +159,7 @@ def _rows(kind: str, only_missing: bool) -> list[tuple[str, str]]:
         from app.services import bitbucket_repos as bitbucket_svc
 
         rows = db.fetchall(f"SELECT * FROM kb_bitbucket_repos{where}")
-        return [(row["repo_id"], bitbucket_svc.text_for(row)[:2000]) for row in rows]
+        return [(row["repo_id"], bitbucket_svc.text_for(row)[: bitbucket_svc.EMBED_CHARS]) for row in rows]
     rows = db.fetchall(f"SELECT * FROM interfaces{where}")
     return [(row["interface_id"], interfaces.text_for(row)[: interfaces.EMBED_CHARS]) for row in interfaces.attach_fields(rows)]
 

@@ -321,3 +321,26 @@ def test_field_workbook_names_each_problem_and_blocks_viewers(client):
     assert missing.status_code == 400 and "Field path" in missing.json()["detail"]
     viewer = login(client, "Viewer")
     assert _upload_fields(client, viewer, "SPL", _excel([["request", "amount", "string", "Y", "", "", "", ""]], header=FIELD_HEADER)).status_code == 403
+
+
+def test_interface_downloads_as_markdown(client):
+    admin = login(client, "Admin")
+    _systems(client, admin)
+    created = client.post(
+        "/api/interfaces/SPL",
+        json={
+            "country": "SG",
+            "interface_name": "Balance API",
+            "protocol": "API",
+            "source": "SPL",
+            "destination": "DGE",
+            "processing_rules": "Return the ledger balance.",
+            "fields": [_field("request", "account.currency", "string", "Y", description="Currency")],
+        },
+        headers=auth(admin),
+    )
+    assert created.status_code == 200, created.text
+    markdown = client.get(f"/api/interfaces/SPL/{created.json()['interface_id']}/export?format=md", headers=auth(admin))
+    assert markdown.status_code == 200
+    assert "account.currency" in markdown.text and "Return the ledger balance." in markdown.text
+    assert markdown.headers["content-disposition"].endswith('.md"')

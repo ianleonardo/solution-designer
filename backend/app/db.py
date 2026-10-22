@@ -437,6 +437,7 @@ def _migrate() -> None:
             repo_name VARCHAR NOT NULL,
             description VARCHAR NOT NULL DEFAULT '',
             main_components VARCHAR NOT NULL DEFAULT '',
+            diagrams VARCHAR NOT NULL DEFAULT '[]',
             created_at TIMESTAMP NOT NULL,
             last_modified TIMESTAMP NOT NULL,
             embedding FLOAT[],
@@ -727,6 +728,15 @@ def _ensure_columns() -> None:
         )
         _conn.execute("DROP TABLE kb_bitbucket_repos")
         _conn.execute("ALTER TABLE kb_bitbucket_repos_v2 RENAME TO kb_bitbucket_repos")
+    repo_columns = {
+        row[0]
+        for row in _conn.execute(
+            "SELECT column_name FROM information_schema.columns WHERE table_name = 'kb_bitbucket_repos'"
+        ).fetchall()
+    }
+    if "diagrams" not in repo_columns:
+        _conn.execute("ALTER TABLE kb_bitbucket_repos ADD COLUMN diagrams VARCHAR DEFAULT '[]'")
+        _conn.execute("UPDATE kb_bitbucket_repos SET diagrams = '[]' WHERE diagrams IS NULL OR diagrams = ''")
 
 
 def _seed_llm_providers() -> None:

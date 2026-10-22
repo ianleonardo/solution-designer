@@ -18,6 +18,7 @@ import { FileDrop } from "./FileDrop";
 import { DiagramPopup, MermaidPreview } from "./DiagramBlock";
 import { SequenceDiagramsDialog, type SequenceDiagram } from "./SequenceDiagramsDialog";
 import { InterfaceDetailDialog } from "./InterfaceSpec";
+import { DownloadButtons } from "./DownloadButtons";
 import { BatchDetailsDialog } from "./BatchesPanel";
 import { ReportDetailsDialog } from "./ReportsPanel";
 import { TableDetailsDialog } from "./TablesPanel";
@@ -691,7 +692,8 @@ function CapabilityFormDialog({
           );
         })}
         {error && <p className="text-alert text-sm">{error}</p>}
-        <div className="flex justify-end gap-2 pt-2">
+        <div className="flex flex-wrap items-center justify-end gap-2 pt-2">
+          {readOnly && savedId && <DownloadButtons path={`/api/capabilities/${encodeURIComponent(savedId)}/export`} filename={[l1, l2, l3].filter(Boolean).join("-") || "capability"} />}
           <button type="button" className="btn" disabled={busy} onClick={onClose}>
             {readOnly ? "Close" : "Cancel"}
           </button>

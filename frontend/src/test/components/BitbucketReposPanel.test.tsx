@@ -3,6 +3,14 @@ import { MemoryRouter } from "react-router-dom";
 import { afterEach, expect, test, vi } from "vitest";
 import { BitbucketReposPanel } from "../../components/BitbucketReposPanel";
 
+vi.mock("mermaid", () => ({
+  default: {
+    initialize: vi.fn(),
+    parse: vi.fn(async () => ({ diagramType: "flowchart" })),
+    render: vi.fn(async () => ({ svg: '<svg viewBox="0 0 800 400"></svg>' })),
+  },
+}));
+
 const projects = ["CORE", "SPL", "DBE", "PIB", "PIBVN2", "PIBID", "SOF", "WSM", "NTN"];
 
 const repo = (id: string, project: string, name: string) => ({
@@ -102,15 +110,20 @@ test("opens a repository row in a detail popup and saves main components", async
   expect(screen.getByRole("button", { name: "Delete payment-api" }).className).toContain("icon-btn");
 
   fireEvent.click(screen.getByRole("button", { name: "Edit payment-api" }));
-  expect(screen.getByRole("dialog", { name: "Edit repository" })).toBeTruthy();
+  const edit = screen.getByRole("dialog", { name: "Edit repository" });
+  expect(within(edit).getByRole("button", { name: "Add / edit" })).toBeTruthy();
+  expect(within(edit).getByRole("button", { name: "Markdown" })).toBeTruthy();
+  expect(within(edit).getByRole("button", { name: "PDF" })).toBeTruthy();
   expect(screen.queryByRole("dialog", { name: "Repository detail" })).toBeNull();
-  fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+  fireEvent.click(within(edit).getByRole("button", { name: "Cancel" }));
 
   fireEvent.click(screen.getByText("payment-api"));
   const dialog = screen.getByRole("dialog", { name: "Repository detail" });
   expect(within(dialog).getByText("payment-api description")).toBeTruthy();
   expect(within(dialog).getByRole("textbox", { name: "Main components" })).toBeTruthy();
   expect(within(dialog).getByRole("toolbar", { name: "Main components formatting" })).toBeTruthy();
+  expect(within(dialog).getByRole("button", { name: "Markdown" })).toBeTruthy();
+  expect(within(dialog).getByText("No diagrams.")).toBeTruthy();
   fireEvent.click(within(dialog).getByRole("button", { name: "Save components" }));
   await waitFor(() => {
     const patch = fetchMock.mock.calls.find((call) => (call[1] as RequestInit | undefined)?.method === "PATCH");
