@@ -110,6 +110,7 @@ def _tables() -> list[tuple[str, str, str, str]]:
         ("kb_reports", "report_id", "kb_report", "reports"),
         ("kb_batches", "batch_id", "kb_batch", "batches"),
         ("kb_capabilities", "capability_id", "kb_capability", "capabilities"),
+        ("kb_capability_nodes", "node_id", "kb_capability_node", "L1/L2 capability details"),
         ("kb_bitbucket_repos", "repo_id", "kb_bitbucket", "bitbucket repositories"),
     ]
 
@@ -155,6 +156,11 @@ def _rows(kind: str, only_missing: bool) -> list[tuple[str, str]]:
 
         rows = db.fetchall(f"SELECT * FROM kb_capabilities{where}")
         return [(row["capability_id"], capabilities_svc.text_for(row)[: capabilities_svc.EMBED_CHARS]) for row in rows]
+    if kind == "kb_capability_node":
+        from app.services import capability_nodes as nodes_svc
+
+        rows = db.fetchall(f"SELECT * FROM kb_capability_nodes{where}")
+        return [(row["node_id"], nodes_svc.text_for(row)[: nodes_svc.caps.EMBED_CHARS]) for row in rows]
     if kind == "kb_bitbucket":
         from app.services import bitbucket_repos as bitbucket_svc
 

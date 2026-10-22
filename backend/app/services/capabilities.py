@@ -413,37 +413,34 @@ def list_capabilities() -> list[dict]:
 
 
 def markdown_body(record: dict) -> tuple[str, str]:
-    """Title and Markdown for the capability download. Diagrams stay as Mermaid fences."""
+    """Title and Markdown for the capability download: its L1 and L2 details first, then the L3.
+
+    Diagrams stay as Mermaid fences.
+    """
+    from app.services import capability_nodes
+
     title = " / ".join(part for part in (record.get("l1_capability"), record.get("l2_capability"), record.get("l3_capability")) if part) or "Capability"
-    country = record.get("country") or "All countries"
+    country = record.get("country") or ""
     lines = [
         f"**System:** {record.get('system_code') or ''}",
-        f"**Applicable for:** {country}",
-        "",
-        "## Description",
-        "",
-        record.get("description") or "",
-        "",
-        "## Country specific behavior",
-        "",
-        record.get("country_behavior") or "",
-        "",
-        "## Diagrams",
+        f"**Applicable for:** {country_label(country)}",
         "",
     ]
-    diagrams = record.get("sequence_diagrams") or []
-    if not diagrams:
-        lines.extend(["No diagrams.", ""])
-    for diagram in diagrams:
-        lines.extend([f"### {diagram.get('title') or 'Diagram'}", "", "```mermaid", diagram.get("mermaid") or "", "```", ""])
-    lines.extend(["## Processing rules", "", record.get("processing_rules") or "", ""])
+    lines.extend(
+        capability_nodes.context_lines(
+            record.get("system_code") or "", record.get("l1_capability") or "", record.get("l2_capability") or "", country, (1, 2)
+        )
+    )
+    lines.extend([f"## L3 — {record.get('l3_capability') or ''}", ""])
+    lines.extend(capability_nodes.detail_lines(record.get("description") or "", record.get("country_behavior") or "", record.get("sequence_diagrams") or []))
+    lines.extend(["### Processing rules", "", (record.get("processing_rules") or "").strip() or "None.", ""])
     for heading, key, label in (
         ("Interfaces", "interfaces", "interface_name"),
         ("Tables", "tables", "table_name"),
         ("Batches", "batches", "batch_name"),
         ("Reports", "reports", "report_name"),
     ):
-        lines.extend([f"## {heading}", ""])
+        lines.extend([f"### {heading}", ""])
         rows = record.get(key) or []
         if not rows:
             lines.append("None.")

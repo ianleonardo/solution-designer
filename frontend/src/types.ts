@@ -423,6 +423,22 @@ export type KbCapabilityRecord = {
   reports?: KbCapabilityLinkReport[];
 };
 
+/** Description, country behavior and diagrams for an L1 or L2 capability (matched by system and name). */
+export type KbCapabilityNode = {
+  node_id: string;
+  country: string;
+  system_code: string;
+  level: 1 | 2;
+  l1_capability: string;
+  l2_capability: string;
+  description: string;
+  country_behavior: string;
+  sequence_diagrams: { id: string; title: string; mermaid: string }[];
+  l3_count: number;
+  created_at: string;
+  last_modified: string;
+};
+
 export type MissingColumnItem = {
   column_id: string;
   table_id: string;

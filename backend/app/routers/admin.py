@@ -10,6 +10,7 @@ from app.services import (
     bitbucket_repos,
     catalogue_export,
     capabilities,
+    capability_nodes,
     guidelines,
     interfaces,
     layouts,
@@ -574,6 +575,47 @@ async def upload_capabilities(
 def _catalogue_download(title: str, markdown: str, format: str) -> Response:
     body, media_type, name = catalogue_export.render_download(title, markdown, format)
     return Response(content=body, media_type=media_type, headers={"Content-Disposition": f'attachment; filename="{name}"'})
+
+
+@router.get("/capability-nodes")
+def list_capability_nodes(system: str = "", user: dict = Depends(current_user)):
+    del user
+    return capability_nodes.list_nodes(system)
+
+
+@router.post("/capability-nodes")
+def create_capability_node(body: dict, user: dict = Depends(require_kb_editor)):
+    return capability_nodes.create_node(user, body)
+
+
+@router.post("/capability-nodes/rename")
+def rename_capability_node(body: dict, user: dict = Depends(require_kb_editor)):
+    """Rename an L1 or L2 for a system; its L3 capabilities and L1/L2 details follow."""
+    return capability_nodes.rename(user, body)
+
+
+@router.get("/capability-nodes/{node_id}/export")
+def export_capability_node(node_id: str, format: str = "md", user: dict = Depends(current_user)):
+    del user
+    title, markdown = capability_nodes.markdown_body(capability_nodes.get_node(node_id))
+    return _catalogue_download(title, markdown, format)
+
+
+@router.get("/capability-nodes/{node_id}")
+def get_capability_node(node_id: str, user: dict = Depends(current_user)):
+    del user
+    return capability_nodes.get_node(node_id)
+
+
+@router.patch("/capability-nodes/{node_id}")
+def update_capability_node(node_id: str, body: dict, user: dict = Depends(require_kb_editor)):
+    return capability_nodes.update_node(user, node_id, body)
+
+
+@router.delete("/capability-nodes/{node_id}")
+def delete_capability_node(node_id: str, user: dict = Depends(require_kb_editor)):
+    capability_nodes.delete_node(user, node_id)
+    return {"ok": True}
 
 
 @router.get("/capabilities/{capability_id}/export")

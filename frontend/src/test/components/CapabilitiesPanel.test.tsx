@@ -111,29 +111,29 @@ test("view hierarchy expands one branch at a time and opens the L3 detail", asyn
   fireEvent.click(await screen.findByRole("button", { name: /View Hierarchy/ }));
   const tree = screen.getByRole("dialog", { name: "Capability hierarchy" });
   expect(within(tree).getByText("SPL Core")).toBeTruthy();
-  expect(within(tree).getByRole("button", { name: /Payments/ })).toBeTruthy();
-  expect(within(tree).getByRole("button", { name: /Accounts/ })).toBeTruthy();
+  expect(within(tree).getByRole("button", { name: "Payments" })).toBeTruthy();
+  expect(within(tree).getByRole("button", { name: "Accounts" })).toBeTruthy();
   expect(within(tree).queryByText("Lending")).toBeNull();
-  expect(within(tree).queryByRole("button", { name: /Card/ })).toBeNull();
-  expect(within(tree).queryByRole("button", { name: /Auth/ })).toBeNull();
+  expect(within(tree).queryByRole("button", { name: "Card" })).toBeNull();
+  expect(within(tree).queryByRole("button", { name: "Auth" })).toBeNull();
 
-  fireEvent.click(within(tree).getByRole("button", { name: /Payments/ }));
-  expect(within(tree).getByRole("button", { name: /Card/ })).toBeTruthy();
-  expect(within(tree).getByRole("button", { name: /Transfer/ })).toBeTruthy();
-  expect(within(tree).queryByRole("button", { name: /Auth/ })).toBeNull();
+  fireEvent.click(within(tree).getByRole("button", { name: "Payments" }));
+  expect(within(tree).getByRole("button", { name: "Card" })).toBeTruthy();
+  expect(within(tree).getByRole("button", { name: "Transfer" })).toBeTruthy();
+  expect(within(tree).queryByRole("button", { name: "Auth" })).toBeNull();
 
-  fireEvent.click(within(tree).getByRole("button", { name: /Accounts/ }));
-  expect(within(tree).queryByRole("button", { name: /Card/ })).toBeNull();
-  expect(within(tree).getByRole("button", { name: /Savings/ })).toBeTruthy();
+  fireEvent.click(within(tree).getByRole("button", { name: "Accounts" }));
+  expect(within(tree).queryByRole("button", { name: "Card" })).toBeNull();
+  expect(within(tree).getByRole("button", { name: "Savings" })).toBeTruthy();
 
-  fireEvent.click(within(tree).getByRole("button", { name: /Payments/ }));
-  fireEvent.click(within(tree).getByRole("button", { name: /Card/ }));
-  expect(within(tree).getByRole("button", { name: /Auth/ })).toBeTruthy();
-  expect(within(tree).queryByRole("button", { name: /Send/ })).toBeNull();
+  fireEvent.click(within(tree).getByRole("button", { name: "Payments" }));
+  fireEvent.click(within(tree).getByRole("button", { name: "Card" }));
+  expect(within(tree).getByRole("button", { name: "Auth" })).toBeTruthy();
+  expect(within(tree).queryByRole("button", { name: "Send" })).toBeNull();
 
-  fireEvent.click(within(tree).getByRole("button", { name: /Transfer/ }));
-  expect(within(tree).queryByRole("button", { name: /Auth/ })).toBeNull();
-  fireEvent.click(within(tree).getByRole("button", { name: /Send/ }));
+  fireEvent.click(within(tree).getByRole("button", { name: "Transfer" }));
+  expect(within(tree).queryByRole("button", { name: "Auth" })).toBeNull();
+  fireEvent.click(within(tree).getByRole("button", { name: "Send" }));
   const detail = await screen.findByRole("dialog", { name: "View capability" });
   expect(await within(detail).findByDisplayValue("Send")).toBeTruthy();
 });

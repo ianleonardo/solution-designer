@@ -79,7 +79,7 @@ def require(user: dict, area: str, need: str = "read") -> None:
 
 # --- which area and level a request needs --------------------------------------------------------------------------
 
-_KNOWLEDGE = {"rag", "guidelines", "systems", "interfaces", "tables", "reports", "batches", "bitbucket-repos", "capabilities"}
+_KNOWLEDGE = {"rag", "guidelines", "systems", "interfaces", "tables", "reports", "batches", "bitbucket-repos", "capabilities", "capability-nodes"}
 _SETTINGS = {"templates", "layouts", "settings", "audit", "reindex", "users", "roles"}
 # POSTs that only read: checking a document for gaps, and listing related Knowledge Base items.
 _READ_POSTS = re.compile(r"^projects/[^/]+(?:/documents/[^/]+)?/(?:validate|sections/[^/]+/kb-related)$")

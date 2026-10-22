@@ -6,6 +6,7 @@ type Impact = {
   system_code: string;
   system_name: string;
   capabilities: { capability_id: string; country: string; l1_capability: string; l2_capability: string; l3_capability: string }[];
+  capability_details?: { node_id: string; country: string; level: number; l1_capability: string; l2_capability: string }[];
   batches: { batch_id: string; country: string; batch_name: string }[];
   reports: { report_id: string; country: string; report_name: string }[];
   interfaces_kept: { interface_id: string; channel: string; interface_name: string }[];
@@ -63,7 +64,7 @@ export function DeleteSystemDialog({ system, onDeleted, onClose }: { system: Sys
     };
   }, [code]);
 
-  const deleting = impact ? impact.capabilities.length + impact.batches.length + impact.reports.length : 0;
+  const deleting = impact ? impact.capabilities.length + (impact.capability_details?.length ?? 0) + impact.batches.length + impact.reports.length : 0;
   const matches = typed.trim().toUpperCase() === code.toUpperCase();
 
   async function submit(event: FormEvent) {
@@ -116,6 +117,12 @@ export function DeleteSystemDialog({ system, onDeleted, onClose }: { system: Sys
                       count={impact.capabilities.length}
                       label={impact.capabilities.length === 1 ? "capability (and its links)" : "capabilities (and their links)"}
                       items={impact.capabilities.map((row) => `${row.l1_capability} › ${row.l2_capability} › ${row.l3_capability} (${row.country || "All"})`)}
+                    />
+                    <Line
+                      tone="delete"
+                      count={impact.capability_details?.length ?? 0}
+                      label={(impact.capability_details?.length ?? 0) === 1 ? "L1/L2 capability details record" : "L1/L2 capability details records"}
+                      items={(impact.capability_details ?? []).map((row) => `L${row.level} ${[row.l1_capability, row.l2_capability].filter(Boolean).join(" › ")} (${row.country || "All"})`)}
                     />
                     <Line tone="delete" count={impact.batches.length} label={impact.batches.length === 1 ? "batch" : "batches"} items={impact.batches.map((row) => `${row.batch_name} (${row.country})`)} />
                     <Line tone="delete" count={impact.reports.length} label={impact.reports.length === 1 ? "report" : "reports"} items={impact.reports.map((row) => `${row.report_name} (${row.country})`)} />

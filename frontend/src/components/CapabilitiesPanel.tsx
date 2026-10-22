@@ -7,6 +7,7 @@ import type {
   InterfaceRecord,
   KbBatchRecord,
   KbCapabilityLinkInterface,
+  KbCapabilityNode,
   KbCapabilityRecord,
   KbReportRecord,
   KbTableRecord,
@@ -27,6 +28,7 @@ import { ProcessingRulesEditor } from "./ProcessingRulesEditor";
 import { SelectField } from "./SelectField";
 import { PageSlice } from "./TablePager";
 import { can } from "../permissions";
+import { CapabilityNodeWindow, hasDetails, type CapabilityNodeRef } from "./CapabilityNodeDetails";
 
 function inferredDescription(l1: string, l2: string, l3: string) {
   const [area, group, feature] = [l1, l2, l3].map((part) => part.trim());
@@ -785,16 +787,43 @@ function HierarchyNode({
   expanded,
   onClick,
   nodeRef,
+  onInfo,
+  infoLabel,
+  hasInfo,
 }: {
   label: string;
   selected?: boolean;
   expanded?: boolean;
   onClick?: () => void;
   nodeRef?: (element: HTMLElement | null) => void;
+  /** Opens the L1 / L2 details window. */
+  onInfo?: () => void;
+  infoLabel?: string;
+  hasInfo?: boolean;
 }) {
   const className = `relative z-[1] rounded-lg border px-3 py-2 text-left text-sm font-medium break-words min-w-[9rem] max-w-[16rem] ${
     selected ? "border-[var(--accent,currentColor)] bg-inset shadow-sm" : "border-hairline bg-panel hover:bg-inset/70"
   }`;
+  if (onClick && onInfo) {
+    return (
+      <div ref={nodeRef} className={`${className} flex items-start gap-1 !p-0`}>
+        <button type="button" className="flex-1 min-w-0 px-3 py-2 text-left break-words" aria-expanded={expanded} onClick={onClick}>
+          {label}
+        </button>
+        <button
+          type="button"
+          className={`shrink-0 mt-1 mr-1 rounded p-1 leading-none hover:bg-inset ${hasInfo ? "text-accent" : "text-muted opacity-60 hover:opacity-100"}`}
+          aria-label={infoLabel ?? `Details for ${label}`}
+          title={hasInfo ? "View details" : "No details yet"}
+          onClick={onInfo}
+        >
+          <span className="material-symbols-outlined text-base" style={hasInfo ? { fontVariationSettings: "'FILL' 1" } : undefined}>
+            info
+          </span>
+        </button>
+      </div>
+    );
+  }
   if (!onClick) {
     return (
       <div ref={nodeRef} className={className}>
@@ -849,6 +878,7 @@ export function CapabilityHierarchyDialog({
   systemCode,
   systemName,
   rows,
+  countries = [],
   onOpen,
   onClose,
 }: {
@@ -856,11 +886,23 @@ export function CapabilityHierarchyDialog({
   systemCode: string;
   systemName: string;
   rows: KbCapabilityRecord[];
+  countries?: string[];
   onOpen: (capabilityId: string) => void;
   onClose: () => void;
 }) {
   const [openL1, setOpenL1] = useState<string | null>(null);
   const [openL2, setOpenL2] = useState<string | null>(null);
+  const [nodeDetails, setNodeDetails] = useState<KbCapabilityNode[]>([]);
+  const [detail, setDetail] = useState<CapabilityNodeRef | null>(null);
+  const loadNodes = useCallback(() => {
+    if (!systemCode) return;
+    api<KbCapabilityNode[]>(`/api/capability-nodes?system=${encodeURIComponent(systemCode)}`)
+      .then(setNodeDetails)
+      .catch(() => setNodeDetails([]));
+  }, [systemCode]);
+  useEffect(() => {
+    loadNodes();
+  }, [loadNodes]);
   const l1Groups = groupNamed(rows, (row) => row.l1_capability);
   const l2Groups = openL1 ? groupNamed(l1Groups.find(([name]) => name === openL1)?.[1] ?? [], (row) => row.l2_capability) : [];
   const l3Rows = openL2 ? (l2Groups.find(([name]) => name === openL2)?.[1] ?? []).slice().sort((a, b) => a.l3_capability.localeCompare(b.l3_capability, undefined, { sensitivity: "base" })) : [];
@@ -909,7 +951,9 @@ export function CapabilityHierarchyDialog({
             <h2 className="font-headline text-xl font-semibold">Capability hierarchy</h2>
             <p className="text-xs text-muted mt-1">
               {country} · {systemCode}
-              {systemName !== systemCode ? ` — ${systemName}` : ""}. Open an L1 to see its L2 capabilities, then an L2 to see L3. Click an L3 to view it.
+              {systemName !== systemCode ? ` — ${systemName}` : ""}. Open an L1 to see its L2 capabilities, then an L2 to see L3. Click an L3 to view it, or the
+              <span className="material-symbols-outlined align-middle text-sm mx-0.5">info</span>
+              on an L1 or L2 to view its description and diagrams.
             </p>
           </div>
           <button type="button" className="btn" onClick={onClose}>
@@ -944,6 +988,9 @@ export function CapabilityHierarchyDialog({
                     nodeRef={register(`l1:${name}`)}
                     selected={openL1 === name}
                     expanded={openL1 === name}
+                    infoLabel={`Details for L1 ${name}`}
+                    hasInfo={hasDetails(nodeDetails, { systemCode, level: 1, l1: name, l2: "" }, country)}
+                    onInfo={() => setDetail({ systemCode, level: 1, l1: name, l2: "" })}
                     onClick={() => {
                       setOpenL1((current) => (current === name ? null : name));
                       setOpenL2(null);
@@ -960,6 +1007,9 @@ export function CapabilityHierarchyDialog({
                       nodeRef={register(`l2:${name}`)}
                       selected={openL2 === name}
                       expanded={openL2 === name}
+                      infoLabel={`Details for L2 ${name}`}
+                      hasInfo={hasDetails(nodeDetails, { systemCode, level: 2, l1: openL1, l2: name }, country)}
+                      onInfo={() => setDetail({ systemCode, level: 2, l1: openL1, l2: name })}
                       onClick={() => setOpenL2((current) => (current === name ? null : name))}
                     />
                   ))}
@@ -976,8 +1026,29 @@ export function CapabilityHierarchyDialog({
           </div>
         )}
       </div>
+      {detail && (
+        <CapabilityNodeWindow
+          node={detail}
+          systemName={systemName}
+          country={country}
+          countries={countries}
+          canEdit={false}
+          {...nodeChildren(rows, detail)}
+          onClose={() => setDetail(null)}
+        />
+      )}
     </div>
   );
+}
+
+/** The L2 names under an L1, or the L3 names under an L2, for the details window. */
+function nodeChildren(rows: KbCapabilityRecord[], node: CapabilityNodeRef) {
+  const same = (a: string, b: string) => a.toLowerCase() === b.toLowerCase();
+  const under = rows.filter((row) => same(row.l1_capability, node.l1) && (node.level === 1 || same(row.l2_capability, node.l2)));
+  const names = [...new Set(under.map((row) => (node.level === 1 ? row.l2_capability : row.l3_capability)))].sort((a, b) =>
+    a.localeCompare(b, undefined, { sensitivity: "base" }),
+  );
+  return { childLabel: node.level === 1 ? "L2 capabilities" : "L3 capabilities", childNames: names };
 }
 
 export function CapabilitiesPanel() {
@@ -998,6 +1069,7 @@ export function CapabilitiesPanel() {
   const [form, setForm] = useState<{ capability?: KbCapabilityRecord } | null>(null);
   const [inspecting, setInspecting] = useState<string | null>(null);
   const [hierarchyOpen, setHierarchyOpen] = useState(false);
+  const [nodeDetail, setNodeDetail] = useState<CapabilityNodeRef | null>(null);
   const [deleting, setDeleting] = useState<KbCapabilityRecord | null>(null);
   const [sort, setSort] = useState<ColumnSort>(null);
 
@@ -1010,6 +1082,10 @@ export function CapabilitiesPanel() {
     api<SystemRecord[]>("/api/systems")
       .then(setSystems)
       .catch(() => undefined);
+    reloadCapabilities();
+  }, []);
+
+  function reloadCapabilities() {
     api<KbCapabilityRecord[]>("/api/capabilities")
       .then((data) => {
         setItems(data);
@@ -1017,7 +1093,12 @@ export function CapabilitiesPanel() {
       })
       .catch((err: unknown) => setError(err instanceof ApiError ? err.message : "Could not load capabilities"))
       .finally(() => setLoading(false));
-  }, []);
+  }
+
+  function openNode(event: { stopPropagation: () => void }, row: KbCapabilityRecord, level: 1 | 2) {
+    event.stopPropagation();
+    setNodeDetail({ systemCode: row.system_code, level, l1: row.l1_capability, l2: level === 2 ? row.l2_capability : "" });
+  }
 
   useEffect(() => {
     setCountryFilter((current) => (countries.includes(current) ? current : countries.includes("SG") ? "SG" : countries[0] ?? "SG"));
@@ -1204,8 +1285,36 @@ export function CapabilitiesPanel() {
                         }
                       }}
                     >
-                      <td className="py-2.5 px-3 font-label text-xs">{sentenceCase(row.l1_capability)}</td>
-                      <td className="py-2.5 px-3 text-muted">{sentenceCase(row.l2_capability)}</td>
+                      <td className="py-2.5 px-3 font-label text-xs">
+                        <span className="inline-flex items-center gap-1">
+                          {sentenceCase(row.l1_capability)}
+                          <button
+                            type="button"
+                            className="icon-btn !p-0.5 opacity-50 hover:opacity-100"
+                            aria-label={`L1 details: ${row.l1_capability}`}
+                            title="View L1 details"
+                            onClick={(event) => openNode(event, row, 1)}
+                            onKeyDown={(event) => event.stopPropagation()}
+                          >
+                            <span className="material-symbols-outlined text-sm">info</span>
+                          </button>
+                        </span>
+                      </td>
+                      <td className="py-2.5 px-3 text-muted">
+                        <span className="inline-flex items-center gap-1">
+                          {sentenceCase(row.l2_capability)}
+                          <button
+                            type="button"
+                            className="icon-btn !p-0.5 opacity-50 hover:opacity-100"
+                            aria-label={`L2 details: ${row.l2_capability}`}
+                            title="View L2 details"
+                            onClick={(event) => openNode(event, row, 2)}
+                            onKeyDown={(event) => event.stopPropagation()}
+                          >
+                            <span className="material-symbols-outlined text-sm">info</span>
+                          </button>
+                        </span>
+                      </td>
                       <td className="py-2.5 px-3 text-muted">{sentenceCase(row.l3_capability)}</td>
                       <td className="py-2.5 px-3 text-muted">{capabilityDescription(row)}</td>
                       {canEdit && (
@@ -1256,8 +1365,21 @@ export function CapabilitiesPanel() {
           systemCode={systemFilter}
           systemName={hierarchySystemName}
           rows={hierarchyRows}
+          countries={countries}
           onOpen={(capabilityId) => setInspecting(capabilityId)}
           onClose={() => setHierarchyOpen(false)}
+        />
+      )}
+      {nodeDetail && (
+        <CapabilityNodeWindow
+          node={nodeDetail}
+          systemName={systems.find((item) => item.system_code === nodeDetail.systemCode)?.system_name}
+          country={countryFilter}
+          countries={countries}
+          canEdit={canEdit}
+          {...nodeChildren(hierarchyRows, nodeDetail)}
+          onRenamed={reloadCapabilities}
+          onClose={() => setNodeDetail(null)}
         />
       )}
       {uploading && (

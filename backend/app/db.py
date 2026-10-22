@@ -431,6 +431,22 @@ def _migrate() -> None:
         )
         """,
         """
+        CREATE TABLE IF NOT EXISTS kb_capability_nodes (
+            node_id VARCHAR PRIMARY KEY,
+            country VARCHAR NOT NULL DEFAULT '',
+            system_code VARCHAR NOT NULL,
+            level INTEGER NOT NULL,
+            l1_capability VARCHAR NOT NULL,
+            l2_capability VARCHAR NOT NULL DEFAULT '',
+            description VARCHAR NOT NULL DEFAULT '',
+            country_behavior VARCHAR NOT NULL DEFAULT '',
+            sequence_diagrams VARCHAR NOT NULL DEFAULT '[]',
+            created_at TIMESTAMP NOT NULL,
+            last_modified TIMESTAMP NOT NULL,
+            embedding FLOAT[]
+        )
+        """,
+        """
         CREATE TABLE IF NOT EXISTS kb_bitbucket_repos (
             repo_id VARCHAR PRIMARY KEY,
             bitbucket_project VARCHAR NOT NULL,
@@ -1210,6 +1226,7 @@ def _migrate_table_countries() -> None:
         exec_sql("UPDATE kb_reports SET country = ? WHERE country = ?", [new, old])
         exec_sql("UPDATE kb_batches SET country = ? WHERE country = ?", [new, old])
         exec_sql("UPDATE kb_capabilities SET country = ? WHERE country = ?", [new, old])
+        exec_sql("UPDATE kb_capability_nodes SET country = ? WHERE country = ?", [new, old])
 
 
 def _seed() -> None:

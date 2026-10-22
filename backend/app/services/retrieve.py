@@ -68,6 +68,7 @@ def retrieve(query: str, limit: int = 6) -> list[dict]:
     scored.extend(_report_hits(query_tokens, query_vector))
     scored.extend(_batch_hits(query_tokens, query_vector))
     scored.extend(_capability_hits(query_tokens, query_vector))
+    scored.extend(_capability_node_hits(query_tokens, query_vector))
     scored.extend(_bitbucket_hits(query_tokens, query_vector))
     scored.sort(key=lambda item: item["score"], reverse=True)
     top = scored[:limit]
@@ -214,6 +215,39 @@ def _capability_hits(query_tokens: set[str], query_vector: list[float] | None) -
                     "l1": row["l1_capability"],
                     "l2": row["l2_capability"],
                     "l3": row["l3_capability"],
+                },
+                score,
+            )
+        )
+    return hits
+
+
+def _capability_node_hits(query_tokens: set[str], query_vector: list[float] | None) -> list[dict]:
+    """L1 / L2 capability details from kb_capability_nodes."""
+    from app.services import capability_nodes as nodes_svc
+
+    hits = []
+    for row in db.fetchall("SELECT * FROM kb_capability_nodes"):
+        text = nodes_svc.text_for(row)
+        score = score_text(query_tokens, text, query_vector, row.get("embedding"))
+        for field in ("l1_capability", "l2_capability", "system_code"):
+            if str(row[field] or "").lower() in query_tokens:
+                score += 2
+                break
+        if score <= 0:
+            continue
+        hits.append(
+            _entry(
+                row["node_id"],
+                "Capabilities",
+                nodes_svc.node_title(row),
+                text,
+                {
+                    "country": row["country"],
+                    "system": row["system_code"],
+                    "level": int(row["level"]),
+                    "l1": row["l1_capability"],
+                    "l2": row["l2_capability"],
                 },
                 score,
             )

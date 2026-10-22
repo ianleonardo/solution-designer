@@ -182,6 +182,11 @@ def _impact_rows(code: str) -> dict:
         if code in split_codes(row["source"]) or code in split_codes(row["destination"])
     ]
     capability_ids = [row["capability_id"] for row in capabilities]
+    capability_details = db.fetchall(
+        "SELECT node_id, country, level, l1_capability, l2_capability FROM kb_capability_nodes WHERE system_code = ?"
+        " ORDER BY level, l1_capability, l2_capability",
+        [code],
+    )
     unlinked_tables = []
     if capability_ids:
         marks = ", ".join("?" for _ in capability_ids)
@@ -211,6 +216,7 @@ def _impact_rows(code: str) -> dict:
     ]
     return {
         "capabilities": capabilities,
+        "capability_details": capability_details,
         "interfaces_kept": interfaces,
         "batches": batches,
         "reports": reports,
@@ -232,7 +238,7 @@ def delete_impact(user: dict, code: str) -> dict:
 def delete_system(user: dict, code: str, confirm: str = "") -> dict:
     """Delete the system and everything that belongs to it.
 
-    Removed: its capabilities (and their links), batches and reports. Interfaces that have it as source or destination
+    Removed: its capabilities (and their links, and L1/L2 details), batches and reports. Interfaces that have it as source or destination
     are kept as they are, and tables are kept; both are only unlinked from the removed capabilities. The code is also
     taken out of other systems' upstreams / downstreams, other batches' To/From lists and project scopes.
     The caller must repeat the system code in `confirm`.
@@ -257,6 +263,7 @@ def delete_system(user: dict, code: str, confirm: str = "") -> dict:
         delete_in("kb_capability_batches", "batch_id", batch_ids)
         delete_in("kb_capability_reports", "report_id", report_ids)
         delete_in("kb_capabilities", "capability_id", capability_ids)
+        db.exec_sql("DELETE FROM kb_capability_nodes WHERE system_code = ?", [code])
         delete_in("kb_batches", "batch_id", batch_ids)
         delete_in("kb_reports", "report_id", report_ids)
         for other in db.fetchall("SELECT system_code, upstreams, downstreams FROM systems WHERE system_code <> ?", [code]):
