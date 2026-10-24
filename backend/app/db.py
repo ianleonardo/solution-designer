@@ -250,8 +250,11 @@ def _migrate() -> None:
             endpoint VARCHAR NOT NULL DEFAULT '',
             description VARCHAR NOT NULL DEFAULT '',
             protocol VARCHAR NOT NULL,
+            format VARCHAR NOT NULL DEFAULT '',
             source VARCHAR NOT NULL,
             destination VARCHAR NOT NULL,
+            upstream_interfaces VARCHAR NOT NULL DEFAULT '[]',
+            downstream_interfaces VARCHAR NOT NULL DEFAULT '[]',
             processing_rules VARCHAR NOT NULL DEFAULT '',
             validation_rules VARCHAR NOT NULL DEFAULT '',
             created_at TIMESTAMP NOT NULL,
@@ -387,6 +390,7 @@ def _migrate() -> None:
             frequency_other VARCHAR NOT NULL DEFAULT '',
             description VARCHAR NOT NULL DEFAULT '',
             layout VARCHAR NOT NULL DEFAULT '',
+            sample VARCHAR NOT NULL DEFAULT '',
             created_at TIMESTAMP NOT NULL,
             last_modified TIMESTAMP NOT NULL,
             embedding FLOAT[],
@@ -637,6 +641,9 @@ def _ensure_columns() -> None:
     if "report_code" not in report_columns:
         _conn.execute("ALTER TABLE kb_reports ADD COLUMN report_code VARCHAR DEFAULT ''")
         _conn.execute("UPDATE kb_reports SET report_code = '' WHERE report_code IS NULL")
+    if "sample" not in report_columns:
+        _conn.execute("ALTER TABLE kb_reports ADD COLUMN sample VARCHAR DEFAULT ''")
+        _conn.execute("UPDATE kb_reports SET sample = '' WHERE sample IS NULL")
     capability_columns = {
         row[0]
         for row in _conn.execute(
@@ -661,6 +668,15 @@ def _ensure_columns() -> None:
     if "validation_rules" not in interface_columns:
         _conn.execute("ALTER TABLE interfaces ADD COLUMN validation_rules VARCHAR DEFAULT ''")
         _conn.execute("UPDATE interfaces SET validation_rules = '' WHERE validation_rules IS NULL")
+    if "format" not in interface_columns:
+        _conn.execute("ALTER TABLE interfaces ADD COLUMN format VARCHAR DEFAULT ''")
+        _conn.execute("UPDATE interfaces SET format = '' WHERE format IS NULL")
+    if "upstream_interfaces" not in interface_columns:
+        _conn.execute("ALTER TABLE interfaces ADD COLUMN upstream_interfaces VARCHAR DEFAULT '[]'")
+        _conn.execute("UPDATE interfaces SET upstream_interfaces = '[]' WHERE upstream_interfaces IS NULL OR upstream_interfaces = ''")
+    if "downstream_interfaces" not in interface_columns:
+        _conn.execute("ALTER TABLE interfaces ADD COLUMN downstream_interfaces VARCHAR DEFAULT '[]'")
+        _conn.execute("UPDATE interfaces SET downstream_interfaces = '[]' WHERE downstream_interfaces IS NULL OR downstream_interfaces = ''")
     _conn.execute(
         """
         CREATE TABLE IF NOT EXISTS interface_fields (

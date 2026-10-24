@@ -197,8 +197,12 @@ def test_export_renders_headers_and_inlines_images(client):
     assert markdown.text.startswith("# Exports - Interface Specifications Document")
     assert "#### Welcome" in markdown.text
     assert "![Interface context](data:image/png;base64," in markdown.text
-    html = client.get(f"{base}/export?format=html", headers=auth(writer)).text
-    assert "<h4>Welcome</h4>" in html and "<figure><img src=\"data:image/png;base64," in html
+    saved_doc = client.get(base, headers=auth(writer)).json()
+    from app.services import export
+
+    page = export.render_html("Exports - Interface Specifications Document", saved_doc["templates"], saved_doc["content_json"])
+    assert "<h4>Welcome</h4>" in page and "<figure><img src=\"data:image/png;base64," in page
+    assert client.get(f"{base}/export?format=html", headers=auth(writer)).status_code == 400
     legacy = client.get(f"/api/projects/{project_id}/export?format=md", headers=auth(writer)).text
     assert legacy.startswith("# Exports\n")
 

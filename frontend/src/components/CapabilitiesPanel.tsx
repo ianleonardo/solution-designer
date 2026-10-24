@@ -195,13 +195,14 @@ function itemMatchesCountries(applicable: string, unrestricted: boolean, itemCou
   return selected.some((code) => item.includes(code));
 }
 
-function CapabilityFormDialog({
+export function CapabilityFormDialog({
   capability,
   capabilityId,
   readOnly = false,
   countries,
   systems,
   onSaved,
+  onOpenLevel,
   onClose,
 }: {
   capability?: KbCapabilityRecord;
@@ -210,6 +211,7 @@ function CapabilityFormDialog({
   countries: string[];
   systems: SystemRecord[];
   onSaved: (item: KbCapabilityRecord) => void;
+  onOpenLevel: (node: CapabilityNodeRef) => void;
   onClose: () => void;
 }) {
   const recordId = capabilityId || capability?.capability_id || "";
@@ -582,14 +584,28 @@ function CapabilityFormDialog({
           </div>
         </fieldset>
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-          <label className="block">
-            <span className="font-label text-[10px] uppercase text-muted">L1 capability</span>
+          <div>
+            <span className="flex items-center gap-1">
+              <span className="font-label text-[10px] uppercase text-muted">L1 capability</span>
+              {editing && l1.trim() && system && (
+                <button type="button" className="icon-btn !p-0.5" aria-label={`${readOnly ? "View" : "Edit"} L1 ${l1.trim()}`} title={readOnly ? "View L1 details" : "Edit L1 details"} onClick={() => onOpenLevel({ systemCode: system, level: 1, l1: l1.trim(), l2: "" })}>
+                  <span className="material-symbols-outlined text-sm">{readOnly ? "info" : "edit"}</span>
+                </button>
+              )}
+            </span>
             <input className="field mt-1" aria-label="L1 capability" value={l1} disabled={locked} onChange={(e) => setL1(e.target.value)} />
-          </label>
-          <label className="block">
-            <span className="font-label text-[10px] uppercase text-muted">L2 capability</span>
+          </div>
+          <div>
+            <span className="flex items-center gap-1">
+              <span className="font-label text-[10px] uppercase text-muted">L2 capability</span>
+              {editing && l2.trim() && system && (
+                <button type="button" className="icon-btn !p-0.5" aria-label={`${readOnly ? "View" : "Edit"} L2 ${l2.trim()}`} title={readOnly ? "View L2 details" : "Edit L2 details"} onClick={() => onOpenLevel({ systemCode: system, level: 2, l1: l1.trim(), l2: l2.trim() })}>
+                  <span className="material-symbols-outlined text-sm">{readOnly ? "info" : "edit"}</span>
+                </button>
+              )}
+            </span>
             <input className="field mt-1" aria-label="L2 capability" value={l2} disabled={locked} onChange={(e) => setL2(e.target.value)} />
-          </label>
+          </div>
           <label className="block">
             <span className="font-label text-[10px] uppercase text-muted">L3 capability</span>
             <input className="field mt-1" aria-label="L3 capability" value={l3} disabled={locked} onChange={(e) => setL3(e.target.value)} />
@@ -1069,7 +1085,7 @@ export function CapabilitiesPanel() {
   const [form, setForm] = useState<{ capability?: KbCapabilityRecord } | null>(null);
   const [inspecting, setInspecting] = useState<string | null>(null);
   const [hierarchyOpen, setHierarchyOpen] = useState(false);
-  const [nodeDetail, setNodeDetail] = useState<CapabilityNodeRef | null>(null);
+  const [nodeDetail, setNodeDetail] = useState<(CapabilityNodeRef & { editable: boolean }) | null>(null);
   const [deleting, setDeleting] = useState<KbCapabilityRecord | null>(null);
   const [sort, setSort] = useState<ColumnSort>(null);
 
@@ -1097,7 +1113,7 @@ export function CapabilitiesPanel() {
 
   function openNode(event: { stopPropagation: () => void }, row: KbCapabilityRecord, level: 1 | 2) {
     event.stopPropagation();
-    setNodeDetail({ systemCode: row.system_code, level, l1: row.l1_capability, l2: level === 2 ? row.l2_capability : "" });
+    setNodeDetail({ systemCode: row.system_code, level, l1: row.l1_capability, l2: level === 2 ? row.l2_capability : "", editable: canEdit });
   }
 
   useEffect(() => {
@@ -1172,7 +1188,7 @@ export function CapabilitiesPanel() {
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h1 className="font-headline text-2xl font-semibold">Capabilities</h1>
-          <p className="text-muted mt-0.5">One table per country and system (L1 / L2 / L3). Click a row for processing rules and linked catalogue items.</p>
+          <p className="text-muted mt-0.5">One table per country and system (L1 / L2 / L3). Click an L1 or L2 name to view that level. Click L3 to view the capability.</p>
         </div>
         <div className="flex items-center gap-2">
           <button type="button" className="btn" onClick={() => setHierarchyOpen(true)} disabled={!systemFilter}>
@@ -1285,53 +1301,61 @@ export function CapabilitiesPanel() {
                         }
                       }}
                     >
-                      <td className="py-2.5 px-3 font-label text-xs">
+                      <td className="py-2.5 px-3 font-label text-xs" onClick={(event) => openNode(event, row, 1)}>
                         <span className="inline-flex items-center gap-1">
                           {sentenceCase(row.l1_capability)}
                           <button
                             type="button"
                             className="icon-btn !p-0.5 opacity-50 hover:opacity-100"
                             aria-label={`L1 details: ${row.l1_capability}`}
-                            title="View L1 details"
+                            title={canEdit ? "Edit L1 details" : "View L1 details"}
                             onClick={(event) => openNode(event, row, 1)}
                             onKeyDown={(event) => event.stopPropagation()}
                           >
-                            <span className="material-symbols-outlined text-sm">info</span>
+                            <span className="material-symbols-outlined text-sm">{canEdit ? "edit" : "info"}</span>
                           </button>
                         </span>
                       </td>
-                      <td className="py-2.5 px-3 text-muted">
+                      <td className="py-2.5 px-3 text-muted" onClick={(event) => openNode(event, row, 2)}>
                         <span className="inline-flex items-center gap-1">
                           {sentenceCase(row.l2_capability)}
                           <button
                             type="button"
                             className="icon-btn !p-0.5 opacity-50 hover:opacity-100"
                             aria-label={`L2 details: ${row.l2_capability}`}
-                            title="View L2 details"
+                            title={canEdit ? "Edit L2 details" : "View L2 details"}
                             onClick={(event) => openNode(event, row, 2)}
                             onKeyDown={(event) => event.stopPropagation()}
                           >
-                            <span className="material-symbols-outlined text-sm">info</span>
+                            <span className="material-symbols-outlined text-sm">{canEdit ? "edit" : "info"}</span>
                           </button>
                         </span>
                       </td>
-                      <td className="py-2.5 px-3 text-muted">{sentenceCase(row.l3_capability)}</td>
-                      <td className="py-2.5 px-3 text-muted">{capabilityDescription(row)}</td>
+                      <td className="py-2.5 px-3 text-muted">
+                        <span className="inline-flex items-center gap-1">
+                          {sentenceCase(row.l3_capability)}
+                          <button
+                            type="button"
+                            className="icon-btn !p-0.5 opacity-50 hover:opacity-100"
+                            aria-label={canEdit ? `Edit ${row.l3_capability}` : `View ${row.l3_capability}`}
+                            title={canEdit ? "Edit" : "View"}
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              if (canEdit) setForm({ capability: row });
+                              else setInspecting(row.capability_id);
+                            }}
+                            onKeyDown={(event) => event.stopPropagation()}
+                          >
+                            <span className="material-symbols-outlined text-sm">{canEdit ? "edit" : "info"}</span>
+                          </button>
+                        </span>
+                      </td>
+                      <td className="py-2.5 px-3 text-muted cursor-auto" onClick={(event) => event.stopPropagation()}>
+                        {capabilityDescription(row)}
+                      </td>
                       {canEdit && (
                         <td className="py-2.5 px-3 whitespace-nowrap">
                           <div className="flex items-center gap-1 justify-end">
-                            <button
-                              type="button"
-                              className="icon-btn"
-                              aria-label={`Edit ${row.l3_capability}`}
-                              title="Edit"
-                              onClick={(event) => {
-                                event.stopPropagation();
-                                setForm({ capability: row });
-                              }}
-                            >
-                              <span className="material-symbols-outlined text-base">edit</span>
-                            </button>
                             <button
                               type="button"
                               className="icon-btn icon-btn-danger"
@@ -1376,7 +1400,7 @@ export function CapabilitiesPanel() {
           systemName={systems.find((item) => item.system_code === nodeDetail.systemCode)?.system_name}
           country={countryFilter}
           countries={countries}
-          canEdit={canEdit}
+          canEdit={nodeDetail.editable}
           {...nodeChildren(hierarchyRows, nodeDetail)}
           onRenamed={reloadCapabilities}
           onClose={() => setNodeDetail(null)}
@@ -1412,6 +1436,7 @@ export function CapabilitiesPanel() {
               );
             });
           }}
+          onOpenLevel={(node) => setNodeDetail({ ...node, editable: canEdit })}
           onClose={() => setForm(null)}
         />
       )}
@@ -1422,6 +1447,7 @@ export function CapabilitiesPanel() {
           countries={countries}
           systems={systems}
           onSaved={() => undefined}
+          onOpenLevel={(node) => setNodeDetail({ ...node, editable: false })}
           onClose={() => setInspecting(null)}
         />
       )}

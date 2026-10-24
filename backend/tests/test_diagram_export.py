@@ -244,8 +244,10 @@ def test_pdf_export_draws_the_diagrams(client):
     block = next(b for b in sections[key]["blocks"] if b["type"] == "diagram")
     block.update({"mermaid": FLOWCHART, "flow": None})
     assert client.put(base, json={"content_json": {"sections": sections}}, headers=auth(writer)).status_code == 200
-    html_page = client.get(f"{base}/export?format=html", headers=auth(writer))
-    assert html_page.status_code == 200 and "<svg" in html_page.text and "flowchart LR" not in html_page.text
+    saved = client.get(base, headers=auth(writer)).json()
+    page = export.render_html("Diagrams", saved["templates"], saved["content_json"])
+    assert "<svg" in page and "flowchart LR" not in page
+    assert client.get(f"{base}/export?format=html", headers=auth(writer)).status_code == 400
     pdf = client.get(f"{base}/export?format=pdf", headers=auth(writer))
     assert pdf.status_code == 200 and pdf.content.startswith(b"%PDF")
     plain = client.get(f"{base}/export?format=md", headers=auth(writer)).text

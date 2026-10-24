@@ -31,6 +31,17 @@ def _content(blocks):
     return {"sections": {"s": {"blocks": blocks}}}
 
 
+def test_prose_markdown_tables_become_real_tables():
+    page = export.render_html(
+        "T",
+        _templates(),
+        _content([{"type": "prose", "markdown": "Population\n\n| Country | Capital |\n| --- | --- |\n| Maldives | [Male](https://example.com) |\n"}]),
+    )
+    assert "<table>" in page and "<th>Country</th>" in page and "<th>Capital</th>" in page
+    assert 'href="https://example.com"' in page
+    assert "| Country |" not in page
+
+
 def test_html_export_renders_prose_and_cell_formatting():
     page = export.render_html(
         "T",

@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { api, ApiError } from "../api";
-import type { InterfaceField, InterfaceRecord } from "../types";
+import type { InterfaceField, InterfaceParty, InterfaceRecord } from "../types";
 import { ProcessingRulesEditor } from "./ProcessingRulesEditor";
 import { SelectField } from "./SelectField";
 import { DownloadButtons } from "./DownloadButtons";
@@ -253,6 +253,7 @@ export function InterfaceDetailDialog({
 }) {
   const [record, setRecord] = useState<InterfaceRecord | null>(null);
   const [error, setError] = useState("");
+  const [linked, setLinked] = useState<InterfaceRecord | null>(null);
 
   useEffect(() => {
     let current = true;
@@ -276,13 +277,13 @@ export function InterfaceDetailDialog({
         ["Applicable for", record.country || "All countries"],
         ["Endpoint", record.endpoint || "—"],
         ["Protocol", record.protocol],
-        ["Source", record.source],
-        ["Destination", record.destination],
+        ["Format", record.format || "—"],
         ["Description", record.description || "—"],
       ]
     : [];
 
   return (
+    <>
     <div className={`fixed inset-0 ${layerClass} flex items-center justify-center bg-black/50 p-4`} role="presentation" onMouseDown={(event) => event.target === event.currentTarget && onClose()}>
       <div role="dialog" aria-modal="true" aria-label="Interface specification" className="flex w-full max-w-5xl max-h-[90vh] flex-col overflow-hidden rounded-lg border border-hairline bg-panel shadow-xl">
         <div className="flex flex-wrap items-center justify-end gap-2 border-b border-hairline px-6 py-4">
@@ -305,6 +306,8 @@ export function InterfaceDetailDialog({
                   </div>
                 ))}
               </dl>
+              <PartyList title="Upstream interfaces" parties={record.upstream ?? []} onOpen={setLinked} />
+              <PartyList title="Downstream interfaces" parties={record.downstream ?? []} onOpen={setLinked} />
               <section className="space-y-2">
                 <h4 className="font-headline text-base font-semibold m-0">Request</h4>
                 <InterfaceFieldTable direction="request" fields={fields} readOnly onChange={() => undefined} />
@@ -326,5 +329,60 @@ export function InterfaceDetailDialog({
         </div>
       </div>
     </div>
+    {linked && (
+      <InterfaceDetailDialog
+        channel={linked.channel}
+        interfaceId={linked.interface_id}
+        fallbackName={linked.interface_name}
+        layerClass="z-[80]"
+        onClose={() => setLinked(null)}
+      />
+    )}
+    </>
+  );
+}
+
+function PartyList({ title, parties, onOpen }: { title: string; parties: InterfaceParty[]; onOpen: (party: InterfaceRecord) => void }) {
+  async function open(party: InterfaceParty) {
+    if (!party.interface_id) return;
+    try {
+      onOpen(await api<InterfaceRecord>(`/api/interfaces/id/${encodeURIComponent(party.interface_id)}`));
+    } catch {
+      onOpen({ interface_id: party.interface_id, channel: "", interface_name: party.interface_name, endpoint: "", description: "", protocol: "", source: "", destination: "", country: "" });
+    }
+  }
+
+  return (
+    <section className="space-y-2">
+      <h4 className="font-headline text-base font-semibold m-0">{title}</h4>
+      {parties.length === 0 ? (
+        <p className="text-sm text-muted">No items.</p>
+      ) : (
+        <table className="w-full text-sm border border-hairline">
+          <thead>
+            <tr className="text-left font-label text-[10px] uppercase text-muted">
+              <th className="px-3 py-2">System</th>
+              <th className="px-3 py-2">Interface</th>
+            </tr>
+          </thead>
+          <tbody>
+            {parties.map((party, index) => (
+              <tr key={`${party.system}-${party.interface_id}-${index}`} className="border-t border-hairline">
+                <td className="px-3 py-2">{party.system || "—"}</td>
+                <td className="px-3 py-2">
+                  {party.interface_id ? (
+                    <button type="button" className="text-left underline" onClick={() => void open(party)}>
+                      {party.interface_name || "View interface"}
+                    </button>
+                  ) : (
+                    party.interface_name || "—"
+                  )}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+    </section>
   );
 }

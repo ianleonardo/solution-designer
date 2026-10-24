@@ -3,16 +3,15 @@ import MarkdownIt from "markdown-it";
 import { authHeaders } from "../api";
 import { MermaidPreview } from "./DiagramBlock";
 
-export type ExportFormat = "md" | "html" | "pdf";
+export type ExportFormat = "md" | "pdf";
 
 const TITLES: Record<ExportFormat, string> = {
   md: "Markdown preview",
-  html: "HTML preview",
   pdf: "PDF preview",
 };
 
 // html:false keeps raw tags in the generated markdown from being injected into the page.
-const markdown = new MarkdownIt({ html: false, linkify: true, breaks: false });
+const markdown = new MarkdownIt({ html: false, linkify: true, breaks: false }).enable("table");
 
 // The Markdown export puts a line break inside a table cell as <br>. Raw HTML stays off, so only that one tag is
 // recognised, and it becomes a real line break instead of showing as text.
@@ -151,7 +150,6 @@ export function ExportPreview({
           {error && <p className="p-4 text-alert">{error}</p>}
           {!error && !blob && <p className="p-4 text-muted">Preparing preview…</p>}
           {!error && blob && format === "md" && <MarkdownView source={text} />}
-          {!error && blob && format === "html" && <iframe title="HTML preview" sandbox="" srcDoc={text} className="h-full w-full bg-white" />}
           {!error && blob && format === "pdf" && url && <iframe title="PDF preview" src={url} className="h-full w-full bg-white" />}
         </div>
       </div>

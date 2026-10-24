@@ -148,8 +148,11 @@ test("offers Adhoc before Daily and Quarterly before Other", async () => {
     </MemoryRouter>,
   );
   fireEvent.click(await screen.findByRole("button", { name: /Add report/ }));
-  const labels = within(screen.getByRole("dialog", { name: "Add report" }))
+  const dialog = screen.getByRole("dialog", { name: "Add report" });
+  const labels = within(dialog)
     .getAllByRole("checkbox")
     .map((node) => node.getAttribute("aria-label"));
   expect(labels).toEqual(["Adhoc", "Daily", "Weekly", "Monthly", "Quarterly", "Other"]);
+  expect(within(dialog).getByLabelText("Upload report sample")).toBeTruthy();
+  expect(within(dialog).queryByRole("textbox", { name: "Report sample" })).toBeNull();
 });

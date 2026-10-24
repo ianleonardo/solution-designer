@@ -129,6 +129,10 @@ def test_manual_interface_crud(client):
     row = created.json()
     assert row["channel"] == "SPL" and row["country"] == "SG,MY" and row["endpoint"] == "/balance" and row["source"] == "SPL, DGE"
     interface_id = row["interface_id"]
+    found = client.get(f"/api/interfaces/id/{interface_id}", headers=auth(viewer))
+    assert found.status_code == 200
+    assert found.json()["channel"] == "SPL" and found.json()["interface_name"] == "Balance API"
+    assert client.get("/api/interfaces/id/missing", headers=auth(viewer)).status_code == 404
 
     assert (
         client.post(
@@ -156,6 +160,102 @@ def test_manual_interface_crud(client):
     assert updated.json()["interface_name"] == "Balance API v2"
     assert updated.json()["protocol"] == "MQ"
 
+def test_upstream_and_downstream_can_be_empty_and_name_a_known_interface(client):
+    admin = login(client, "Admin")
+    _systems(client, admin)
+    analyst = login(client, "SuperAnalyst")
+    other = client.post(
+        "/api/interfaces/DGE",
+        json={"country": "SG", "interface_name": "Ledger", "protocol": "API", "source": "DGE", "destination": "SPL"},
+        headers=auth(analyst),
+    )
+    assert other.status_code == 200, other.text
+    ledger_id = other.json()["interface_id"]
+
+    created = client.post(
+        "/api/interfaces/SPL",
+        json={
+            "country": "SG",
+            "interface_name": "Balance API",
+            "protocol": "API",
+            "format": "json",
+            "upstream": [{"system": "spl, nope", "interface_id": "", "interface_name": ""}],
+            "downstream": [],
+        },
+        headers=auth(analyst),
+    )
+    assert created.status_code == 400 and "NOPE" in created.json()["detail"]
+
+    created = client.post(
+        "/api/interfaces/SPL",
+        json={
+            "country": "SG",
+            "interface_name": "Balance API",
+            "protocol": "API",
+            "format": "fixed length",
+            "upstream": [
+                {"system": "", "interface_id": "", "interface_name": ""},
+                {"system": "spl, dge", "interface_id": ledger_id, "interface_name": ""},
+            ],
+            "downstream": [{"system": "", "interface_id": "", "interface_name": "Manual hop"}],
+        },
+        headers=auth(analyst),
+    )
+    assert created.status_code == 400 and "single system code" in created.json()["detail"]
+
+    created = client.post(
+        "/api/interfaces/SPL",
+        json={
+            "country": "SG",
+            "interface_name": "Balance API",
+            "protocol": "API",
+            "format": "fixed length",
+            "upstream": [
+                {"system": "spl", "interface_id": ledger_id, "interface_name": ""},
+                {"system": "dge", "interface_id": "", "interface_name": "Manual"},
+            ],
+            "downstream": [{"system": "", "interface_id": "", "interface_name": "Manual hop"}],
+        },
+        headers=auth(analyst),
+    )
+    assert created.status_code == 200, created.text
+    detail = created.json()
+    assert detail["format"] == "Fixed length"
+    assert detail["source"] == "SPL, DGE"
+    assert detail["destination"] == ""
+    assert detail["upstream"] == [
+        {"system": "SPL", "interface_id": ledger_id, "interface_name": "Ledger"},
+        {"system": "DGE", "interface_id": "", "interface_name": "Manual"},
+    ]
+    assert detail["downstream"] == [{"system": "", "interface_id": "", "interface_name": "Manual hop"}]
+
+    cleared = client.patch(
+        f"/api/interfaces/SPL/{detail['interface_id']}",
+        json={"upstream": [], "downstream": [], "format": "soap"},
+        headers=auth(analyst),
+    )
+    assert cleared.status_code == 400 and "Format" in cleared.json()["detail"]
+    cleared = client.patch(
+        f"/api/interfaces/SPL/{detail['interface_id']}",
+        json={"upstream": [], "downstream": []},
+        headers=auth(analyst),
+    )
+    assert cleared.status_code == 200, cleared.text
+    assert cleared.json()["source"] == "" and cleared.json()["destination"] == ""
+    assert cleared.json()["upstream"] == [] and cleared.json()["downstream"] == []
+
+
+def test_manual_interface_delete_rules(client):
+    admin = login(client, "Admin")
+    _systems(client, admin)
+    analyst = login(client, "SuperAnalyst")
+    viewer = login(client, "Viewer")
+    created = client.post(
+        "/api/interfaces/SPL",
+        json={"country": "SG", "interface_name": "Balance API", "protocol": "API", "source": "SPL", "destination": "DGE"},
+        headers=auth(analyst),
+    )
+    interface_id = created.json()["interface_id"]
     assert client.delete(f"/api/interfaces/SPL/{interface_id}", headers=auth(viewer)).status_code == 403
     assert client.delete(f"/api/interfaces/SPL/{interface_id}", headers=auth(analyst)).status_code == 200
     assert client.get("/api/interfaces/SPL", headers=auth(admin)).json() == []

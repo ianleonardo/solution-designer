@@ -82,7 +82,7 @@ test("lists capabilities and filters by country", async () => {
   fireEvent.click(screen.getByRole("tab", { name: "SG" }));
   await waitFor(() => expect(screen.getByText("Payments")).toBeTruthy());
 
-  fireEvent.click(screen.getByText("Payments"));
+  fireEvent.click(screen.getByText("Auth"));
   const detail = await screen.findByRole("dialog", { name: "View capability" });
   await within(detail).findByLabelText("Capability system");
   for (const label of ["System", "Applicable for", "L1 capability", "Description", "Country specific behavior", "Diagrams", "Processing rules", "Interfaces", "Tables", "Batches", "Reports"]) {
@@ -90,6 +90,53 @@ test("lists capabilities and filters by country", async () => {
   }
   expect(within(detail).getByRole("button", { name: "Markdown" })).toBeTruthy();
   expect(within(detail).getByRole("button", { name: "PDF" })).toBeTruthy();
+  expect(within(detail).getByRole("button", { name: "View L1 Payments" }).textContent).toContain("info");
+  expect(within(detail).getByRole("button", { name: "View L2 Card" }).textContent).toContain("info");
+  fireEvent.click(within(detail).getByRole("button", { name: "View L1 Payments" }));
+  const l1 = await screen.findByRole("dialog", { name: "L1 capability details" });
+  expect(within(l1).queryByRole("button", { name: /Rename/ })).toBeNull();
+});
+
+test("clicking an L1 or L2 name opens that level, and the description does not", async () => {
+  vi.stubGlobal("localStorage", { getItem: () => JSON.stringify({ role_name: "Analyst", username: "a" }) });
+  vi.stubGlobal(
+    "fetch",
+    vi.fn().mockImplementation((url: string) => {
+      if (url === "/api/catalogs") return Promise.resolve(json({ countries: ["SG", "MY"], databases: [], interface_channels: [] }));
+      if (url === "/api/systems")
+        return Promise.resolve(
+          json([
+            { system_code: "SPL", system_name: "SPL Core", description: "", upstreams: "", downstreams: "", has_batch: false, has_report: false, has_capability: true },
+          ]),
+        );
+      if (url === "/api/capabilities") return Promise.resolve(json([capability]));
+      if (url.startsWith("/api/capabilities/c1")) return Promise.resolve(json({ ...capability, interfaces: [], tables: [], batches: [], reports: [] }));
+      return Promise.resolve(json([]));
+    }),
+  );
+  renderPanel();
+  fireEvent.click(await screen.findByText("Payments"));
+  const l1 = await screen.findByRole("dialog", { name: "L1 capability details" });
+  expect(within(l1).getByRole("heading", { name: "Payments" })).toBeTruthy();
+  expect(screen.queryByRole("dialog", { name: "View capability" })).toBeNull();
+  fireEvent.click(within(l1).getByRole("button", { name: "Close" }));
+
+  fireEvent.click(screen.getByText("Card"));
+  const l2 = await screen.findByRole("dialog", { name: "L2 capability details" });
+  expect(within(l2).getByRole("heading", { name: "Payments › Card" })).toBeTruthy();
+  fireEvent.click(within(l2).getByRole("button", { name: "Close" }));
+
+  fireEvent.click(screen.getByText("Payments > card > auth"));
+  expect(screen.queryByRole("dialog", { name: "L2 capability details" })).toBeNull();
+  expect(screen.queryByRole("dialog", { name: "View capability" })).toBeNull();
+  expect(screen.getByRole("button", { name: "L1 details: Payments" }).textContent).toContain("edit");
+  expect(screen.getByRole("button", { name: "L2 details: Card" }).textContent).toContain("edit");
+  fireEvent.click(screen.getByRole("button", { name: "Edit Auth" }));
+  const edit = await screen.findByRole("dialog", { name: "Edit capability" });
+  expect(within(edit).getByRole("button", { name: "Edit L1 Payments" }).textContent).toContain("edit");
+  expect(within(edit).getByRole("button", { name: "Edit L2 Card" }).textContent).toContain("edit");
+  fireEvent.click(within(edit).getByRole("button", { name: "Edit L2 Card" }));
+  expect(await screen.findByRole("dialog", { name: "L2 capability details" })).toBeTruthy();
 });
 
 test("view hierarchy expands one branch at a time and opens the L3 detail", async () => {
@@ -154,7 +201,7 @@ test("shows a short description when description is empty", async () => {
   );
   renderPanel();
   await waitFor(() => expect(screen.getByText("Provides auth as a card feature of payments.")).toBeTruthy());
-  fireEvent.click(screen.getByText("Payments"));
+  fireEvent.click(screen.getByText("Auth"));
   const detail = await screen.findByRole("dialog", { name: "View capability" });
   await waitFor(() => expect((within(detail).getByLabelText("Capability description") as HTMLInputElement).value).toBe("Provides Auth as a Card feature of Payments."));
 });
@@ -347,7 +394,7 @@ test("shows table columns and offers tables, batches and reports for the selecte
   );
   renderPanel();
   await waitFor(() => expect(screen.getByText("Payments")).toBeTruthy());
-  fireEvent.click(screen.getByText("Payments"));
+  fireEvent.click(screen.getByText("Auth"));
   const detail = await screen.findByRole("dialog", { name: "View capability" });
   fireEvent.click(await within(detail).findByRole("button", { name: "PIB.DBO.ACCT" }));
   const table = await screen.findByRole("dialog", { name: "Table ACCT" });
@@ -453,7 +500,7 @@ test("each capability diagram opens a zoomable viewer", async () => {
     }),
   );
   renderPanel();
-  fireEvent.click(await screen.findByText("Payments"));
+  fireEvent.click(await screen.findByText("Auth"));
   const detail = await screen.findByRole("dialog", { name: "View capability" });
   expect(await within(detail).findByRole("button", { name: "Expand Pay flow" })).toBeTruthy();
   expect(within(detail).getByRole("button", { name: "Expand Refund flow" })).toBeTruthy();
@@ -521,7 +568,7 @@ test("a linked interface opens its specification", async () => {
     }),
   );
   renderPanel();
-  fireEvent.click(await screen.findByText("Payments"));
+  fireEvent.click(await screen.findByText("Auth"));
   const detail = await screen.findByRole("dialog", { name: "View capability" });
   fireEvent.click(await within(detail).findByRole("button", { name: "SPL · Balance API" }));
   const spec = await screen.findByRole("dialog", { name: "Interface specification" });

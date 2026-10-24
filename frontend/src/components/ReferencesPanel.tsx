@@ -5,7 +5,7 @@ import type { Reference } from "../types";
 import { ConfirmDialog } from "./ConfirmDialog";
 import { FileDrop } from "./FileDrop";
 
-const markdown = new MarkdownIt({ html: false, linkify: true, breaks: true });
+const markdown = new MarkdownIt({ html: false, linkify: true, breaks: true }).enable("table");
 
 type Props = {
   projectId: string;

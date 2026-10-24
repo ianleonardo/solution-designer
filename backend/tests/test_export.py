@@ -28,9 +28,14 @@ def test_markdown_export_includes_top_level_sections_in_order(client):
     top = [item["section_name"] for item in parse_template(template_path()) if item["parent_id"] is None]
     indexes = [text.index(f"## {name}") for name in top]
     assert indexes == sorted(indexes)
-    html = client.get(f"/api/projects/{project_id}/export?format=html", headers=auth(writer))
-    assert html.status_code == 200
-    assert "<h2>Key Functional Requirements</h2>" in html.text
+    refused = client.get(f"/api/projects/{project_id}/export?format=html", headers=auth(writer))
+    assert refused.status_code == 400
+    listing = client.get(f"/api/projects/{project_id}/documents", headers=auth(writer)).json()[0]
+    document = client.get(f"/api/projects/{project_id}/documents/{listing['document_id']}", headers=auth(writer)).json()
+    from app.services import export
+
+    page = export.render_html("Export Me", document["templates"], document["content_json"])
+    assert "<h2>Key Functional Requirements</h2>" in page
     pdf = client.get(f"/api/projects/{project_id}/export?format=pdf", headers=auth(writer))
     assert pdf.status_code == 200
     assert pdf.content.startswith(b"%PDF-")

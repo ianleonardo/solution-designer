@@ -61,5 +61,8 @@ def test_the_api_and_the_exports_show_the_rows_in_order(client):
     assert saved["content_json"]["sections"][sid]["blocks"][0]["rows"] == [["1", "third", ""], ["2", "first", ""], ["3", "second", ""]]
     markdown = client.get(f"{base}/export?format=md", headers=auth(writer)).text
     assert "| 1 | third |" in markdown and "| 3 | second |" in markdown
-    html = client.get(f"{base}/export?format=html", headers=auth(writer)).text
-    assert html.index("<td>1</td><td>third") < html.index("<td>2</td><td>first")
+    saved = client.get(base, headers=auth(writer)).json()
+    from app.services import export
+
+    page = export.render_html("Cases", saved["templates"], saved["content_json"])
+    assert page.index("<td>1</td><td>third") < page.index("<td>2</td><td>first")

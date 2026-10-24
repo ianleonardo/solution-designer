@@ -25,7 +25,7 @@ function fakeEditor(active: string[] = []) {
 it("the full toolbar offers headings, text styles, lists, quote, rule, link and history", () => {
   const { editor, calls } = fakeEditor(["bold"]);
   render(<EditorToolbar editor={editor} />);
-  for (const label of ["Heading 1", "Heading 2", "Heading 3", "Bold", "Italic", "Underline", "Strikethrough", "Code", "Link", "Quote", "Bullet list", "Numbered list", "Horizontal rule", "Undo", "Redo"]) {
+  for (const label of ["Heading 1", "Heading 2", "Heading 3", "Bold", "Italic", "Underline", "Strikethrough", "Code", "Link", "Quote", "Bullet list", "Numbered list", "Horizontal rule", "Insert table", "Add column", "Delete column", "Add row", "Delete row", "Delete table", "Undo", "Redo"]) {
     expect(screen.getByLabelText(label)).toBeTruthy();
   }
   expect(screen.getByLabelText("Bold").getAttribute("aria-pressed")).toBe("true");

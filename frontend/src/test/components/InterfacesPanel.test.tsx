@@ -234,3 +234,58 @@ test("clicking an interface row opens the specification", async () => {
   expect(within(spec).getByRole("button", { name: "PDF" })).toBeTruthy();
   expect(screen.queryByRole("dialog", { name: "Edit interface" })).toBeNull();
 });
+
+test("upstream and downstream rows accept several systems and a catalogue interface", async () => {
+  const zeta = item("SPL", "Zeta");
+  const ledger = item("DGE", "Ledger", "SG", { endpoint: "/ledger" });
+  const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
+    if (url === "/api/catalogs") return json({ countries: ["SG"], databases: [], interface_channels: ["SPL", "DGE"] });
+    if (url === "/api/systems")
+      return json([
+        { system_code: "SPL", system_name: "SPL", description: "", upstreams: "", downstreams: "", has_batch: false, has_report: false, has_capability: false, created_at: "", last_modified: "" },
+        { system_code: "DGE", system_name: "DGE", description: "", upstreams: "", downstreams: "", has_batch: false, has_report: false, has_capability: false, created_at: "", last_modified: "" },
+      ]);
+    if (url === `/api/interfaces/SPL/${zeta.interface_id}`)
+      return json({ ...zeta, format: "", upstream: [{ system: "SPL", interface_id: "", interface_name: "" }], downstream: [], processing_rules: "", validation_rules: "", fields: [] });
+    if (url === "/api/interfaces/DGE") return json([ledger]);
+    if (url === `/api/interfaces/DGE/${ledger.interface_id}`) return json({ ...ledger, processing_rules: "", validation_rules: "", fields: [] });
+    if (init?.method === "PATCH") return json({ ...zeta });
+    return json([zeta, item("SPL", "Bravo")]);
+  });
+  vi.stubGlobal("fetch", fetchMock);
+  renderAt();
+  fireEvent.click(await screen.findByRole("button", { name: "Edit Zeta" }));
+  const dialog = await screen.findByRole("dialog", { name: "Edit interface" });
+  expect(within(dialog).getByText("Application for")).toBeTruthy();
+  expect(within(dialog).getByLabelText("Format")).toBeTruthy();
+  expect(await within(dialog).findByText("No items.")).toBeTruthy();
+  const system = within(dialog).getByLabelText("Upstream interfaces system 1");
+  expect((system as HTMLInputElement).value).toBe("SPL");
+
+  fireEvent.change(system, { target: { value: "NOPE" } });
+  fireEvent.click(within(dialog).getByRole("button", { name: "Save" }));
+  expect(within(dialog).getAllByText("NOPE is not a known system code.").length).toBeGreaterThan(0);
+
+  fireEvent.change(system, { target: { value: "spl, dge" } });
+  fireEvent.click(within(dialog).getByRole("button", { name: "Save" }));
+  expect(within(dialog).getAllByText("Enter one system code.").length).toBeGreaterThan(0);
+  fireEvent.change(system, { target: { value: "SPL" } });
+  fireEvent.click(within(dialog).getByRole("button", { name: "Add downstream interfaces" }));
+  const downstreamSystem = within(dialog).getByLabelText("Downstream interfaces system 1");
+  fireEvent.change(downstreamSystem, { target: { value: "" } });
+  const downstreamInterface = within(dialog).getByLabelText("Downstream interfaces interface 1");
+  fireEvent.change(downstreamInterface, { target: { value: "Led" } });
+  fireEvent.focus(downstreamInterface);
+  const choice = await within(dialog).findByRole("option", { name: /Ledger/ });
+  expect(choice.textContent).toContain("/ledger");
+  fireEvent.click(choice);
+  expect(within(dialog).getByRole("button", { name: "View Ledger" })).toBeTruthy();
+
+  fireEvent.click(within(dialog).getByRole("button", { name: "Remove upstream interfaces 1" }));
+  fireEvent.click(within(dialog).getByRole("button", { name: "Save" }));
+  await waitFor(() => expect(fetchMock.mock.calls.some((call) => (call[1] as RequestInit | undefined)?.method === "PATCH")).toBe(true));
+  const patch = fetchMock.mock.calls.find((call) => (call[1] as RequestInit | undefined)?.method === "PATCH")!;
+  const body = JSON.parse(String((patch[1] as RequestInit).body));
+  expect(body.upstream).toEqual([]);
+  expect(body.downstream).toEqual([{ system: "", interface_id: ledger.interface_id, interface_name: "Ledger" }]);
+});

@@ -1,11 +1,14 @@
 """Structured knowledge-base reports organized by country and system."""
 
 import io
+import json
+import re
 import uuid
 from datetime import datetime, timezone
+from pathlib import Path
 
 from app import db
-from app.config import kb_countries
+from app.config import data_dir, kb_countries
 from app.errors import AppError
 from app.permissions import require
 from app.services import gcs, llm, systems
@@ -17,6 +20,9 @@ MAX_CODE = 50
 MAX_NAME = 200
 MAX_DESCRIPTION = 4000
 MAX_LAYOUT = 50000
+MAX_SAMPLE_BYTES = 20 * 1024 * 1024
+SAMPLE_TYPES = {"png": "image/png", "jpg": "image/jpeg", "gif": "image/gif", "webp": "image/webp", "pdf": "application/pdf", "txt": "text/plain"}
+_STORED_NAME = re.compile(r"^[A-Za-z0-9._-]{1,200}$")
 
 
 def _now() -> datetime:
@@ -133,10 +139,13 @@ def text_for(row: dict) -> str:
     layout = (row.get("layout") or "")[:1500]
     desc = f" {row['description']}" if row.get("description") else ""
     code = f"{row['report_code']} " if row.get("report_code") else ""
+    sample = _sample_public(row.get("sample") or "")
+    sample_note = f" Sample: {sample['filename']}." if sample else ""
     return (
         f"Report {code}{row['report_name']} (country {row['country']}, system {row['system_code']}).{desc} "
         f"Frequency: {row.get('frequency') or 'unspecified'}"
         f"{' (' + row['frequency_other'] + ')' if row.get('frequency_other') else ''}. Layout: {layout}"
+        f"{sample_note}"
     )
 
 
@@ -159,6 +168,7 @@ def _payload(row: dict) -> dict:
         "frequency_other": row.get("frequency_other") or "",
         "description": row["description"],
         "layout": row["layout"],
+        "sample": _sample_public(row.get("sample") or ""),
         "created_at": row["created_at"],
         "last_modified": row["last_modified"],
     }
@@ -274,9 +284,121 @@ def _reject_duplicate(country: str, system_code: str, code: str, name: str, igno
 
 def delete_report(user: dict, report_id: str) -> None:
     _require_editor(user)
-    get_report(report_id)
+    row = db.fetchone("SELECT sample FROM kb_reports WHERE report_id = ?", [report_id])
+    if row is None:
+        raise AppError(404, "Report not found")
+    _remove_sample_file(report_id, _sample_meta(row.get("sample") or ""))
     db.exec_sql("DELETE FROM kb_reports WHERE report_id = ?", [report_id])
     gcs.upload_db()
+
+
+def _sample_kind(data: bytes, filename: str) -> str | None:
+    if data.startswith(b"\x89PNG\r\n\x1a\n"):
+        return "png"
+    if data.startswith(b"\xff\xd8\xff"):
+        return "jpg"
+    if data.startswith((b"GIF87a", b"GIF89a")):
+        return "gif"
+    if data[:4] == b"RIFF" and data[8:12] == b"WEBP":
+        return "webp"
+    if data.startswith(b"%PDF-"):
+        return "pdf"
+    if Path(filename or "").suffix.lower() == ".txt" and b"\x00" not in data:
+        try:
+            data.decode("utf-8")
+        except UnicodeDecodeError:
+            return None
+        return "txt"
+    return None
+
+
+def _sample_meta(raw: str) -> dict | None:
+    try:
+        parsed = json.loads(raw or "")
+    except json.JSONDecodeError:
+        return None
+    if not isinstance(parsed, dict):
+        return None
+    stored = str(parsed.get("stored") or "")
+    filename = str(parsed.get("filename") or "")
+    media_type = str(parsed.get("media_type") or "")
+    if not _STORED_NAME.fullmatch(stored) or not filename or media_type not in SAMPLE_TYPES.values():
+        return None
+    return {"stored": stored, "filename": filename, "media_type": media_type}
+
+
+def _sample_public(raw: str) -> dict | None:
+    meta = _sample_meta(raw)
+    if meta is None:
+        return None
+    return {"filename": meta["filename"], "media_type": meta["media_type"]}
+
+
+def _sample_folder(report_id: str) -> Path:
+    if not re.fullmatch(r"[0-9a-fA-F-]{8,64}", report_id):
+        raise AppError(404, "Report not found")
+    return data_dir() / "uploads" / "reports" / report_id
+
+
+def _remove_sample_file(report_id: str, meta: dict | None) -> None:
+    if meta is None:
+        return
+    path = _sample_folder(report_id) / meta["stored"]
+    if path.is_file():
+        path.unlink()
+    gcs.delete_file(f"uploads/reports/{report_id}/{meta['stored']}")
+
+
+def save_sample(user: dict, report_id: str, filename: str, data: bytes) -> dict:
+    _require_editor(user)
+    if db.fetchone("SELECT report_id FROM kb_reports WHERE report_id = ?", [report_id]) is None:
+        raise AppError(404, "Report not found")
+    if not data:
+        raise AppError(400, "The sample is empty.")
+    if len(data) > MAX_SAMPLE_BYTES:
+        raise AppError(400, "Report samples must be 20 MB or smaller.")
+    kind = _sample_kind(data, filename)
+    if kind is None:
+        raise AppError(400, "Report samples must be a PDF, text, PNG, JPEG, GIF or WEBP file.")
+    current = db.fetchone("SELECT sample FROM kb_reports WHERE report_id = ?", [report_id])
+    _remove_sample_file(report_id, _sample_meta((current or {}).get("sample") or ""))
+    folder = _sample_folder(report_id)
+    folder.mkdir(parents=True, exist_ok=True)
+    stored = f"{uuid.uuid4().hex}.{kind}"
+    path = folder / stored
+    path.write_bytes(data)
+    display = Path(filename or "sample").name or "sample"
+    meta = {"filename": display[:200], "stored": stored, "media_type": SAMPLE_TYPES[kind]}
+    db.exec_sql("UPDATE kb_reports SET sample = ?, last_modified = ? WHERE report_id = ?", [json.dumps(meta), _now(), report_id])
+    gcs.persist_file(path, f"uploads/reports/{report_id}/{stored}")
+    gcs.upload_db()
+    return get_report(report_id)
+
+
+def delete_sample(user: dict, report_id: str) -> dict:
+    _require_editor(user)
+    row = db.fetchone("SELECT sample FROM kb_reports WHERE report_id = ?", [report_id])
+    if row is None:
+        raise AppError(404, "Report not found")
+    _remove_sample_file(report_id, _sample_meta(row.get("sample") or ""))
+    db.exec_sql("UPDATE kb_reports SET sample = '', last_modified = ? WHERE report_id = ?", [_now(), report_id])
+    gcs.upload_db()
+    return get_report(report_id)
+
+
+def read_sample(report_id: str) -> tuple[Path, str, str]:
+    row = db.fetchone("SELECT sample FROM kb_reports WHERE report_id = ?", [report_id])
+    if row is None:
+        raise AppError(404, "Report not found")
+    meta = _sample_meta(row.get("sample") or "")
+    if meta is None:
+        raise AppError(404, "Report sample not found")
+    path = _sample_folder(report_id) / meta["stored"]
+    if not path.is_file():
+        gcs.fetch_file(path, f"uploads/reports/{report_id}/{meta['stored']}")
+    if not path.is_file():
+        raise AppError(404, "Report sample not found")
+    return path, meta["media_type"], meta["filename"]
 
 
 def _cell(value) -> str:

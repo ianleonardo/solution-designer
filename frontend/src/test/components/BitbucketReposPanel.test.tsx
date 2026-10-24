@@ -122,6 +122,8 @@ test("opens a repository row in a detail popup and saves main components", async
   expect(within(dialog).getByText("payment-api description")).toBeTruthy();
   expect(within(dialog).getByRole("textbox", { name: "Main components" })).toBeTruthy();
   expect(within(dialog).getByRole("toolbar", { name: "Main components formatting" })).toBeTruthy();
+  expect(within(dialog).getByRole("button", { name: "Heading 1" })).toBeTruthy();
+  expect(within(dialog).getByRole("button", { name: "Insert table" })).toBeTruthy();
   expect(within(dialog).getByRole("button", { name: "Markdown" })).toBeTruthy();
   expect(within(dialog).getByText("No diagrams.")).toBeTruthy();
   fireEvent.click(within(dialog).getByRole("button", { name: "Save components" }));

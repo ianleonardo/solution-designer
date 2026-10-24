@@ -14,7 +14,7 @@ from app.services import diagrams, images, mermaid_render
 logger = logging.getLogger(__name__)
 
 # Raw HTML in the text is escaped, so only Markdown formatting reaches the page.
-_MARKDOWN = MarkdownIt("commonmark", {"html": False}).enable("strikethrough")
+_MARKDOWN = MarkdownIt("commonmark", {"html": False}).enable("table").enable("strikethrough")
 
 
 def _restore_underline(html_text: str) -> str:
@@ -149,8 +149,8 @@ def _render_html(
         "</title><style>",
         "body{font-family:Inter,sans-serif;background:#fafcff;color:#131b2e;margin:2rem auto;max-width:920px;}",
         "h1,h2,h3,h4,h5,h6{font-family:'Plus Jakarta Sans',sans-serif;color:#1a4b8c;}",
-        "table{border-collapse:collapse;width:100%;margin:1rem 0;}",
-        "th,td{border:1px solid #c3c6d2;padding:6px 8px;vertical-align:top;font-size:14px;}",
+        "table{border-collapse:collapse;width:100%;margin:1rem 0;table-layout:auto;}",
+        "th,td{border:1px solid #c3c6d2;padding:6px 8px;vertical-align:top;font-size:14px;overflow-wrap:anywhere;}",
         "th{background:#f0f4f8;text-align:left;}",
         "pre{background:#0e1626;color:#dbe1ff;padding:1rem;overflow:auto;}",
         "figure.diagram{margin:0.75rem auto;text-align:center;}",

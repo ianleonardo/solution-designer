@@ -107,13 +107,6 @@ def export_document(project_id: str, document_id: str | None = None, format: str
             media_type="text/markdown",
             headers={"Content-Disposition": f'attachment; filename="{filename}.md"'},
         )
-    if format == "html":
-        body = export.render_html(title, templates, result["content_json"])
-        return Response(
-            body,
-            media_type="text/html",
-            headers={"Content-Disposition": f'attachment; filename="{filename}.html"'},
-        )
     if format == "pdf":
         pdf = export.render_pdf_document(title, templates, result["content_json"])
         return Response(
@@ -121,7 +114,7 @@ def export_document(project_id: str, document_id: str | None = None, format: str
             media_type="application/pdf",
             headers={"Content-Disposition": f'attachment; filename="{filename}.pdf"'},
         )
-    raise AppError(400, "Format must be md, html, or pdf")
+    raise AppError(400, "Format must be md or pdf")
 
 
 def _require_author(user: dict) -> None:

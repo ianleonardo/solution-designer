@@ -7,6 +7,8 @@ import { ConfirmDialog } from "./ConfirmDialog";
 import { FileDrop } from "./FileDrop";
 import { FrequencyField, frequencyText, selectedFrequencies } from "./FrequencyField";
 import { appliesToCountry, countryLabel } from "../countries";
+import { renderMarkdown } from "../markdown";
+import { ProcessingRulesEditor } from "./ProcessingRulesEditor";
 import { SelectField } from "./SelectField";
 import { SortHeader, sortRows, toggleColumnSort, type ColumnSort } from "./SortHeader";
 import { PageSlice } from "./TablePager";
@@ -211,7 +213,7 @@ function BatchFormDialog({
   const title = editing ? "Edit batch" : "Add batch";
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" role="presentation" onMouseDown={(e) => e.target === e.currentTarget && !busy && onClose()}>
-      <form role="dialog" aria-modal="true" aria-label={title} className="w-full max-w-lg rounded-lg border border-hairline bg-panel p-6 shadow-xl space-y-3" onSubmit={(e) => void submit(e)}>
+      <form role="dialog" aria-modal="true" aria-label={title} className="flex max-h-[90vh] w-full max-w-3xl flex-col overflow-y-auto rounded-lg border border-hairline bg-panel p-6 shadow-xl space-y-3" onSubmit={(e) => void submit(e)}>
         <h2 className="font-headline text-xl font-semibold">{title}</h2>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <label className="block">
@@ -283,10 +285,12 @@ function BatchFormDialog({
           <span className="font-label text-[10px] uppercase text-muted">Batch filename</span>
           <input className="field mt-1" aria-label="Batch filename" value={filename} disabled={busy} onChange={(e) => setFilename(e.target.value)} />
         </label>
-        <label className="block">
-          <span className="font-label text-[10px] uppercase text-muted">File layout</span>
-          <textarea className="field mt-1 min-h-[120px] font-mono text-xs" aria-label="File layout" value={layout} disabled={busy} onChange={(e) => setLayout(e.target.value)} />
-        </label>
+        <div className="block">
+          <span className="font-label text-[10px] uppercase text-muted">Batch layout</span>
+          <div className="mt-1">
+            <ProcessingRulesEditor value={layout} onChange={setLayout} readOnly={busy} label="Batch layout" toolbarLabel="Batch layout formatting" />
+          </div>
+        </div>
         {error && <p className="text-alert text-sm">{error}</p>}
         <div className="flex justify-end gap-2 pt-2">
           <button type="button" className="btn" disabled={busy} onClick={onClose}>
@@ -325,8 +329,12 @@ export function BatchDetailDialog({ batch, onClose, layerClass = "z-50" }: { bat
             <p className="text-sm bg-inset rounded-lg p-4 border border-hairline font-mono">{batch.batch_filename || "No filename provided."}</p>
           </div>
           <div>
-            <h3 className="font-label text-[10px] uppercase text-muted mb-2">File layout</h3>
-            <pre className="whitespace-pre-wrap text-sm bg-inset rounded-lg p-4 border border-hairline min-h-[12rem]">{batch.file_layout || "No layout provided."}</pre>
+            <h3 className="font-label text-[10px] uppercase text-muted mb-2">Batch layout</h3>
+            {batch.file_layout.trim() ? (
+              <div className="md-preview rounded-lg border border-hairline bg-inset p-4" aria-label="Batch layout" dangerouslySetInnerHTML={{ __html: renderMarkdown(batch.file_layout) }} />
+            ) : (
+              <p className="text-sm text-muted">No layout provided.</p>
+            )}
           </div>
         </div>
       </div>

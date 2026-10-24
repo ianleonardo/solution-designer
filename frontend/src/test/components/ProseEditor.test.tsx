@@ -18,6 +18,7 @@ it("shows existing Markdown as formatted text and offers the toolbar to editors 
   await waitFor(() => expect(container.querySelector(".ProseMirror h2")?.textContent).toBe("Title"));
   expect(container.querySelector(".ProseMirror strong")?.textContent).toBe("bold");
   expect(screen.getByLabelText("Bold")).toBeTruthy();
+  expect(screen.getByLabelText("Insert table")).toBeTruthy();
   rerender(<ProseEditor value="x" readOnly onChange={() => undefined} />);
   expect(screen.queryByLabelText("Bold")).toBeNull();
 });

@@ -2,7 +2,7 @@ import { FormEvent, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { api, ApiError, type RowError } from "../api";
 import { useOptionalAuth } from "../auth";
-import type { Catalogs, InterfaceField, InterfaceRecord, SystemRecord } from "../types";
+import type { Catalogs, InterfaceField, InterfaceParty, InterfaceRecord, SystemRecord } from "../types";
 import { appliesToCountry } from "../countries";
 import { ConfirmDialog } from "./ConfirmDialog";
 import { FileDrop } from "./FileDrop";
@@ -15,6 +15,29 @@ import { can } from "../permissions";
 
 export const INTERFACES_PAGE_SIZE = 25;
 export const PROTOCOLS = ["API", "MQ", "Kafka", "gRPC", "FTP", "SMTP", "SMPP"];
+export const FORMATS = ["JSON", "XML", "Fixed length", "Delimiter"];
+
+type PartyRow = { key: string; system: string; interface_id: string; interface_name: string };
+type KnownInterface = { interface_id: string; channel: string; interface_name: string; endpoint: string };
+
+function partyKey() {
+  return crypto.randomUUID();
+}
+
+function toParties(rows: InterfaceParty[] | undefined, fallback: string | undefined): PartyRow[] {
+  const source = rows ?? ((fallback ?? "").trim() ? [{ system: fallback ?? "", interface_id: "", interface_name: "" }] : []);
+  return source.map((row) => ({ key: partyKey(), system: row.system, interface_id: row.interface_id, interface_name: row.interface_name }));
+}
+
+function systemProblem(system: string, known: Set<string>) {
+  const parts = system
+    .split(/[,;]/)
+    .map((part) => part.trim())
+    .filter(Boolean);
+  if (parts.length > 1) return "Enter one system code.";
+  if (parts.length === 1 && !known.has(parts[0].toUpperCase())) return `${parts[0].toUpperCase()} is not a known system code.`;
+  return "";
+}
 
 function countryCodes(value: string) {
   return value
@@ -45,7 +68,7 @@ function CountryChecks({
 }) {
   return (
     <fieldset className="space-y-2" disabled={disabled}>
-      <legend className="font-label text-[10px] uppercase text-muted">Applicable for</legend>
+      <legend className="font-label text-[10px] uppercase text-muted">Application for</legend>
       <div className="flex flex-wrap gap-x-4 gap-y-2">
         <label className="inline-flex items-center gap-2 text-sm">
           <input type="checkbox" aria-label="All countries" checked={allCountries} onChange={(event) => onAll(event.target.checked)} />
@@ -62,37 +85,176 @@ function CountryChecks({
   );
 }
 
-function SystemChecks({
+function InterfacePartyTable({
   label,
+  rows,
   systems,
-  selected,
+  catalogue,
   disabled,
-  onToggle,
+  onChange,
+  onView,
 }: {
   label: string;
+  rows: PartyRow[];
   systems: SystemRecord[];
-  selected: string[];
+  catalogue: KnownInterface[];
   disabled?: boolean;
-  onToggle: (code: string) => void;
+  onChange: (rows: PartyRow[]) => void;
+  onView: (item: KnownInterface) => void;
 }) {
+  const known = useMemo(() => new Set(systems.map((item) => item.system_code.toUpperCase())), [systems]);
+  const heading = label.toLowerCase();
+
+  function update(key: string, patch: Partial<PartyRow>) {
+    onChange(rows.map((row) => (row.key === key ? { ...row, ...patch } : row)));
+  }
+
   return (
     <fieldset className="space-y-2" disabled={disabled}>
       <legend className="font-label text-[10px] uppercase text-muted">{label}</legend>
-      <div className="flex flex-wrap gap-x-4 gap-y-2">
-        {systems.length === 0 && <p className="text-sm text-muted">No systems.</p>}
-        {systems.map((item) => (
-          <label key={item.system_code} className="inline-flex items-center gap-2 text-sm">
-            <input
-              type="checkbox"
-              aria-label={`${label} ${item.system_code}`}
-              checked={selected.includes(item.system_code)}
-              onChange={() => onToggle(item.system_code)}
-            />
-            {item.system_code}
-          </label>
-        ))}
-      </div>
+      {rows.length === 0 ? (
+        <p className="text-sm text-muted">No items.</p>
+      ) : (
+        <table className="w-full text-sm border border-hairline">
+          <thead>
+            <tr className="text-left font-label text-[10px] uppercase text-muted">
+              <th className="px-3 py-2 w-[40%]">System</th>
+              <th className="px-3 py-2">Interface</th>
+              {!disabled && <th className="px-3 py-2 w-10" />}
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((row, index) => {
+              const problem = systemProblem(row.system, known);
+              const position = index + 1;
+              return (
+                <tr key={row.key} className="border-t border-hairline align-top">
+                  <td className="px-3 py-2">
+                    <input
+                      className="field"
+                      aria-label={`${label} system ${position}`}
+                      aria-invalid={problem !== ""}
+                      value={row.system}
+                      disabled={disabled}
+                      placeholder="System code"
+                      onChange={(event) => update(row.key, { system: event.target.value })}
+                    />
+                    {problem && <p className="text-alert text-xs mt-1">{problem}</p>}
+                  </td>
+                  <td className="px-3 py-2">
+                    <InterfacePicker
+                      label={`${label} interface ${position}`}
+                      row={row}
+                      catalogue={catalogue}
+                      disabled={disabled}
+                      onChange={(next) => update(row.key, next)}
+                      onView={onView}
+                    />
+                  </td>
+                  {!disabled && (
+                    <td className="px-3 py-2">
+                      <button type="button" className="icon-btn icon-btn-danger" aria-label={`Remove ${heading} ${position}`} title="Remove" onClick={() => onChange(rows.filter((item) => item.key !== row.key))}>
+                        <span className="material-symbols-outlined text-base">delete</span>
+                      </button>
+                    </td>
+                  )}
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      )}
+      {!disabled && (
+        <button
+          type="button"
+          className="btn"
+          onClick={() => onChange([...rows, { key: partyKey(), system: "", interface_id: "", interface_name: "" }])}
+        >
+          Add {heading}
+        </button>
+      )}
     </fieldset>
+  );
+}
+
+function InterfacePicker({
+  label,
+  row,
+  catalogue,
+  disabled,
+  onChange,
+  onView,
+}: {
+  label: string;
+  row: PartyRow;
+  catalogue: KnownInterface[];
+  disabled?: boolean;
+  onChange: (patch: Partial<PartyRow>) => void;
+  onView: (item: KnownInterface) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const matches = useMemo(() => {
+    const needle = row.interface_name.trim().toLowerCase();
+    const pool = needle
+      ? catalogue.filter((item) => item.interface_name.toLowerCase().includes(needle) || item.endpoint.toLowerCase().includes(needle))
+      : catalogue;
+    return pool.slice(0, 8);
+  }, [catalogue, row.interface_name]);
+  const linked = catalogue.find((item) => item.interface_id === row.interface_id);
+
+  async function view() {
+    if (linked) {
+      onView(linked);
+      return;
+    }
+    if (!row.interface_id) return;
+    const data = await api<InterfaceRecord>(`/api/interfaces/id/${encodeURIComponent(row.interface_id)}`);
+    onView({ interface_id: data.interface_id, channel: data.channel, interface_name: data.interface_name, endpoint: data.endpoint || "" });
+  }
+
+  return (
+    <div className="relative">
+      <div className="flex items-center gap-1">
+        <input
+          className="field"
+          aria-label={label}
+          aria-expanded={open}
+          aria-autocomplete="list"
+          value={row.interface_name}
+          disabled={disabled}
+          placeholder="Search or type an interface"
+          onFocus={() => setOpen(true)}
+          onBlur={() => setOpen(false)}
+          onChange={(event) => onChange({ interface_name: event.target.value, interface_id: "" })}
+        />
+        {row.interface_id && (
+          <button type="button" className="icon-btn shrink-0" aria-label={`View ${row.interface_name || "interface"}`} title="View interface" onMouseDown={(event) => event.preventDefault()} onClick={() => void view()}>
+            <span className="material-symbols-outlined text-base">open_in_new</span>
+          </button>
+        )}
+      </div>
+      {open && matches.length > 0 && (
+        <ul role="listbox" aria-label={`${label} matches`} className="absolute z-20 mt-1 max-h-48 w-full overflow-y-auto rounded border border-hairline bg-panel shadow-lg">
+          {matches.map((item) => (
+            <li key={item.interface_id}>
+              <button
+                type="button"
+                role="option"
+                className="flex w-full items-center justify-between gap-2 px-3 py-2 text-left text-sm hover:bg-surface"
+                onMouseDown={(event) => event.preventDefault()}
+                onClick={() => {
+                  onChange({ interface_id: item.interface_id, interface_name: item.interface_name });
+                  setOpen(false);
+                }}
+              >
+                <span className="min-w-0 truncate">{item.interface_name}</span>
+                <span className="font-label text-xs text-muted truncate">{item.endpoint || "—"}</span>
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
   );
 }
 
@@ -198,8 +360,11 @@ function InterfaceFormDialog({
   const [endpoint, setEndpoint] = useState(record?.endpoint ?? "");
   const [description, setDescription] = useState(record?.description ?? "");
   const [protocol, setProtocol] = useState(record?.protocol ?? "API");
-  const [sources, setSources] = useState<string[]>(record ? countryCodes(record.source) : []);
-  const [destinations, setDestinations] = useState<string[]>(record ? countryCodes(record.destination) : []);
+  const [format, setFormat] = useState(record?.format ?? "");
+  const [upstream, setUpstream] = useState<PartyRow[]>(() => toParties(record?.upstream, record?.source ?? ""));
+  const [downstream, setDownstream] = useState<PartyRow[]>(() => toParties(record?.downstream, record?.destination ?? ""));
+  const [catalogue, setCatalogue] = useState<KnownInterface[]>([]);
+  const [viewingParty, setViewingParty] = useState<KnownInterface | null>(null);
   const [fields, setFields] = useState<InterfaceField[]>(record?.fields ?? []);
   const [processingRules, setProcessingRules] = useState(record?.processing_rules ?? "");
   const [validationRules, setValidationRules] = useState(record?.validation_rules ?? "");
@@ -218,6 +383,9 @@ function InterfaceFormDialog({
         setFields(data.fields ?? []);
         setProcessingRules(data.processing_rules ?? "");
         setValidationRules(data.validation_rules ?? "");
+        setFormat(data.format ?? "");
+        setUpstream(toParties(data.upstream, data.source));
+        setDownstream(toParties(data.downstream, data.destination));
         setReady(true);
       })
       .catch((err: unknown) => {
@@ -230,6 +398,27 @@ function InterfaceFormDialog({
     };
   }, [channel, record]);
 
+  useEffect(() => {
+    let current = true;
+    api<Catalogs>("/api/catalogs")
+      .then(async (catalogs) => {
+        const channels = catalogs.interface_channels?.length ? catalogs.interface_channels : [channel];
+        const lists = await Promise.all(channels.map((item) => api<InterfaceRecord[]>(`/api/interfaces/${encodeURIComponent(item)}`).catch(() => [] as InterfaceRecord[])));
+        if (!current) return;
+        const editingId = record?.interface_id;
+        setCatalogue(
+          lists
+            .flat()
+            .filter((row) => row.interface_id !== editingId)
+            .map((row) => ({ interface_id: row.interface_id, channel: row.channel, interface_name: row.interface_name, endpoint: row.endpoint || "" })),
+        );
+      })
+      .catch(() => undefined);
+    return () => {
+      current = false;
+    };
+  }, [channel, record?.interface_id]);
+
   function toggle(list: string[], code: string, setList: (next: string[]) => void) {
     setList(list.includes(code) ? list.filter((item) => item !== code) : [...list, code]);
   }
@@ -237,20 +426,31 @@ function InterfaceFormDialog({
   async function submit(event: FormEvent) {
     event.preventDefault();
     const country = allCountries ? "" : countries.filter((code) => selectedCountries.includes(code)).join(",");
-    if ((!allCountries && !country) || !name.trim() || sources.length === 0 || destinations.length === 0) {
-      setError("Choose All countries or at least one country, a name, and at least one source and destination.");
+    const known = new Set(systems.map((item) => item.system_code.toUpperCase()));
+    const invalid = [...upstream, ...downstream].map((row) => systemProblem(row.system, known)).filter(Boolean);
+    if ((!allCountries && !country) || !name.trim()) {
+      setError("Choose All countries or at least one country, and a name.");
+      return;
+    }
+    if (invalid.length > 0) {
+      setError(invalid[0]);
       return;
     }
     setBusy(true);
     setError("");
+    const parties = (rows: PartyRow[]) =>
+      rows
+        .filter((row) => row.system.trim() || row.interface_name.trim() || row.interface_id)
+        .map(({ system, interface_id, interface_name }) => ({ system: system.trim(), interface_id, interface_name: interface_name.trim() }));
     const payload = {
       country,
       interface_name: name.trim(),
       endpoint: endpoint.trim(),
       description: description.trim(),
       protocol,
-      source: sources.join(", "),
-      destination: destinations.join(", "),
+      format,
+      upstream: parties(upstream),
+      downstream: parties(downstream),
       processing_rules: processingRules,
       validation_rules: validationRules,
       fields,
@@ -340,25 +540,40 @@ function InterfaceFormDialog({
           <span className="font-label text-[10px] uppercase text-muted">Endpoint</span>
           <input className="field mt-1" aria-label="Endpoint" value={endpoint} disabled={locked} onChange={(e) => setEndpoint(e.target.value)} />
         </label>
-        <label className="block">
-          <span className="font-label text-[10px] uppercase text-muted">Protocol</span>
-          <div className="mt-1">
-            <SelectField
-              aria-label="Protocol"
-              value={protocol}
-              disabled={locked}
-              className="w-full [&_button]:w-full [&_button]:max-w-none"
-              options={PROTOCOLS.map((item) => ({ value: item, label: item }))}
-              onChange={setProtocol}
-            />
-          </div>
-        </label>
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <label className="block">
+            <span className="font-label text-[10px] uppercase text-muted">Protocol</span>
+            <div className="mt-1">
+              <SelectField
+                aria-label="Protocol"
+                value={protocol}
+                disabled={locked}
+                className="w-full [&_button]:w-full [&_button]:max-w-none"
+                options={PROTOCOLS.map((item) => ({ value: item, label: item }))}
+                onChange={setProtocol}
+              />
+            </div>
+          </label>
+          <label className="block">
+            <span className="font-label text-[10px] uppercase text-muted">Format</span>
+            <div className="mt-1">
+              <SelectField
+                aria-label="Format"
+                value={format}
+                disabled={locked}
+                className="w-full [&_button]:w-full [&_button]:max-w-none"
+                options={[{ value: "", label: "—" }, ...FORMATS.map((item) => ({ value: item, label: item }))]}
+                onChange={setFormat}
+              />
+            </div>
+          </label>
+        </div>
         <label className="block">
           <span className="font-label text-[10px] uppercase text-muted">Description</span>
           <textarea className="field mt-1 min-h-[70px]" aria-label="Description" value={description} disabled={locked} onChange={(e) => setDescription(e.target.value)} />
         </label>
-        <SystemChecks label="Source" systems={systems} selected={sources} disabled={locked} onToggle={(code) => toggle(sources, code, setSources)} />
-        <SystemChecks label="Destination" systems={systems} selected={destinations} disabled={locked} onToggle={(code) => toggle(destinations, code, setDestinations)} />
+        <InterfacePartyTable label="Upstream interfaces" rows={upstream} systems={systems} catalogue={catalogue} disabled={locked} onChange={setUpstream} onView={setViewingParty} />
+        <InterfacePartyTable label="Downstream interfaces" rows={downstream} systems={systems} catalogue={catalogue} disabled={locked} onChange={setDownstream} onView={setViewingParty} />
           </>
         )}
         {(section === "request" || section === "response") && (
@@ -399,12 +614,21 @@ function InterfaceFormDialog({
             {readOnly ? "Close" : "Cancel"}
           </button>
           {!readOnly && (
-            <button type="submit" className="btn btn-primary" disabled={busy || !ready || !name.trim() || sources.length === 0 || destinations.length === 0}>
+            <button type="submit" className="btn btn-primary" disabled={busy || !ready || !name.trim()}>
               {editing ? "Save" : "Add"}
             </button>
           )}
         </div>
       </form>
+      {viewingParty && (
+        <InterfaceDetailDialog
+          channel={viewingParty.channel}
+          interfaceId={viewingParty.interface_id}
+          fallbackName={viewingParty.interface_name}
+          layerClass="z-[80]"
+          onClose={() => setViewingParty(null)}
+        />
+      )}
       {uploadingFields && (
         <UploadFieldsDialog
           channel={channel}

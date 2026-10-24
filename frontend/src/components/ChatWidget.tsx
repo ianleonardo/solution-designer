@@ -4,7 +4,7 @@ import { useParams } from "react-router-dom";
 import { api, ApiError } from "../api";
 
 // html:false stops raw tags in a model reply from being injected into the page.
-const markdown = new MarkdownIt({ html: false, linkify: true, breaks: true });
+const markdown = new MarkdownIt({ html: false, linkify: true, breaks: true }).enable("table");
 
 type ChatMessage = { role: "user" | "assistant"; text: string };
 type PanelPosition = { left: number; top: number };

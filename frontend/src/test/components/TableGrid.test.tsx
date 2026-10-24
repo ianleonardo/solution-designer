@@ -212,8 +212,8 @@ describe("TableGrid", () => {
         readOnly={false}
       />,
     );
-    expect(screen.getByRole("img", { name: /Row 1: Filled from the Knowledge Base/ })).toBeTruthy();
-    expect(screen.getByRole("img", { name: /Row 3: Changed in the Knowledge Base/ })).toBeTruthy();
+    expect(screen.getByRole("button", { name: /Row 1: Filled from the Knowledge Base/ })).toBeTruthy();
+    expect(screen.getByRole("button", { name: /Row 3: Changed in the Knowledge Base/ })).toBeTruthy();
     expect(screen.queryByRole("img", { name: /Row 2:/ })).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Delete row 1" }));
     const [rows, links] = onChange.mock.calls.at(-1)!;
@@ -221,5 +221,13 @@ describe("TableGrid", () => {
     expect(links.map((item: { id: string } | null) => item?.id ?? null)).toEqual([null, "c"]);
     fireEvent.click(screen.getByRole("button", { name: "Add row" }));
     expect(onChange.mock.calls.at(-1)![1]).toHaveLength(4);
+  });
+
+  it("opens the Knowledge Base item when the chain icon is clicked", () => {
+    const onView = vi.fn();
+    const link = { kind: "interface" as const, id: "i1", owned: [1], values: { "1": "Balance" }, state: "ok" as const };
+    render(<TableGrid columns={["Name"]} rows={[["Balance"]]} links={[link]} onChange={vi.fn()} onView={onView} readOnly />);
+    fireEvent.click(screen.getByRole("button", { name: /Row 1: Filled from the Knowledge Base/ }));
+    expect(onView).toHaveBeenCalledWith(link);
   });
 });

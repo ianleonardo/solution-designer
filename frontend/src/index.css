@@ -299,20 +299,28 @@ input.no-spinner {
   padding: 0.75rem;
 }
 
-.prose-editor .ProseMirror h1 { font-size: 1.5rem; font-weight: 700; margin: 0.85rem 0 0.3rem; }
-.prose-editor .ProseMirror h2 { font-size: 1.25rem; font-weight: 700; margin: 0.75rem 0 0.25rem; }
-.prose-editor .ProseMirror h3 { font-size: 1.05rem; font-weight: 700; margin: 0.6rem 0 0.25rem; }
+.prose-editor .ProseMirror h1,
+.rules-editor .ProseMirror h1 { font-size: 1.5rem; font-weight: 700; margin: 0.85rem 0 0.3rem; }
+.prose-editor .ProseMirror h2,
+.rules-editor .ProseMirror h2 { font-size: 1.25rem; font-weight: 700; margin: 0.75rem 0 0.25rem; }
+.prose-editor .ProseMirror h3,
+.rules-editor .ProseMirror h3 { font-size: 1.05rem; font-weight: 700; margin: 0.6rem 0 0.25rem; }
 .prose-editor .ProseMirror ul,
 .prose-editor .ProseMirror ol { margin: 0.4rem 0; padding-left: 1.25rem; }
 .prose-editor .ProseMirror ul { list-style: disc; }
 .prose-editor .ProseMirror ol { list-style: decimal; }
-.prose-editor .ProseMirror blockquote { border-left: 3px solid var(--line); padding-left: 0.75rem; color: var(--muted); margin: 0.5rem 0; }
-.prose-editor .ProseMirror hr { border: 0; border-top: 1px solid var(--line); margin: 0.75rem 0; }
-.prose-editor .ProseMirror a { color: var(--accent); text-decoration: underline; }
-.prose-editor .ProseMirror code { font-family: "JetBrains Mono", ui-monospace, monospace; background: var(--inset); padding: 0.05rem 0.25rem; border-radius: 0.2rem; }
+.prose-editor .ProseMirror blockquote,
+.rules-editor .ProseMirror blockquote { border-left: 3px solid var(--line); padding-left: 0.75rem; color: var(--muted); margin: 0.5rem 0; }
+.prose-editor .ProseMirror hr,
+.rules-editor .ProseMirror hr { border: 0; border-top: 1px solid var(--line); margin: 0.75rem 0; }
+.prose-editor .ProseMirror a,
+.rules-editor .ProseMirror a { color: var(--accent); text-decoration: underline; }
+.prose-editor .ProseMirror code,
+.rules-editor .ProseMirror code { font-family: "JetBrains Mono", ui-monospace, monospace; background: var(--inset); padding: 0.05rem 0.25rem; border-radius: 0.2rem; }
 .prose-editor .ProseMirror strong { font-weight: 700; }
 .prose-editor .ProseMirror em { font-style: italic; }
-.prose-editor .ProseMirror s { text-decoration: line-through; }
+.prose-editor .ProseMirror s,
+.rules-editor .ProseMirror s { text-decoration: line-through; }
 .prose-editor .ProseMirror u { text-decoration: underline; }
 .icon-btn-active { border-color: var(--focus); color: var(--accent); background: var(--inset); }
 
@@ -360,7 +368,8 @@ input.no-spinner {
 .rules-editor .ProseMirror u,
 .rules-editor .rules-editor-surface u { text-decoration: underline; }
 .rules-editor .ProseMirror table,
-.rules-editor .rules-editor-surface table {
+.rules-editor .rules-editor-surface table,
+.prose-editor .ProseMirror table {
   border-collapse: collapse;
   width: 100%;
   margin: 0.5rem 0;
@@ -369,7 +378,9 @@ input.no-spinner {
 .rules-editor .ProseMirror th,
 .rules-editor .ProseMirror td,
 .rules-editor .rules-editor-surface th,
-.rules-editor .rules-editor-surface td {
+.rules-editor .rules-editor-surface td,
+.prose-editor .ProseMirror th,
+.prose-editor .ProseMirror td {
   border: 1px solid var(--line);
   padding: 0.35rem 0.5rem;
   vertical-align: top;
@@ -377,13 +388,17 @@ input.no-spinner {
   min-height: 1.75rem;
 }
 .rules-editor .ProseMirror th,
-.rules-editor .rules-editor-surface th { background: var(--inset); font-weight: 600; text-align: left; }
+.rules-editor .rules-editor-surface th,
+.prose-editor .ProseMirror th { background: var(--inset); font-weight: 600; text-align: left; }
 .rules-editor .ProseMirror .selectedCell,
-.rules-editor .rules-editor-surface .selectedCell { background: color-mix(in srgb, var(--focus) 18%, transparent); }
+.rules-editor .rules-editor-surface .selectedCell,
+.prose-editor .ProseMirror .selectedCell { background: color-mix(in srgb, var(--focus) 18%, transparent); }
 .rules-editor .ProseMirror td p,
 .rules-editor .ProseMirror th p,
 .rules-editor .rules-editor-surface td p,
-.rules-editor .rules-editor-surface th p {
+.rules-editor .rules-editor-surface th p,
+.prose-editor .ProseMirror td p,
+.prose-editor .ProseMirror th p {
   margin: 0;
   min-height: 1.25rem;
 }

@@ -9,7 +9,7 @@ import { KB_PAGE_SIZES } from "./TablePager";
 import { GuidelineDialog } from "./GuidelineDialog";
 import { can } from "../permissions";
 
-const markdown = new MarkdownIt({ html: false, linkify: true, breaks: true });
+const markdown = new MarkdownIt({ html: false, linkify: true, breaks: true }).enable("table");
 
 export const GUIDELINES_PAGE_SIZE = 25;
 

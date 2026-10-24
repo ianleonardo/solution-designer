@@ -104,6 +104,7 @@ def test_reports_edit_country_system_and_reject_duplicate_name(client):
         headers=auth(analyst),
     )
     assert first.status_code == 200, first.text
+    assert first.json()["sample"] is None
     second = client.post(
         "/api/reports",
         json={
@@ -209,3 +210,40 @@ def test_report_frequency_includes_adhoc_and_quarterly(client):
     )
     assert rejected.status_code == 400
     assert "Adhoc" in rejected.json()["detail"] and "Quarterly" in rejected.json()["detail"]
+
+
+def test_report_sample_can_be_uploaded_previewed_and_deleted(client):
+    admin = login(client, "Admin")
+    _system(client, admin)
+    analyst = login(client, "SuperAnalyst")
+    viewer = login(client, "Viewer")
+    created = client.post(
+        "/api/reports",
+        json={"country": "SG", "system_code": "SPL", "report_code": "RPT-01", "report_name": "Daily", "layout": "A"},
+        headers=auth(analyst),
+    )
+    assert created.status_code == 200, created.text
+    report_id = created.json()["report_id"]
+    png = b"\x89PNG\r\n\x1a\n" + b"\x00" * 16
+    forbidden = client.post(f"/api/reports/{report_id}/sample", files={"file": ("balance.png", png, "image/png")}, headers=auth(viewer))
+    assert forbidden.status_code == 403
+    rejected = client.post(f"/api/reports/{report_id}/sample", files={"file": ("notes.bin", b"\x00\x01", "application/octet-stream")}, headers=auth(analyst))
+    assert rejected.status_code == 400 and "text" in rejected.json()["detail"]
+    text = client.post(f"/api/reports/{report_id}/sample", files={"file": ("notes.txt", b"Posted SGD 10.00", "text/plain")}, headers=auth(analyst))
+    assert text.status_code == 200, text.text
+    assert text.json()["sample"] == {"filename": "notes.txt", "media_type": "text/plain"}
+    text_preview = client.get(f"/api/reports/{report_id}/sample", headers=auth(viewer))
+    assert text_preview.status_code == 200 and text_preview.content == b"Posted SGD 10.00"
+    assert text_preview.headers["content-type"].startswith("text/plain")
+
+    uploaded = client.post(f"/api/reports/{report_id}/sample", files={"file": ("balance.png", png, "image/png")}, headers=auth(analyst))
+    assert uploaded.status_code == 200, uploaded.text
+    assert uploaded.json()["sample"] == {"filename": "balance.png", "media_type": "image/png"}
+    preview = client.get(f"/api/reports/{report_id}/sample", headers=auth(viewer))
+    assert preview.status_code == 200
+    assert preview.content.startswith(b"\x89PNG")
+    assert preview.headers["content-type"].startswith("image/png")
+
+    removed = client.delete(f"/api/reports/{report_id}/sample", headers=auth(analyst))
+    assert removed.status_code == 200 and removed.json()["sample"] is None
+    assert client.get(f"/api/reports/{report_id}/sample", headers=auth(viewer)).status_code == 404

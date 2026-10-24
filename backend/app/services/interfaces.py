@@ -2,6 +2,7 @@
 
 import io
 import re
+import json
 import uuid
 from datetime import datetime, timezone
 
@@ -12,6 +13,9 @@ from app.permissions import require
 from app.services import gcs, systems
 
 PROTOCOLS = ("API", "MQ", "Kafka", "gRPC", "FTP", "SMTP", "SMPP")
+FORMATS = ("JSON", "XML", "Fixed length", "Delimiter")
+MAX_PARTIES = 50
+MAX_PARTY_NAME = 200
 HEADERS = ("Interface name", "Endpoint", "Description", "Protocol", "Source", "Destination")
 FIELD_HEADERS = ("Direction", "Field path", "Type", "Required", "Length", "Validation", "Description", "Example")
 MAX_ROWS = 5000
@@ -100,6 +104,95 @@ def _system_codes(value: str, label: str) -> str:
     return ", ".join(codes)
 
 
+def _known_codes(codes: list[str], label: str) -> str:
+    known = systems.existing_codes()
+    unknown = [code for code in codes if code not in known]
+    if unknown:
+        raise AppError(400, f"{label} '{', '.join(unknown)}' is not a known system code.")
+    return ", ".join(codes)
+
+
+def _format(value: str) -> str:
+    text = (value or "").strip()
+    if not text:
+        return ""
+    canonical = _canonical(text, FORMATS)
+    if canonical is None:
+        raise AppError(400, f"Format must be one of: {', '.join(FORMATS)}.")
+    return canonical
+
+
+def _party_rows(value, label: str) -> tuple[str, str]:
+    """A table of system/interface pairs. Returns stored JSON and the joined system codes.
+
+    A string is the older comma-separated system list and stays required.
+    A list may be empty. Each system cell holds one code, or is blank.
+    """
+    if isinstance(value, str):
+        joined = _system_codes(value, label)
+        rows = [{"system": code, "interface_id": "", "interface_name": ""} for code in systems.split_codes(joined)]
+        return json.dumps(rows), joined
+    if not isinstance(value, list):
+        raise AppError(400, f"{label} must be a list.")
+    if len(value) > MAX_PARTIES:
+        raise AppError(400, f"{label} can have at most {MAX_PARTIES} rows.")
+    cleaned: list[dict] = []
+    ordered: list[str] = []
+    for item in value:
+        if not isinstance(item, dict):
+            raise AppError(400, f"{label} rows must include a system and an interface.")
+        codes = systems.split_codes(str(item.get("system") or "").replace(";", ","))
+        system = _known_codes(codes, label) if codes else ""
+        if len(codes) > 1:
+            raise AppError(400, f"{label} system must be a single system code.")
+        interface_id = str(item.get("interface_id") or "").strip()
+        interface_name = str(item.get("interface_name") or "").strip()
+        if len(interface_name) > MAX_PARTY_NAME:
+            raise AppError(400, f"{label} interface must be {MAX_PARTY_NAME} characters or fewer.")
+        if interface_id:
+            match = db.fetchone("SELECT interface_id, interface_name FROM interfaces WHERE interface_id = ?", [interface_id])
+            if match is None:
+                interface_id = ""
+            elif not interface_name:
+                interface_name = match["interface_name"]
+        if not system and not interface_name and not interface_id:
+            continue
+        cleaned.append({"system": system, "interface_id": interface_id, "interface_name": interface_name})
+        for code in codes:
+            if code not in ordered:
+                ordered.append(code)
+    return json.dumps(cleaned), ", ".join(ordered)
+
+
+def _public_parties(raw: str | None, fallback_codes: str) -> list[dict]:
+    try:
+        parsed = json.loads(raw or "[]")
+    except json.JSONDecodeError:
+        parsed = []
+    rows: list[dict] = []
+    if isinstance(parsed, list):
+        for item in parsed:
+            if not isinstance(item, dict):
+                continue
+            system = str(item.get("system") or "")
+            interface_id = str(item.get("interface_id") or "")
+            interface_name = str(item.get("interface_name") or "")
+            codes = systems.split_codes(system)
+            if len(codes) > 1:
+                for code in codes:
+                    rows.append({"system": code, "interface_id": interface_id, "interface_name": interface_name})
+            elif system or interface_id or interface_name:
+                rows.append({"system": system, "interface_id": interface_id, "interface_name": interface_name})
+    if rows:
+        return rows
+    return [{"system": code, "interface_id": "", "interface_name": ""} for code in systems.split_codes(fallback_codes or "")]
+
+
+def _parties_from_codes(codes: str) -> str:
+    rows = [{"system": code, "interface_id": "", "interface_name": ""} for code in systems.split_codes(codes)]
+    return json.dumps(rows)
+
+
 def _endpoint(value: str) -> str:
     text = (value or "").strip()
     if len(text) > MAX_ENDPOINT:
@@ -138,10 +231,11 @@ def text_for(row: dict) -> str:
     """
     description = f" {row['description']}" if row.get("description") else ""
     endpoint = f" Endpoint {row['endpoint']}." if row.get("endpoint") else ""
+    format_note = f" Format {row['format']}." if row.get("format") else ""
     lines = [
         (
             f"Interface {row['interface_name']} ({row['channel']} channel, country {country_label(row.get('country') or '')}).{description}{endpoint} "
-            f"Protocol {row['protocol']}. Source {row['source']} -> Destination {row['destination']}."
+            f"Protocol {row['protocol']}. Source {row['source']} -> Destination {row['destination']}.{format_note}"
         )
     ]
     for field in row.get("fields") or []:
@@ -327,14 +421,24 @@ def markdown_body(record: dict) -> tuple[str, str]:
         f"**Applicable for:** {country}",
         f"**Endpoint:** {record.get('endpoint') or ''}",
         f"**Protocol:** {record.get('protocol') or ''}",
-        f"**Source:** {record.get('source') or ''}",
-        f"**Destination:** {record.get('destination') or ''}",
+        f"**Format:** {record.get('format') or ''}",
+    ]
+    for heading, key in (("Upstream interfaces", "upstream"), ("Downstream interfaces", "downstream")):
+        lines.extend(["", f"## {heading}", ""])
+        parties = record.get(key) or []
+        if not parties:
+            lines.append("None.")
+            continue
+        lines.extend(["| System | Interface |", "| --- | --- |"])
+        for party in parties:
+            lines.append(f"| {_md_cell(party.get('system') or '')} | {_md_cell(party.get('interface_name') or '')} |")
+    lines.extend([
         "",
         "## Description",
         "",
         record.get("description") or "",
         "",
-    ]
+    ])
     required = {"Y": "Required", "N": "Optional", "C": "Conditional"}
     for heading, direction in (("Request", "request"), ("Response", "response")):
         lines.extend([f"## {heading}", ""])
@@ -364,6 +468,14 @@ def markdown_body(record: dict) -> tuple[str, str]:
     return title, "\n".join(lines).rstrip() + "\n"
 
 
+def get_interface_by_id(interface_id: str) -> dict:
+    """The specification for an interface id, whichever channel it belongs to."""
+    row = db.fetchone("SELECT channel FROM interfaces WHERE interface_id = ?", [interface_id])
+    if row is None:
+        raise AppError(404, "Interface not found")
+    return get_interface(row["channel"], interface_id)
+
+
 def list_interfaces(channel: str) -> list[dict]:
     rows = db.fetchall(
         """
@@ -378,8 +490,8 @@ def list_interfaces(channel: str) -> list[dict]:
 def get_interface(channel: str, interface_id: str) -> dict:
     row = db.fetchone(
         """
-        SELECT interface_id, channel, country, interface_name, endpoint, description, protocol, source, destination,
-               processing_rules, validation_rules
+        SELECT interface_id, channel, country, interface_name, endpoint, description, protocol, format, source, destination,
+               upstream_interfaces, downstream_interfaces, processing_rules, validation_rules
         FROM interfaces WHERE channel = ? AND interface_id = ?
         """,
         [_channel(channel), interface_id],
@@ -387,6 +499,9 @@ def get_interface(channel: str, interface_id: str) -> dict:
     if row is None:
         raise AppError(404, "Interface not found")
     detail = dict(row)
+    detail["format"] = detail.get("format") or ""
+    detail["upstream"] = _public_parties(detail.pop("upstream_interfaces", None), detail.get("source") or "")
+    detail["downstream"] = _public_parties(detail.pop("downstream_interfaces", None), detail.get("destination") or "")
     detail["processing_rules"] = detail.get("processing_rules") or ""
     detail["validation_rules"] = detail.get("validation_rules") or ""
     detail["fields"] = [_public_field(field) for field in fields_by_interface([interface_id]).get(interface_id, [])]
@@ -407,8 +522,12 @@ def create_interface(user: dict, channel: str, body: dict) -> dict:
         raise AppError(400, f"Description must be {MAX_DESCRIPTION} characters or fewer.")
     endpoint = _endpoint(str(body.get("endpoint") or ""))
     protocol = _protocol(str(body.get("protocol") or ""))
-    source = _system_codes(str(body.get("source") or ""), "Source")
-    destination = _system_codes(str(body.get("destination") or ""), "Destination")
+    message_format = _format(str(body.get("format") or ""))
+    upstream_json, source = _party_rows(body["upstream"] if "upstream" in body else str(body.get("source") or ""), "Upstream interfaces")
+    downstream_json, destination = _party_rows(
+        body["downstream"] if "downstream" in body else str(body.get("destination") or ""),
+        "Downstream interfaces",
+    )
     processing_rules = _rules(str(body.get("processing_rules") or ""), "Processing rules")
     validation_rules = _rules(str(body.get("validation_rules") or ""), "Validation rules")
     fields = _parse_fields(body) or []
@@ -416,11 +535,27 @@ def create_interface(user: dict, channel: str, body: dict) -> dict:
     db.exec_sql(
         """
         INSERT INTO interfaces (
-            interface_id, channel, country, interface_name, endpoint, description, protocol, source, destination,
-            processing_rules, validation_rules, created_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            interface_id, channel, country, interface_name, endpoint, description, protocol, format, source, destination,
+            upstream_interfaces, downstream_interfaces, processing_rules, validation_rules, created_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
-        [interface_id, channel, country, name, endpoint, description, protocol, source, destination, processing_rules, validation_rules, _now()],
+        [
+            interface_id,
+            channel,
+            country,
+            name,
+            endpoint,
+            description,
+            protocol,
+            message_format,
+            source,
+            destination,
+            upstream_json,
+            downstream_json,
+            processing_rules,
+            validation_rules,
+            _now(),
+        ],
     )
     if fields:
         _replace_fields(interface_id, fields)
@@ -445,19 +580,46 @@ def update_interface(user: dict, channel: str, interface_id: str, body: dict) ->
         raise AppError(400, f"Description must be {MAX_DESCRIPTION} characters or fewer.")
     endpoint = _endpoint(str(body.get("endpoint", current.get("endpoint") or "") or ""))
     protocol = _protocol(str(body.get("protocol", current["protocol"]) or ""))
-    source = _system_codes(str(body.get("source", current["source"]) or ""), "Source")
-    destination = _system_codes(str(body.get("destination", current["destination"]) or ""), "Destination")
+    message_format = _format(str(body.get("format", current.get("format") or "") or ""))
+    if "upstream" in body:
+        upstream_value = body["upstream"]
+    elif "source" in body:
+        upstream_value = str(body.get("source") or "")
+    else:
+        upstream_value = current.get("upstream") or []
+    if "downstream" in body:
+        downstream_value = body["downstream"]
+    elif "destination" in body:
+        downstream_value = str(body.get("destination") or "")
+    else:
+        downstream_value = current.get("downstream") or []
+    upstream_json, source = _party_rows(upstream_value, "Upstream interfaces")
+    downstream_json, destination = _party_rows(downstream_value, "Downstream interfaces")
     processing_rules = _rules(str(body.get("processing_rules", current.get("processing_rules") or "") or ""), "Processing rules")
     validation_rules = _rules(str(body.get("validation_rules", current.get("validation_rules") or "") or ""), "Validation rules")
     fields = _parse_fields(body)
     db.exec_sql(
         """
         UPDATE interfaces
-        SET country = ?, interface_name = ?, endpoint = ?, description = ?, protocol = ?, source = ?, destination = ?,
-            processing_rules = ?, validation_rules = ?, embedding = NULL
+        SET country = ?, interface_name = ?, endpoint = ?, description = ?, protocol = ?, format = ?, source = ?, destination = ?,
+            upstream_interfaces = ?, downstream_interfaces = ?, processing_rules = ?, validation_rules = ?, embedding = NULL
         WHERE interface_id = ?
         """,
-        [country, name, endpoint, description, protocol, source, destination, processing_rules, validation_rules, interface_id],
+        [
+            country,
+            name,
+            endpoint,
+            description,
+            protocol,
+            message_format,
+            source,
+            destination,
+            upstream_json,
+            downstream_json,
+            processing_rules,
+            validation_rules,
+            interface_id,
+        ],
     )
     if fields is not None:
         _replace_fields(interface_id, fields)
@@ -623,10 +785,20 @@ def replace_from_excel(user: dict, channel: str, country_raw: str, filename: str
             db.exec_sql(
                 """
                 UPDATE interfaces
-                SET endpoint = ?, description = ?, protocol = ?, source = ?, destination = ?, embedding = NULL
+                SET endpoint = ?, description = ?, protocol = ?, source = ?, destination = ?,
+                    upstream_interfaces = ?, downstream_interfaces = ?, embedding = NULL
                 WHERE interface_id = ?
                 """,
-                [record["endpoint"], record["description"], record["protocol"], record["source"], record["destination"], interface_id],
+                [
+                    record["endpoint"],
+                    record["description"],
+                    record["protocol"],
+                    record["source"],
+                    record["destination"],
+                    _parties_from_codes(record["source"]),
+                    _parties_from_codes(record["destination"]),
+                    interface_id,
+                ],
             )
             kept.add(interface_id)
             continue

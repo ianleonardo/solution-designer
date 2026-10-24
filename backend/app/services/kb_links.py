@@ -121,6 +121,8 @@ def row_for(source: str, record: dict, columns: list[str]) -> tuple[list[str], d
     link = {"kind": SOURCE_KIND[source], "id": record["_id"], "owned": owned, "values": {str(i): cells[i] for i in owned}}
     if source == "tables":
         link["table_id"] = record["table_id"]
+    if source == "interfaces":
+        link["channel"] = record.get("channel") or ""
     return cells, link
 
 

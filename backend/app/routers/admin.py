@@ -317,6 +317,12 @@ def list_interfaces(channel: str, user: dict = Depends(current_user)):
     return interfaces.list_interfaces(channel)
 
 
+@router.get("/interfaces/id/{interface_id}")
+def get_interface_by_id(interface_id: str, user: dict = Depends(current_user)):
+    del user
+    return interfaces.get_interface_by_id(interface_id)
+
+
 @router.get("/interfaces/{channel}/{interface_id}")
 def get_interface(channel: str, interface_id: str, user: dict = Depends(current_user)):
     del user
@@ -464,6 +470,23 @@ async def upload_reports(
 def get_report(report_id: str, user: dict = Depends(current_user)):
     del user
     return reports.get_report(report_id)
+
+
+@router.post("/reports/{report_id}/sample")
+async def upload_report_sample(report_id: str, file: UploadFile = File(...), user: dict = Depends(require_kb_editor)):
+    return reports.save_sample(user, report_id, file.filename or "sample", await file.read())
+
+
+@router.delete("/reports/{report_id}/sample")
+def delete_report_sample(report_id: str, user: dict = Depends(require_kb_editor)):
+    return reports.delete_sample(user, report_id)
+
+
+@router.get("/reports/{report_id}/sample")
+def download_report_sample(report_id: str, user: dict = Depends(current_user)):
+    del user
+    path, media_type, filename = reports.read_sample(report_id)
+    return FileResponse(path, media_type=media_type, content_disposition_type="inline", filename=filename)
 
 
 @router.patch("/reports/{report_id}")

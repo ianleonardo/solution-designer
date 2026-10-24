@@ -1,16 +1,99 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
-import { api, ApiError, type RowError } from "../api";
+import { api, ApiError, authHeaders, type RowError } from "../api";
 import { useOptionalAuth } from "../auth";
-import type { Catalogs, KbReportRecord, SystemRecord } from "../types";
+import type { Catalogs, KbReportRecord, ReportSample, SystemRecord } from "../types";
 import { ConfirmDialog } from "./ConfirmDialog";
 import { FrequencyField, REPORT_FREQUENCY_CHOICES, frequencyText, selectedFrequencies } from "./FrequencyField";
 import { FileDrop } from "./FileDrop";
 import { appliesToCountry, countryLabel } from "../countries";
+import { renderMarkdown } from "../markdown";
+import { ProcessingRulesEditor } from "./ProcessingRulesEditor";
 import { SelectField } from "./SelectField";
 import { SortHeader, sortRows, toggleColumnSort, type ColumnSort } from "./SortHeader";
 import { PageSlice } from "./TablePager";
 import { can } from "../permissions";
+
+function SamplePreviewDialog({
+  filename,
+  mediaType,
+  reportId,
+  file,
+  onClose,
+}: {
+  filename: string;
+  mediaType: string;
+  reportId?: string;
+  file?: File | null;
+  onClose: () => void;
+}) {
+  const [url, setUrl] = useState("");
+  const [text, setText] = useState("");
+  const [error, setError] = useState("");
+  const plain = mediaType.startsWith("text/");
+
+  useEffect(() => {
+    let cancelled = false;
+    let objectUrl = "";
+    setUrl("");
+    setText("");
+    setError("");
+    if (file) {
+      if (plain) {
+        file.text().then((value) => {
+          if (!cancelled) setText(value);
+        });
+        return () => {
+          cancelled = true;
+        };
+      }
+      objectUrl = URL.createObjectURL(file);
+      setUrl(objectUrl);
+      return () => URL.revokeObjectURL(objectUrl);
+    }
+    if (!reportId) return undefined;
+    fetch(`/api/reports/${encodeURIComponent(reportId)}/sample`, { headers: authHeaders() })
+      .then(async (response) => {
+        if (!response.ok) throw new Error("Could not load the sample");
+        const blob = await response.blob();
+        if (cancelled) return;
+        if (plain) {
+          setText(await blob.text());
+          return;
+        }
+        objectUrl = URL.createObjectURL(blob);
+        setUrl(objectUrl);
+      })
+      .catch(() => {
+        if (!cancelled) setError("Could not load the sample");
+      });
+    return () => {
+      cancelled = true;
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+    };
+  }, [file, plain, reportId]);
+
+  const image = mediaType.startsWith("image/");
+  return (
+    <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/50 p-4" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && onClose()}>
+      <div role="dialog" aria-modal="true" aria-label={`Preview ${filename}`} className="flex max-h-[90vh] w-full max-w-4xl flex-col overflow-hidden rounded-lg border border-hairline bg-panel shadow-xl">
+        <div className="flex items-center justify-between gap-3 border-b border-hairline px-5 py-4">
+          <h3 className="font-headline text-lg font-semibold m-0 truncate">{filename}</h3>
+          <button type="button" className="icon-btn" aria-label="Close preview" onClick={onClose}>
+            <span className="material-symbols-outlined text-base">close</span>
+          </button>
+        </div>
+        <div className="min-h-0 flex-1 overflow-auto p-5">
+          {error && <p className="text-alert text-sm">{error}</p>}
+          {!url && !text && !error && <p className="text-muted text-sm">Loading…</p>}
+          {plain && text && <pre className="whitespace-pre-wrap text-sm bg-inset rounded border border-hairline p-4">{text}</pre>}
+          {url && image && <img src={url} alt={filename} className="max-w-full rounded border border-hairline" />}
+          {url && !image && !plain && <iframe title={filename} src={url} className="h-[70vh] w-full rounded border border-hairline bg-white" />}
+        </div>
+      </div>
+    </div>
+  );
+}
 
 function UploadReportsDialog({
   countries,
@@ -132,12 +215,14 @@ function ReportFormDialog({
   countries,
   systems,
   onSaved,
+  onChanged,
   onClose,
 }: {
   report?: KbReportRecord;
   countries: string[];
   systems: SystemRecord[];
   onSaved: (saved: KbReportRecord) => void;
+  onChanged?: (saved: KbReportRecord) => void;
   onClose: () => void;
 }) {
   const editing = Boolean(report);
@@ -149,6 +234,9 @@ function ReportFormDialog({
   const [frequencyOther, setFrequencyOther] = useState(report?.frequency_other ?? "");
   const [description, setDescription] = useState(report?.description ?? "");
   const [layout, setLayout] = useState(report?.layout ?? "");
+  const [sample, setSample] = useState<ReportSample | null>(report?.sample ?? null);
+  const [pending, setPending] = useState<File | null>(null);
+  const [previewing, setPreviewing] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
 
@@ -178,7 +266,7 @@ function ReportFormDialog({
         description: description.trim(),
         layout: layout.trim(),
       };
-      const saved = report
+      let saved = report
         ? await api<KbReportRecord>(`/api/reports/${encodeURIComponent(report.report_id)}`, {
             method: "PATCH",
             body: JSON.stringify(payload),
@@ -187,6 +275,11 @@ function ReportFormDialog({
             method: "POST",
             body: JSON.stringify(payload),
           });
+      if (!report && pending) {
+        const body = new FormData();
+        body.append("file", pending);
+        saved = await api<KbReportRecord>(`/api/reports/${encodeURIComponent(saved.report_id)}/sample`, { method: "POST", body });
+      }
       onSaved(saved);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Could not save report");
@@ -194,10 +287,51 @@ function ReportFormDialog({
     }
   }
 
+  async function uploadSample(file: File) {
+    if (!report) {
+      setPending(file);
+      setError("");
+      return;
+    }
+    setBusy(true);
+    setError("");
+    try {
+      const body = new FormData();
+      body.append("file", file);
+      const saved = await api<KbReportRecord>(`/api/reports/${encodeURIComponent(report.report_id)}/sample`, { method: "POST", body });
+      setSample(saved.sample ?? null);
+      onChanged?.(saved);
+      setBusy(false);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Could not upload the sample");
+      setBusy(false);
+    }
+  }
+
+  async function removeSample() {
+    if (!report) {
+      setPending(null);
+      return;
+    }
+    setBusy(true);
+    setError("");
+    try {
+      const saved = await api<KbReportRecord>(`/api/reports/${encodeURIComponent(report.report_id)}/sample`, { method: "DELETE" });
+      setSample(saved.sample ?? null);
+      onChanged?.(saved);
+      setBusy(false);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Could not delete the sample");
+      setBusy(false);
+    }
+  }
+
+  const sampleName = pending?.name || sample?.filename || "";
+  const sampleType = pending?.type || sample?.media_type || "";
   const title = editing ? "Edit report" : "Add report";
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" role="presentation" onMouseDown={(e) => e.target === e.currentTarget && !busy && onClose()}>
-      <form role="dialog" aria-modal="true" aria-label={title} className="w-full max-w-lg rounded-lg border border-hairline bg-panel p-6 shadow-xl space-y-3" onSubmit={(e) => void submit(e)}>
+      <form role="dialog" aria-modal="true" aria-label={title} className="flex max-h-[90vh] w-full max-w-3xl flex-col overflow-y-auto rounded-lg border border-hairline bg-panel p-6 shadow-xl space-y-3" onSubmit={(e) => void submit(e)}>
         <h2 className="font-headline text-xl font-semibold">{title}</h2>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <label className="block">
@@ -253,10 +387,28 @@ function ReportFormDialog({
           <span className="font-label text-[10px] uppercase text-muted">Description</span>
           <textarea className="field mt-1 min-h-[70px]" aria-label="Report description" value={description} disabled={busy} onChange={(e) => setDescription(e.target.value)} />
         </label>
-        <label className="block">
+        <div className="block">
           <span className="font-label text-[10px] uppercase text-muted">Layout</span>
-          <textarea className="field mt-1 min-h-[120px] font-mono text-xs" aria-label="Report layout" value={layout} disabled={busy} onChange={(e) => setLayout(e.target.value)} />
-        </label>
+          <div className="mt-1">
+            <ProcessingRulesEditor value={layout} onChange={setLayout} readOnly={busy} label="Report layout" toolbarLabel="Report layout formatting" />
+          </div>
+        </div>
+        <div className="block space-y-2">
+          <span className="font-label text-[10px] uppercase text-muted">Report sample</span>
+          {sampleName ? (
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-sm min-w-0 truncate">{sampleName}</span>
+              <button type="button" className="btn" disabled={busy} onClick={() => setPreviewing(true)}>
+                Preview
+              </button>
+              <button type="button" className="btn" disabled={busy} onClick={() => void removeSample()}>
+                Delete
+              </button>
+            </div>
+          ) : (
+            <FileDrop accept=".pdf,.txt,.png,.jpg,.jpeg,.gif,.webp" ariaLabel="Upload report sample" disabled={busy} buttonLabel="Upload" idleLabel="PDF, text, or image" onFile={(file) => void uploadSample(file)} />
+          )}
+        </div>
         {error && <p className="text-alert text-sm">{error}</p>}
         <div className="flex justify-end gap-2 pt-2">
           <button type="button" className="btn" disabled={busy} onClick={onClose}>
@@ -267,11 +419,15 @@ function ReportFormDialog({
           </button>
         </div>
       </form>
+      {previewing && sampleName && (
+        <SamplePreviewDialog filename={sampleName} mediaType={sampleType} reportId={pending ? undefined : report?.report_id} file={pending} onClose={() => setPreviewing(false)} />
+      )}
     </div>
   );
 }
 
 export function ReportLayoutDialog({ report, onClose, layerClass = "z-50" }: { report: KbReportRecord; onClose: () => void; layerClass?: string }) {
+  const [previewing, setPreviewing] = useState(false);
   return (
     <div className={`fixed inset-0 ${layerClass} flex items-center justify-center bg-black/50 p-4`} role="presentation" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
       <div role="dialog" aria-modal="true" aria-label={`Report ${report.report_name}`} className="w-full max-w-3xl max-h-[85vh] flex flex-col rounded-lg border border-hairline bg-panel shadow-xl">
@@ -291,11 +447,33 @@ export function ReportLayoutDialog({ report, onClose, layerClass = "z-50" }: { r
             <span className="material-symbols-outlined">close</span>
           </button>
         </div>
-        <div className="flex-1 overflow-auto p-5">
-          <h3 className="font-label text-[10px] uppercase text-muted mb-2">Report layout</h3>
-          <pre className="whitespace-pre-wrap text-sm bg-inset rounded-lg p-4 border border-hairline min-h-[12rem]">{report.layout || "No layout provided."}</pre>
+        <div className="flex-1 overflow-auto p-5 space-y-4">
+          <div>
+            <h3 className="font-label text-[10px] uppercase text-muted mb-2">Layout</h3>
+            {report.layout.trim() ? (
+              <div className="md-preview rounded-lg border border-hairline bg-inset p-4" aria-label="Report layout" dangerouslySetInnerHTML={{ __html: renderMarkdown(report.layout) }} />
+            ) : (
+              <p className="text-sm text-muted">No layout provided.</p>
+            )}
+          </div>
+          <div>
+            <h3 className="font-label text-[10px] uppercase text-muted mb-2">Report sample</h3>
+            {report.sample ? (
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="text-sm">{report.sample.filename}</span>
+                <button type="button" className="btn" onClick={() => setPreviewing(true)}>
+                  Preview
+                </button>
+              </div>
+            ) : (
+              <p className="text-sm text-muted">No sample provided.</p>
+            )}
+          </div>
         </div>
       </div>
+      {previewing && report.sample && (
+        <SamplePreviewDialog filename={report.sample.filename} mediaType={report.sample.media_type} reportId={report.report_id} onClose={() => setPreviewing(false)} />
+      )}
     </div>
   );
 }
@@ -408,7 +586,7 @@ export function ReportsPanel() {
       if (row.system_code !== systemFilter) continue;
       if (
         needle &&
-        !`${row.report_code} ${row.report_name} ${frequencyText(row.frequency, row.frequency_other, REPORT_FREQUENCY_CHOICES)} ${row.description} ${row.layout} ${row.country} ${row.system_code}`
+        !`${row.report_code} ${row.report_name} ${frequencyText(row.frequency, row.frequency_other, REPORT_FREQUENCY_CHOICES)} ${row.description} ${row.layout} ${row.sample?.filename ?? ""} ${row.country} ${row.system_code}`
           .toLowerCase()
           .includes(needle)
       ) {
@@ -585,6 +763,7 @@ export function ReportsPanel() {
           countries={countries}
           systems={systemsForAdd}
           onClose={() => setForm(null)}
+          onChanged={(saved) => setReports((current) => current.map((item) => (item.report_id === saved.report_id ? saved : item)))}
           onSaved={(saved) => {
             setReports((current) => {
               const exists = current.some((item) => item.report_id === saved.report_id);

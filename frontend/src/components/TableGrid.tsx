@@ -13,6 +13,8 @@ function testTypeChoices(column: string): string[] | null {
 /** Where a dragged row would land: before `index` (0 to rows.length). */
 type Drop = { index: number } | null;
 
+const VIEWABLE = new Set<KbLink["kind"]>(["capability", "interface", "report", "column", "batch"]);
+
 const LINK_STATUS: Record<NonNullable<KbLink["state"]>, { icon: string; title: string; tone: string }> = {
   ok: { icon: "link", title: "Filled from the Knowledge Base", tone: "text-accent" },
   changed: { icon: "sync_problem", title: "Changed in the Knowledge Base since it was added. Refresh to update it.", tone: "text-[#c77700]" },
@@ -25,6 +27,7 @@ export function TableGrid({
   onChange,
   readOnly,
   links,
+  onView,
 }: {
   columns: string[];
   rows: string[][];
@@ -32,6 +35,8 @@ export function TableGrid({
   onChange: (rows: string[][], links?: (KbLink | null)[]) => void;
   readOnly: boolean;
   links?: (KbLink | null)[];
+  /** Opens the Knowledge Base item behind a row's chain icon. */
+  onView?: (link: KbLink) => void;
 }) {
   const linked = (links ?? []).some(Boolean);
   const rowLinks = rows.map((_, index) => links?.[index] ?? null);
@@ -168,16 +173,32 @@ export function TableGrid({
                 )}
                 {linked && (
                   <td className="px-1 align-top pt-2 w-8">
-                    {rowLinks[rowIndex] && (
-                      <span
-                        className={`material-symbols-outlined text-base ${LINK_STATUS[rowLinks[rowIndex]?.state ?? "ok"].tone}`}
-                        role="img"
-                        aria-label={`Row ${rowIndex + 1}: ${LINK_STATUS[rowLinks[rowIndex]?.state ?? "ok"].title}`}
-                        title={LINK_STATUS[rowLinks[rowIndex]?.state ?? "ok"].title}
-                      >
-                        {LINK_STATUS[rowLinks[rowIndex]?.state ?? "ok"].icon}
-                      </span>
-                    )}
+                    {rowLinks[rowIndex] && (() => {
+                      const link = rowLinks[rowIndex]!;
+                      const status = LINK_STATUS[link.state ?? "ok"];
+                      const label = `Row ${rowIndex + 1}: ${status.title}`;
+                      const viewable = link.state !== "deleted" && VIEWABLE.has(link.kind) && (link.kind !== "column" || Boolean(link.table_id));
+                      if (!viewable) {
+                        return (
+                          <span className={`material-symbols-outlined text-base ${status.tone}`} role="img" aria-label={label} title={status.title}>
+                            {status.icon}
+                          </span>
+                        );
+                      }
+                      return (
+                        <button
+                          type="button"
+                          className={`icon-btn !p-0.5 ${status.tone}`}
+                          aria-label={label}
+                          title={`${status.title}. Click to view.`}
+                          onClick={() => onView?.(link)}
+                        >
+                          <span className="material-symbols-outlined text-base" aria-hidden="true">
+                            {status.icon}
+                          </span>
+                        </button>
+                      );
+                    })()}
                   </td>
                 )}
                 {columns.map((column, columnIndex) => {

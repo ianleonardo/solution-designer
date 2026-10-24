@@ -3,11 +3,13 @@ export type Role = string;
 
 /** Where a table row came from in the Knowledge Base. `state` is worked out on each load and never saved. */
 export type KbLink = {
-  kind: "capability" | "interface" | "report" | "column";
+  kind: "capability" | "interface" | "report" | "column" | "batch";
   id: string;
   owned: number[];
   values: Record<string, string>;
   table_id?: string;
+  /** Set on interface links so the specification can be opened without searching every channel. */
+  channel?: string;
   state?: "ok" | "changed" | "deleted";
 };
 
@@ -237,6 +239,12 @@ export type InterfaceField = {
   example: string;
 };
 
+export type InterfaceParty = {
+  system: string;
+  interface_id: string;
+  interface_name: string;
+};
+
 export type InterfaceRecord = {
   interface_id: string;
   channel: InterfaceChannel;
@@ -245,8 +253,11 @@ export type InterfaceRecord = {
   endpoint: string;
   description: string;
   protocol: string;
+  format?: string;
   source: string;
   destination: string;
+  upstream?: InterfaceParty[];
+  downstream?: InterfaceParty[];
   processing_rules?: string;
   validation_rules?: string;
   fields?: InterfaceField[];
@@ -336,6 +347,11 @@ export type KbBitbucketRepoRecord = {
   last_modified: string;
 };
 
+export type ReportSample = {
+  filename: string;
+  media_type: string;
+};
+
 export type KbReportRecord = {
   report_id: string;
   country: string;
@@ -346,6 +362,7 @@ export type KbReportRecord = {
   frequency_other: string;
   description: string;
   layout: string;
+  sample?: ReportSample | null;
   created_at: string;
   last_modified: string;
 };

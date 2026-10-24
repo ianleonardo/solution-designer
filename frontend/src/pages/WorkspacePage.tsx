@@ -14,11 +14,12 @@ import { ReferencesPanel } from "../components/ReferencesPanel";
 import { SectionDialog, type SectionDialogMode, type SectionValues } from "../components/SectionDialog";
 import { can } from "../permissions";
 import { KbSectionToolbar, kbSourceOf, presentColumns, TableFieldsDialog } from "../components/KbLinks";
+import { KbLinkedDetail } from "../components/KbLinkedDetail";
 import { TableGrid } from "../components/TableGrid";
 import { sectionIsEmpty } from "../autofill";
 import { STARTER_FLOWCHART } from "../mermaidTemplates";
 import { indentSection, MAX_SECTION_DEPTH, moveSection, outdentSection, sectionDepth, sectionPlacement, toTree, type OutlineTree } from "../structure";
-import type { Block, Project, ProjectDocument, Sdd, Section, TableBlock, Template, WorkspaceData } from "../types";
+import type { Block, KbLink, Project, ProjectDocument, Sdd, Section, TableBlock, Template, WorkspaceData } from "../types";
 import { SelectField } from "../components/SelectField";
 
 const HIDDEN_ALERTS = new Set([
@@ -447,7 +448,6 @@ export function WorkspacePage() {
             References ({data.references.length})
           </button>
           <button type="button" className="btn" onClick={() => setPreview("md")}>Markdown</button>
-          <button type="button" className="btn" onClick={() => setPreview("html")}>HTML</button>
           <button type="button" className="btn" onClick={() => setPreview("pdf")}>PDF</button>
         </div>
       </div>
@@ -710,6 +710,7 @@ function BlockView({
   onError: (message: string) => void;
   readOnly: boolean;
 }) {
+  const [viewing, setViewing] = useState<KbLink | null>(null);
   if (block.type === "header") {
     return (
       <div className="flex items-center gap-2">
@@ -740,13 +741,17 @@ function BlockView({
   }
   if (block.type === "table") {
     return (
-      <TableGrid
-        columns={block.columns}
-        rows={block.rows}
-        links={block.links}
-        readOnly={readOnly}
-        onChange={(rows, links) => onChange(links ? { ...block, rows, links } : { ...block, rows })}
-      />
+      <>
+        <TableGrid
+          columns={block.columns}
+          rows={block.rows}
+          links={block.links}
+          readOnly={readOnly}
+          onView={setViewing}
+          onChange={(rows, links) => onChange(links ? { ...block, rows, links } : { ...block, rows })}
+        />
+        {viewing && <KbLinkedDetail link={viewing} onClose={() => setViewing(null)} />}
+      </>
     );
   }
   return <DiagramBlock block={block} readOnly={readOnly} onChange={onChange} />;
