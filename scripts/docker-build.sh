@@ -43,11 +43,17 @@ for name in HTTP_PROXY HTTPS_PROXY NO_PROXY http_proxy https_proxy no_proxy PIP_
   if [[ -n "${!name:-}" ]]; then build_args+=(--build-arg "$name=${!name}"); fi
 done
 
-echo "Building $IMAGE for $PLATFORM with $ENGINE ..."
+# Stamp the image with the commit it was built from, shown by docker-start.sh.
+REVISION="$(git -C "$ROOT" rev-parse --short HEAD 2>/dev/null || echo unknown)"
+if [[ -n "$(git -C "$ROOT" status --porcelain 2>/dev/null)" ]]; then REVISION="$REVISION+local-changes"; fi
+
+echo "Building $IMAGE ($REVISION) for $PLATFORM with $ENGINE ..."
 "$ENGINE" build \
   --platform "$PLATFORM" \
   --file "$ROOT/Dockerfile" \
   --tag "$IMAGE" \
+  --label "org.opencontainers.image.revision=$REVISION" \
+  --label "org.opencontainers.image.created=$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
   ${build_args[@]+"${build_args[@]}"} \
   "$ROOT"
 

@@ -8,7 +8,8 @@
 #
 # The data folder holds the DuckDB database (and its .wal file) and the "uploads" folder; back it up as a whole.
 # It is created when missing, and an empty one starts a new database. The .env file is mounted read-only.
-# If the image is not loaded yet, a saved image (specforge-*.tar.gz in --load, dist/ or beside this script) is loaded.
+# A saved image (--load, or specforge-*.tar.gz in dist/ or beside this script) is loaded when it differs from the
+# loaded one, so copying a newer .tar.gz to the server and running this script is enough to upgrade.
 # Uses docker, or podman when docker is not installed. Set CONTAINER_ENGINE to choose.
 
 set -euo pipefail
@@ -44,6 +45,8 @@ done
 
 engine() {
   if [[ -n "${CONTAINER_ENGINE:-}" ]]; then echo "$CONTAINER_ENGINE"; return; fi
+  # On RHEL "docker" is often podman under another name (podman-docker); it needs podman's user options.
+  if command -v docker >/dev/null 2>&1 && docker --version 2>&1 | grep -qi podman; then echo podman; return; fi
   if command -v docker >/dev/null 2>&1; then echo docker; return; fi
   if command -v podman >/dev/null 2>&1; then echo podman; return; fi
   echo "Neither docker nor podman is installed." >&2
@@ -70,22 +73,50 @@ esac
 mkdir -p "$DATA_DIR"
 DATA_DIR="$(cd "$DATA_DIR" && pwd -P)"
 
-# Load a saved image when this one is not loaded yet.
-if [[ -n "$IMAGE_FILE" ]] || ! "$ENGINE" image inspect "$IMAGE" >/dev/null 2>&1; then
-  if [[ -z "$IMAGE_FILE" ]]; then
-    for candidate in "$ROOT"/dist/specforge-*.tar.gz "$ROOT"/specforge-*.tar.gz "$(dirname "${BASH_SOURCE[0]}")"/specforge-*.tar.gz; do
-      if [[ -f "$candidate" ]]; then IMAGE_FILE="$candidate"; break; fi
-    done
-  fi
-  if [[ -n "$IMAGE_FILE" ]]; then
+# The image id inside a saved .tar.gz (docker save and podman save both write manifest.json).
+saved_image_id() {
+  { gunzip -c "$1" | tar -xOf - manifest.json 2>/dev/null || true; } \
+    | grep -o '"Config":"[^"]*"' | head -n 1 | sed -e 's/"Config":"//' -e 's/"$//' -e 's#.*/##' -e 's/\.json$//'
+}
+loaded_image_id() {
+  "$ENGINE" image inspect -f '{{.Id}}' "$IMAGE" 2>/dev/null | sed 's/^sha256://' || true
+}
+
+if [[ -n "$IMAGE_FILE" && ! -f "$IMAGE_FILE" ]]; then
+  echo "Saved image not found: $IMAGE_FILE" >&2
+  exit 1
+fi
+if [[ -z "$IMAGE_FILE" ]]; then
+  for candidate in "$ROOT"/dist/specforge-*.tar.gz "$ROOT"/specforge-*.tar.gz "$(dirname "${BASH_SOURCE[0]}")"/specforge-*.tar.gz; do
+    if [[ -f "$candidate" ]]; then IMAGE_FILE="$candidate"; break; fi
+  done
+fi
+# Load the saved image unless exactly that image is already loaded. Without this, an older image with the same
+# tag would keep running after a newer .tar.gz was copied over.
+if [[ -n "$IMAGE_FILE" ]]; then
+  echo "Checking $IMAGE_FILE ..."
+  saved="$(saved_image_id "$IMAGE_FILE")"
+  loaded="$(loaded_image_id)"
+  if [[ -z "$saved" || "$saved" != "$loaded" ]]; then
     echo "Loading image from $IMAGE_FILE ..."
     gunzip -c "$IMAGE_FILE" | "$ENGINE" load
+    if [[ -n "$saved" && "$(loaded_image_id)" != "$saved" ]]; then
+      # The saved image was tagged differently; point the tag used here at it.
+      "$ENGINE" tag "$saved" "$IMAGE"
+    fi
+  else
+    echo "That image is already loaded."
   fi
 fi
 if ! "$ENGINE" image inspect "$IMAGE" >/dev/null 2>&1; then
   echo "Image $IMAGE not found. Build it with ./scripts/docker-build.sh, or pass --load <saved image .tar.gz>." >&2
   exit 1
 fi
+revision="$("$ENGINE" image inspect -f '{{index .Config.Labels "org.opencontainers.image.revision"}}' "$IMAGE" 2>/dev/null || true)"
+[[ "$revision" == "<no value>" ]] && revision=""
+created="$("$ENGINE" image inspect -f '{{.Created}}' "$IMAGE" 2>/dev/null || true)"
+image_id="$(loaded_image_id)"
+echo "Image: $IMAGE  id ${image_id:0:12}  built ${created%%.*}  commit ${revision:-unknown}"
 
 # An old container with this name (running or stopped) is replaced.
 if "$ENGINE" container inspect "$CONTAINER_NAME" >/dev/null 2>&1; then
@@ -117,7 +148,7 @@ fi
   --volume "$DATA_DIR:/data:rw$label" \
   "$IMAGE" >/dev/null
 
-echo "Started $CONTAINER_NAME ($IMAGE)"
+echo "Started $CONTAINER_NAME ($IMAGE, commit ${revision:-unknown})"
 echo "  data:      $DATA_DIR  (database $DB_NAME, uploads/)"
 echo "  .env:      $ENV_FILE  (read-only)"
 

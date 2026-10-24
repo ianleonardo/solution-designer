@@ -248,7 +248,8 @@ Behind a proxy or a private mirror, export `HTTP_PROXY`, `HTTPS_PROXY`, `NO_PROX
 
 - `--data-dir` is the data folder on the server, mounted into the container. It holds the DuckDB database (`solutioncrafter.duckdb`, or `--db-name <file>.duckdb`), its `.wal` file and the `uploads` folder; back up the folder as a whole. It is created when missing, and an empty folder starts a new database. To move an existing setup, copy your current `data` folder there.
 - `--env-file` is mounted read-only. Variables the script sets on the container (`DATA_DIR`, `DUCKDB_PATH`) win over the same names in the file, so a `DATA_DIR=./data` line there does no harm.
-- If the image is not loaded on the server yet, the script loads a saved one first: `--load <file>.tar.gz`, or a `specforge-*.tar.gz` found in `dist/` or beside the script.
+- The script loads a saved image when it differs from the one already loaded: `--load <file>.tar.gz`, or a `specforge-*.tar.gz` found in `dist/` or beside the script. To upgrade, copy the newer `.tar.gz` over the old one and run the script again; it replaces the image and the container. It prints the image id, build time and commit it starts, so you can check the server runs the build you expect.
+- When `docker` on the server is podman under another name (the `podman-docker` package), the script uses podman's user options.
 - The container runs as the user who runs the script (rootless Podman keeps your user id), so the files stay yours. With SELinux enforcing, the mounts are labelled automatically.
 - It restarts on failure and after a reboot of the Docker service. The script waits for `/api/health` and prints the URL, or the last log lines if it fails.
 
